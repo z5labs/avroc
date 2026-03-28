@@ -1,0 +1,7 @@
+edition = "2024";
+
+// The Generator service defines the RPC method for generating code from Avro schemas.
+service Generator {
+    // The Generate method takes a GenerateRequest and returns a GenerateResponse.
+    rpc Generate (GenerateRequest) returns (GenerateResponse);
+}
