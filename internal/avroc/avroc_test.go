@@ -6,11 +6,21 @@
 package avroc
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"log/slog"
+	"net"
+	"os"
 	"testing"
+	"testing/fstest"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/internal/cli"
 
 	"github.com/z5labs/avro-go/idl"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -254,6 +264,205 @@ func TestMapToProtoSchema_EnumNilDefault(t *testing.T) {
 
 	if got.GetType().GetEnumType().GetDefault() != nil {
 		t.Errorf("expected nil default, got %v", got.GetType().GetEnumType().GetDefault())
+	}
+}
+
+func TestLookupGenerators(t *testing.T) {
+	t.Run("finds matching executables", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"usr/local/bin/avroc-gen-go": &fstest.MapFile{Mode: 0o755},
+			"usr/local/bin/other-tool":   &fstest.MapFile{Mode: 0o755},
+		}
+
+		got, err := lookupGenerators(fsys, "usr/local/bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 1 {
+			t.Fatalf("got %d generators, want 1", len(got))
+		}
+		if got["avroc-gen-go"] != "usr/local/bin/avroc-gen-go" {
+			t.Errorf("avroc-gen-go path = %q", got["avroc-gen-go"])
+		}
+	})
+
+	t.Run("multiple directories", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"dir1/avroc-gen-go":   &fstest.MapFile{Mode: 0o755},
+			"dir2/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
+		}
+
+		got, err := lookupGenerators(fsys, "dir1", "dir2")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 2 {
+			t.Fatalf("got %d generators, want 2", len(got))
+		}
+	})
+
+	t.Run("nonexistent directory", func(t *testing.T) {
+		fsys := fstest.MapFS{}
+
+		got, err := lookupGenerators(fsys, "nonexistent")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 0 {
+			t.Fatalf("got %d generators, want 0", len(got))
+		}
+	})
+
+	t.Run("empty directory", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"bin": &fstest.MapFile{Mode: 0o755 | os.ModeDir},
+		}
+
+		got, err := lookupGenerators(fsys, "bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 0 {
+			t.Fatalf("got %d generators, want 0", len(got))
+		}
+	})
+}
+
+func TestPrintHelp(t *testing.T) {
+	var buf bytes.Buffer
+	err := printHelp(&buf, "avroc-gen-go", "avroc-gen-java")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output := buf.String()
+	if !bytes.Contains([]byte(output), []byte("-go_out string")) {
+		t.Errorf("output missing -go_out flag:\n%s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("-java_out string")) {
+		t.Errorf("output missing -java_out flag:\n%s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("Usage: avroc")) {
+		t.Errorf("output missing usage line:\n%s", output)
+	}
+}
+
+func TestMain_PathNotSet(t *testing.T) {
+	code := Main(context.Background(), cli.Context{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
+			return "", false
+		}),
+	})
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestMain_NoIDLFiles(t *testing.T) {
+	code := Main(context.Background(), cli.Context{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
+			if key == "PATH" {
+				return "/nonexistent", true
+			}
+			return "", false
+		}),
+		Fs:   fstest.MapFS{},
+		Args: []string{},
+	})
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+// TestHelperGenerator is a test function that doubles as a real generator subprocess.
+// When run normally by "go test", AVROC_TEST_GENERATOR is not set, so it returns immediately.
+// When re-invoked as a subprocess, it starts a real gRPC server on the Unix socket.
+func TestHelperGenerator(t *testing.T) {
+	if os.Getenv("AVROC_TEST_GENERATOR") != "1" {
+		return
+	}
+
+	socketPath := os.Args[len(os.Args)-1]
+
+	lis, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	avrocpb.RegisterGeneratorServer(srv, &testGeneratorServer{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		<-ctx.Done()
+		srv.GracefulStop()
+	}()
+
+	if err := srv.Serve(lis); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type testGeneratorServer struct {
+	avrocpb.UnimplementedGeneratorServer
+}
+
+func (s *testGeneratorServer) Generate(_ context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
+	return &avrocpb.GenerateResponse{
+		OutputFiles: []string{req.GetOutputDirectory() + "/output.go"},
+	}, nil
+}
+
+func TestGeneratorGenerate(t *testing.T) {
+	t.Setenv("AVROC_TEST_GENERATOR", "1")
+
+	g := generator{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		env: cli.EnvironmentFunc(func(key string) (string, bool) {
+			if key == "AVROC_GENERATOR_ARGS" {
+				return "-test.run=TestHelperGenerator --", true
+			}
+			return "", false
+		}),
+		name:           "avroc-gen-test",
+		executablePath: os.Args[0],
+	}
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("User"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{
+									Ident: &avrocpb.Ident{Value: proto.String("string")},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	outputDir := t.TempDir()
+	err := g.generate(context.Background(), outputDir, schema)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

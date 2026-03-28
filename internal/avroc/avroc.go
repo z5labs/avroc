@@ -112,6 +112,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 
 			g := generator{
 				log:            cli.Log,
+				env:            cli.Env,
 				name:           generatorName,
 				executablePath: executablePath,
 			}
@@ -201,22 +202,26 @@ func parseIDL(path string) (_ *idl.File, err error) {
 
 type generator struct {
 	log            *slog.Logger
+	env            cli.Environment
 	name           string
 	executablePath string
 }
 
 func (g generator) generate(ctx context.Context, output string, schemas ...*avrocpb.Schema) error {
 
-	socketFile, err := os.CreateTemp(g.name, "*.sock")
+	socketFile, err := os.CreateTemp("", g.name+"-*.sock")
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create temporary socket file", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
+	socketPath := socketFile.Name()
+	socketFile.Close()
+	os.Remove(socketPath)
 	defer func() {
-		err = errors.Join(err, os.Remove(socketFile.Name()))
+		err = errors.Join(err, os.Remove(socketPath))
 	}()
 
-	cmd, err := startGenerator(ctx, g.executablePath, socketFile.Name())
+	cmd, err := g.startGenerator(ctx, socketPath)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to start generator", slog.String("generator", g.name), slog.Any("error", err))
 		return err
@@ -228,7 +233,11 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 		err = errors.Join(err, cmd.Cancel())
 	}()
 
-	cc, err := grpc.NewClient("unix://"+socketFile.Name(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := grpc.NewClient(
+		"unix://"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+	)
 	if err != nil {
 		return err
 	}
@@ -250,8 +259,13 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 	return nil
 }
 
-func startGenerator(ctx context.Context, executable, socket string) (*exec.Cmd, error) {
-	cmd := exec.CommandContext(ctx, executable, socket)
+func (g generator) startGenerator(ctx context.Context, socket string) (*exec.Cmd, error) {
+	args := []string{socket}
+	if extra, ok := g.env.LookupEnv("AVROC_GENERATOR_ARGS"); ok {
+		args = append(strings.Fields(extra), args...)
+	}
+
+	cmd := exec.CommandContext(ctx, g.executablePath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
