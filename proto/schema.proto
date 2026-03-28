@@ -1,0 +1,10 @@
+edition = "2024";
+
+import "avro_type.proto";
+
+// Schema represents a schema in the Avro IDL.
+message Schema {
+    string namespace = 1;
+    Type type = 2;
+    repeated Type types = 3;
+}

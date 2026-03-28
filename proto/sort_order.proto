@@ -1,0 +1,8 @@
+edition = "2024";
+
+// SortOrder represents the sort order of a field in a record.
+enum SortOrder {
+    SORT_ORDER_ASC = 0;
+    SORT_ORDER_DESC = 1;
+    SORT_ORDER_IGNORE = 2;
+}

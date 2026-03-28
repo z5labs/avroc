@@ -1,0 +1,7 @@
+edition = "2024";
+
+// The response message for the Generate RPC method.
+message GenerateResponse {
+    // The list of generated output files.
+    repeated string output_files = 1;
+}

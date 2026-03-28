@@ -1,0 +1,7 @@
+edition = "2024";
+
+// The Option message represents a key-value pair for customizing the code generation process.
+message Option {
+    string name = 1;
+    string value = 2;
+}
