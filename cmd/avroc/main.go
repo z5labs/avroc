@@ -13,20 +13,21 @@ import (
 	"syscall"
 
 	"github.com/z5labs/avroc/internal/avroc"
+	"github.com/z5labs/avroc/internal/cli"
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	code := avroc.Main(ctx, avroc.NewCLI(
-		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	code := avroc.Main(ctx, cli.Context{
+		Log: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: true,
 		})),
-		avroc.EnvironmentFunc(func(key string) (string, bool) {
+		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
 			return os.LookupEnv(key)
 		}),
-		os.DirFS("/"),
-	))
+		Fs: os.DirFS("/"),
+	})
 	os.Exit(code)
 }

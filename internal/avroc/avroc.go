@@ -14,36 +14,13 @@ import (
 	"strings"
 
 	"github.com/z5labs/avro-go/idl"
+	"github.com/z5labs/avroc/internal/cli"
 )
 
-type Environment interface {
-	LookupEnv(key string) (string, bool)
-}
-
-type EnvironmentFunc func(string) (string, bool)
-
-func (f EnvironmentFunc) LookupEnv(key string) (string, bool) {
-	return f(key)
-}
-
-type CLI struct {
-	log *slog.Logger
-	env Environment
-	fs  fs.FS
-}
-
-func NewCLI(log *slog.Logger, env Environment, fsys fs.FS) CLI {
-	return CLI{
-		log: log,
-		env: env,
-		fs:  fsys,
-	}
-}
-
-func Main(ctx context.Context, cli CLI) int {
-	path, ok := cli.env.LookupEnv("PATH")
+func Main(ctx context.Context, cli cli.Context) int {
+	path, ok := cli.Env.LookupEnv("PATH")
 	if !ok {
-		cli.log.ErrorContext(
+		cli.Log.ErrorContext(
 			ctx,
 			"unable to lookup generators",
 			slog.Any("error", "PATH environment variable not set"),
@@ -52,9 +29,9 @@ func Main(ctx context.Context, cli CLI) int {
 	}
 
 	paths := strings.Split(path, ":")
-	generators, err := lookupGenerators(cli.fs, paths...)
+	generators, err := lookupGenerators(cli.Fs, paths...)
 	if err != nil {
-		cli.log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
+		cli.Log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
 		return 1
 	}
 
@@ -69,19 +46,19 @@ func Main(ctx context.Context, cli CLI) int {
 	if errors.Is(err, flag.ErrHelp) {
 		err = printHelp(os.Stdout, generators...)
 		if err != nil {
-			cli.log.ErrorContext(ctx, "failed to print help", slog.Any("error", err))
+			cli.Log.ErrorContext(ctx, "failed to print help", slog.Any("error", err))
 			return 1
 		}
 		return 0
 	}
 	if err != nil {
-		cli.log.ErrorContext(ctx, "failed to parse flags", slog.Any("error", err))
+		cli.Log.ErrorContext(ctx, "failed to parse flags", slog.Any("error", err))
 		return 1
 	}
 
 	args := flags.Args()
 	if len(args) == 0 {
-		cli.log.ErrorContext(ctx, "no IDL files provided")
+		cli.Log.ErrorContext(ctx, "no IDL files provided")
 		return 1
 	}
 
@@ -89,13 +66,13 @@ func Main(ctx context.Context, cli CLI) int {
 	for i, arg := range args {
 		f, err := parseIDL(arg)
 		if err != nil {
-			cli.log.ErrorContext(ctx, "failed to parse IDL file", slog.String("file", arg), slog.Any("error", err))
+			cli.Log.ErrorContext(ctx, "failed to parse IDL file", slog.String("file", arg), slog.Any("error", err))
 			return 1
 		}
 
 		files[i] = f
 	}
-	cli.log.InfoContext(ctx, "parsed idl files", slog.Int("num_of_files", len(files)))
+	cli.Log.InfoContext(ctx, "parsed idl files", slog.Int("num_of_files", len(files)))
 
 	return 0
 }

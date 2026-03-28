@@ -5,8 +5,29 @@
 
 package main
 
-import "fmt"
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	avrocgengo "github.com/z5labs/avroc/internal/avroc-gen-go"
+	"github.com/z5labs/avroc/internal/cli"
+)
 
 func main() {
-	fmt.Println("hello world")
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	code := avrocgengo.Main(ctx, cli.Context{
+		Log: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			AddSource: true,
+		})),
+		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
+			return os.LookupEnv(key)
+		}),
+		Fs: os.DirFS("/"),
+	})
+	os.Exit(code)
 }
