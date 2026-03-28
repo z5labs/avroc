@@ -3,7 +3,9 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-edition = "2024";
+edition = "2023";
+
+option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
 
 // The response message for the Generate RPC method.
 message GenerateResponse {
