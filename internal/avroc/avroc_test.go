@@ -14,6 +14,7 @@ import (
 	"os"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
@@ -268,7 +269,7 @@ func TestMapToProtoSchema_EnumNilDefault(t *testing.T) {
 }
 
 func TestLookupGenerators(t *testing.T) {
-	t.Run("finds matching executables", func(t *testing.T) {
+	t.Run("finds executable generators", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			"usr/local/bin/avroc-gen-go": &fstest.MapFile{Mode: 0o755},
 			"usr/local/bin/other-tool":   &fstest.MapFile{Mode: 0o755},
@@ -282,8 +283,24 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d generators, want 1", len(got))
 		}
-		if got["avroc-gen-go"] != "usr/local/bin/avroc-gen-go" {
-			t.Errorf("avroc-gen-go path = %q", got["avroc-gen-go"])
+		if got["avroc-gen-go"] != "/usr/local/bin/avroc-gen-go" {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], "/usr/local/bin/avroc-gen-go")
+		}
+	})
+
+	t.Run("multiple generators in same directory", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"bin/avroc-gen-go":   &fstest.MapFile{Mode: 0o755},
+			"bin/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
+		}
+
+		got, err := lookupGenerators(fsys, "bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 2 {
+			t.Fatalf("got %d generators, want 2", len(got))
 		}
 	})
 
@@ -300,6 +317,21 @@ func TestLookupGenerators(t *testing.T) {
 
 		if len(got) != 2 {
 			t.Fatalf("got %d generators, want 2", len(got))
+		}
+	})
+
+	t.Run("skips non-executable files", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"bin/avroc-gen-go": &fstest.MapFile{Mode: 0o644},
+		}
+
+		got, err := lookupGenerators(fsys, "bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 0 {
+			t.Fatalf("got %d generators, want 0 (file not executable)", len(got))
 		}
 	})
 
@@ -426,6 +458,9 @@ func (s *testGeneratorServer) Generate(_ context.Context, req *avrocpb.GenerateR
 func TestGeneratorGenerate(t *testing.T) {
 	t.Setenv("AVROC_TEST_GENERATOR", "1")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	g := generator{
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		env: cli.EnvironmentFunc(func(key string) (string, bool) {
@@ -460,7 +495,7 @@ func TestGeneratorGenerate(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	err := g.generate(context.Background(), outputDir, schema)
+	err := g.generate(ctx, outputDir, schema)
 	if err != nil {
 		t.Fatal(err)
 	}

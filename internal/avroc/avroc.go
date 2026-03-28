@@ -16,9 +16,9 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
@@ -52,9 +52,10 @@ func Main(ctx context.Context, cli cli.Context) int {
 	flags.Usage = func() {}
 
 	for name := range generators {
-		name := strings.TrimPrefix(name, "avroc-gen-") + "_out"
+		generatorName := strings.TrimPrefix(name, "avroc-gen-")
+		flagName := generatorName + "_out"
 
-		flags.String(name, "", fmt.Sprintf("Output directory for the %q generator", name))
+		flags.String(flagName, "", fmt.Sprintf("Output directory for the %q generator", generatorName))
 	}
 
 	err = flags.Parse(cli.Args)
@@ -98,9 +99,9 @@ func Main(ctx context.Context, cli cli.Context) int {
 		schemas[i] = schema
 	}
 
-	pool := pool.New().WithContext(ctx)
+	genPool := pool.New().WithContext(ctx)
 	flags.Visit(func(f *flag.Flag) {
-		pool.Go(func(ctx context.Context) error {
+		genPool.Go(func(ctx context.Context) error {
 			flagName := strings.TrimSuffix(f.Name, "_out")
 			generatorName := "avroc-gen-" + flagName
 
@@ -110,6 +111,11 @@ func Main(ctx context.Context, cli cli.Context) int {
 				return nil
 			}
 
+			output := f.Value.String()
+			if output == "" {
+				return fmt.Errorf("empty output directory for generator %q", generatorName)
+			}
+
 			g := generator{
 				log:            cli.Log,
 				env:            cli.Env,
@@ -117,11 +123,11 @@ func Main(ctx context.Context, cli cli.Context) int {
 				executablePath: executablePath,
 			}
 
-			return g.generate(ctx, f.Value.String(), schemas...)
+			return g.generate(ctx, output, schemas...)
 		})
 	})
 
-	err = pool.Wait()
+	err = genPool.Wait()
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to run generators", slog.Any("error", err))
 		return 1
@@ -145,12 +151,22 @@ func lookupGenerators(root fs.FS, dirs ...string) (map[string]string, error) {
 			}
 
 			name := d.Name()
-			if d.IsDir() || !strings.HasPrefix(name, "avroc-gen-") {
+			if !strings.HasPrefix(name, "avroc-gen-") {
 				return nil
 			}
 
-			generatorIndex[name] = path
-			return filepath.SkipAll
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				return nil
+			}
+
+			mode := info.Mode()
+			if !mode.IsRegular() || mode&0o111 == 0 {
+				return nil
+			}
+
+			generatorIndex[name] = "/" + path
+			return nil
 		})
 		if err != nil {
 			return nil, err
@@ -207,15 +223,14 @@ type generator struct {
 	executablePath string
 }
 
-func (g generator) generate(ctx context.Context, output string, schemas ...*avrocpb.Schema) error {
-
+func (g generator) generate(ctx context.Context, output string, schemas ...*avrocpb.Schema) (err error) {
 	socketFile, err := os.CreateTemp("", g.name+"-*.sock")
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create temporary socket file", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
 	socketPath := socketFile.Name()
-	err = errors.Join(err, socketFile.Close(), os.Remove(socketPath))
+	err = errors.Join(socketFile.Close(), os.Remove(socketPath))
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to prepare socket path", slog.String("generator", g.name), slog.Any("error", err))
 		return err
@@ -230,10 +245,10 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 		return err
 	}
 	defer func() {
-		err = errors.Join(err, cmd.Wait())
-	}()
-	defer func() {
-		err = errors.Join(err, cmd.Cancel())
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 	}()
 
 	cc, err := grpc.NewClient(
@@ -248,8 +263,11 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 		err = errors.Join(err, cc.Close())
 	}()
 
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer rpcCancel()
+
 	client := avrocpb.NewGeneratorClient(cc)
-	resp, err := client.Generate(ctx, &avrocpb.GenerateRequest{
+	resp, err := client.Generate(rpcCtx, &avrocpb.GenerateRequest{
 		OutputDirectory: &output,
 		Schemas:         schemas,
 	})
