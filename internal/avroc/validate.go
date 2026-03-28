@@ -51,12 +51,28 @@ func collectDefinedTypes(schema *idl.Schema) map[string]idl.Type {
 	types := make(map[string]idl.Type)
 
 	addType := func(name, typeNamespace string, t idl.Type) {
-		types[name] = t
-		if typeNamespace != "" {
-			types[typeNamespace+"."+name] = t
+		// Determine the effective namespace: an explicit type namespace
+		// takes precedence; otherwise, the schema namespace is used.
+		effectiveNamespace := typeNamespace
+		if effectiveNamespace == "" {
+			effectiveNamespace = schema.Namespace
 		}
-		if schema.Namespace != "" && schema.Namespace != typeNamespace {
-			types[schema.Namespace+"."+name] = t
+
+		// If there is no effective namespace at all, register only the bare name.
+		if effectiveNamespace == "" {
+			types[name] = t
+			return
+		}
+
+		// Always register the fully-qualified name using the effective namespace.
+		types[effectiveNamespace+"."+name] = t
+
+		// Only register the bare name when the effective namespace matches the
+		// schema namespace (i.e., when the namespace is inherited from or equal
+		// to the schema namespace). This avoids leaking types from other
+		// namespaces into the schema namespace or into unqualified lookups.
+		if effectiveNamespace == schema.Namespace {
+			types[name] = t
 		}
 	}
 
@@ -83,12 +99,28 @@ func collectDefinedNames(schema *idl.Schema) map[string]struct{} {
 	names := make(map[string]struct{})
 
 	addName := func(name, typeNamespace string) {
-		names[name] = struct{}{}
-		if typeNamespace != "" {
-			names[typeNamespace+"."+name] = struct{}{}
+		// Determine the effective namespace: an explicit type namespace
+		// takes precedence; otherwise, the schema namespace is used.
+		effectiveNamespace := typeNamespace
+		if effectiveNamespace == "" {
+			effectiveNamespace = schema.Namespace
 		}
-		if schema.Namespace != "" && schema.Namespace != typeNamespace {
-			names[schema.Namespace+"."+name] = struct{}{}
+
+		// If there is no effective namespace at all, register only the bare name.
+		if effectiveNamespace == "" {
+			names[name] = struct{}{}
+			return
+		}
+
+		// Always register the fully-qualified name using the effective namespace.
+		names[effectiveNamespace+"."+name] = struct{}{}
+
+		// Only register the bare name when the effective namespace matches the
+		// schema namespace (i.e., when the namespace is inherited from or equal
+		// to the schema namespace). This avoids leaking types from other
+		// namespaces into the schema namespace or into unqualified lookups.
+		if effectiveNamespace == schema.Namespace {
+			names[name] = struct{}{}
 		}
 	}
 

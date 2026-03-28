@@ -814,3 +814,88 @@ func TestValidateSchema_FieldDefaultNilSkipped(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 }
+
+func TestValidateSchema_BareNameDoesNotResolveToOtherNamespace(t *testing.T) {
+	// A bare "Item" reference from com.example should NOT resolve to com.other.Item
+	schema := &idl.Schema{
+		Namespace: "com.example",
+		Type: &idl.Record{
+			Name: "Order",
+			Fields: []*idl.Field{
+				{Name: "item", Type: &idl.Ident{Value: "Item"}},
+			},
+		},
+		Types: []idl.Type{
+			&idl.Record{
+				Name:      "Item",
+				Namespace: "com.other",
+				Fields: []*idl.Field{
+					{Name: "name", Type: &idl.Ident{Value: "string"}},
+				},
+			},
+		},
+	}
+
+	err := validateSchema(schema)
+	if err == nil {
+		t.Fatal("expected error for unresolved bare Item reference, got nil")
+	}
+	if !strings.Contains(err.Error(), "Item") {
+		t.Fatalf("expected error to mention Item, got: %v", err)
+	}
+}
+
+func TestValidateSchema_WrongFullyQualifiedNamespace(t *testing.T) {
+	// A reference to "com.example.Item" should NOT resolve to com.other.Item
+	schema := &idl.Schema{
+		Namespace: "com.example",
+		Type: &idl.Record{
+			Name: "Order",
+			Fields: []*idl.Field{
+				{Name: "item", Type: &idl.Ident{Value: "com.example.Item"}},
+			},
+		},
+		Types: []idl.Type{
+			&idl.Record{
+				Name:      "Item",
+				Namespace: "com.other",
+				Fields: []*idl.Field{
+					{Name: "name", Type: &idl.Ident{Value: "string"}},
+				},
+			},
+		},
+	}
+
+	err := validateSchema(schema)
+	if err == nil {
+		t.Fatal("expected error for unresolved com.example.Item reference, got nil")
+	}
+	if !strings.Contains(err.Error(), "com.example.Item") {
+		t.Fatalf("expected error to mention com.example.Item, got: %v", err)
+	}
+}
+
+func TestValidateSchema_NoNamespaceType(t *testing.T) {
+	// A type with no namespace in a schema with no namespace should be resolvable by bare name
+	schema := &idl.Schema{
+		Type: &idl.Record{
+			Name: "Order",
+			Fields: []*idl.Field{
+				{Name: "item", Type: &idl.Ident{Value: "Item"}},
+			},
+		},
+		Types: []idl.Type{
+			&idl.Record{
+				Name: "Item",
+				Fields: []*idl.Field{
+					{Name: "name", Type: &idl.Ident{Value: "string"}},
+				},
+			},
+		},
+	}
+
+	err := validateSchema(schema)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
