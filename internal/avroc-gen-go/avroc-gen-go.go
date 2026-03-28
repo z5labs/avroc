@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 
 	"github.com/sourcegraph/conc/pool"
@@ -55,9 +56,12 @@ func Main(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
+	generatorService := &generatorService{}
+
 	srv := grpc.NewServer(
 		grpc.Creds(insecure.NewCredentials()),
 	)
+	avrocpb.RegisterGeneratorServer(srv, generatorService)
 
 	pool := pool.New().WithContext(ctx)
 
@@ -82,4 +86,12 @@ func Main(ctx context.Context, cli cli.Context) int {
 func printHelp(w io.Writer) error {
 	_, err := fmt.Fprintln(w, "Usage: avroc-gen-go <unix socket address>")
 	return err
+}
+
+type generatorService struct {
+	avrocpb.UnimplementedGeneratorServer
+}
+
+func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
+	return nil, errors.New("unimplemented")
 }
