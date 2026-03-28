@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Z5Labs and Contributors
+//
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 edition = "2024";
 
 // SortOrder represents the sort order of a field in a record.
