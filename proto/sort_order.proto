@@ -1,4 +1,11 @@
-edition = "2024";
+// Copyright (c) 2026 Z5Labs and Contributors
+//
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
+edition = "2023";
+
+option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
 
 // SortOrder represents the sort order of a field in a record.
 enum SortOrder {
