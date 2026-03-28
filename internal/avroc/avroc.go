@@ -51,7 +51,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 	flags := flag.NewFlagSet("avroc", flag.ContinueOnError)
 	flags.Usage = func() {}
 
-	for name, _ := range generators {
+	for name := range generators {
 		name := strings.TrimPrefix(name, "avroc-gen-") + "_out"
 
 		flags.String(name, "", fmt.Sprintf("Output directory for the %q generator", name))
@@ -215,8 +215,11 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 		return err
 	}
 	socketPath := socketFile.Name()
-	socketFile.Close()
-	os.Remove(socketPath)
+	err = errors.Join(err, socketFile.Close(), os.Remove(socketPath))
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to prepare socket path", slog.String("generator", g.name), slog.Any("error", err))
+		return err
+	}
 	defer func() {
 		err = errors.Join(err, os.Remove(socketPath))
 	}()
