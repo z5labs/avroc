@@ -1,5 +1,8 @@
 edition = "2024";
 
+import "schema.proto";
+import "option.proto";
+
 // The request message for the Generate RPC method.
 message GenerateRequest {
     // The directory where the generated code should be placed.

@@ -1,0 +1,72 @@
+edition = "2024";
+
+import "sort_order.proto";
+
+// Ident represents an identifier in the Avro IDL, such as a schema name,
+// field name, enum value name, or primitive type reference.
+message Ident {
+    string value = 1;
+}
+
+// Type represents a type in the Avro IDL. In Go, this is an interface;
+// in protobuf, it is represented as a oneof over all concrete types.
+message Type {
+    oneof type {
+        Record record = 1;
+        Enum enum_type = 2;
+        Array array = 3;
+        Map map_type = 4;
+        Union union = 5;
+        Fixed fixed = 6;
+        Ident ident = 7;
+    }
+}
+
+// Field represents a field in a record.
+message Field {
+    string name = 1;
+    repeated string aliases = 2;
+    Type type = 3;
+    SortOrder sort_order = 4;
+}
+
+// Record represents a record in the Avro IDL.
+message Record {
+    string name = 1;
+    string namespace = 2;
+    repeated string aliases = 3;
+    repeated Field fields = 4;
+}
+
+// Enum represents an enum in the Avro IDL.
+message Enum {
+    string name = 1;
+    string namespace = 2;
+    repeated string aliases = 3;
+    repeated Ident values = 4;
+    Ident default = 5;
+}
+
+// Array represents an array type in the Avro IDL.
+message Array {
+    Type items = 1;
+}
+
+// Map represents a map type in the Avro IDL.
+// Map keys are always strings in Avro; values is the value type.
+message Map {
+    Ident values = 1;
+}
+
+// Union represents a union type in the Avro IDL.
+message Union {
+    repeated Type types = 1;
+}
+
+// Fixed represents a fixed type in the Avro IDL.
+message Fixed {
+    string name = 1;
+    string namespace = 2;
+    repeated string aliases = 3;
+    int32 size = 4;
+}
