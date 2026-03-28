@@ -90,6 +90,11 @@ func Main(ctx context.Context, cli cli.Context) int {
 			return 1
 		}
 
+		if err := validateSchema(f.Schema); err != nil {
+			cli.Log.ErrorContext(ctx, "schema validation failed", slog.String("file", arg), slog.Any("error", err))
+			return 1
+		}
+
 		schema, err := mapToProtoSchema(f.Schema)
 		if err != nil {
 			cli.Log.ErrorContext(ctx, "failed to map IDL file to proto schema", slog.String("file", arg), slog.Any("error", err))
