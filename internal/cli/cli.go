@@ -16,7 +16,8 @@ func (f EnvironmentFunc) LookupEnv(key string) (string, bool) {
 }
 
 type Context struct {
-	Log *slog.Logger
-	Env Environment
-	Fs  fs.FS
+	Log  *slog.Logger
+	Env  Environment
+	Fs   fs.FS
+	Args []string
 }

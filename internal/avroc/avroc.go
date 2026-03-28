@@ -42,7 +42,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 		flags.String(gen.name+"_out", "", fmt.Sprintf("Output directory for the %q generator", gen.name))
 	}
 
-	err = flags.Parse(os.Args[1:])
+	err = flags.Parse(cli.Args)
 	if errors.Is(err, flag.ErrHelp) {
 		err = printHelp(os.Stdout, generators...)
 		if err != nil {
