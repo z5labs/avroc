@@ -87,11 +87,3 @@ func printHelp(w io.Writer) error {
 	_, err := fmt.Fprintln(w, "Usage: avroc-gen-go <unix socket address>")
 	return err
 }
-
-type generatorService struct {
-	avrocpb.UnimplementedGeneratorServer
-}
-
-func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
-	return nil, errors.New("unimplemented")
-}
