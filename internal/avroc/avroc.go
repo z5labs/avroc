@@ -416,6 +416,12 @@ func mapToProtoType(t idl.Type) (*avrocpb.Type, error) {
 				Ident: mapToProtoIdent(v),
 			},
 		}, nil
+	case idl.Ident:
+		return &avrocpb.Type{
+			Type: &avrocpb.Type_Ident{
+				Ident: mapToProtoIdent(&v),
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported IDL type: %T", t)
 	}
