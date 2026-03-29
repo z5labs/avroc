@@ -35,6 +35,17 @@ var primitiveWriteMethod = map[string]string{
 	"string":  "WriteString",
 }
 
+// primitiveReadMethod maps Avro primitive type names to BinaryReader method names.
+var primitiveReadMethod = map[string]string{
+	"boolean": "ReadBool",
+	"int":     "ReadInt",
+	"long":    "ReadLong",
+	"float":   "ReadFloat",
+	"double":  "ReadDouble",
+	"bytes":   "ReadBytes",
+	"string":  "ReadString",
+}
+
 // goTypeForIdent returns the Go type string for an Avro Ident.
 // For primitives, it returns the Go equivalent.
 // For named types, it returns the PascalCase Go identifier.
