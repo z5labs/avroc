@@ -156,7 +156,7 @@ func recordToJSON(r *avrocpb.Record, namespace string) avroRecord {
 
 	fields := make([]avroField, 0, len(r.GetFields()))
 	for _, f := range r.GetFields() {
-		fields = append(fields, fieldToJSON(f, namespace))
+		fields = append(fields, fieldToJSON(f, ns))
 	}
 
 	return avroRecord{
