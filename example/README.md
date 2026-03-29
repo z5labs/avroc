@@ -17,7 +17,7 @@ go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
 go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
 
 # Generate Go types and JSON schema
-PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -json_out=example example/schema.avdl
+PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example example/schema.avdl
 ```
 
 ## Generated Output
@@ -28,8 +28,10 @@ The Go generator produces a Go file in `gen/` containing:
 
 - `Kind` - an enum type with `KindFOO`, `KindBAR`, `KindBAZ` constants
 - `MD5` - a fixed 16-byte type
-- `NullableHashUnion` - a union interface with `NullableHashUnionNull` and `NullableHashUnionMD5` implementations
+- `TestRecordNullableHashUnion` - a union interface with `TestRecordNullableHashUnionNull` and `TestRecordNullableHashUnionMD5` implementations
 - `TestRecord` - a struct with fields for name, kind, hash, and nullable hash
+
+With `encoding=single_object`, the primary record type also includes a `Fingerprint()` method that returns the precomputed CRC-64-AVRO schema fingerprint for [Avro Single Object Encoding](https://avro.apache.org/docs/1.12.0/specification/#single-object-encoding).
 
 ### JSON Schema (`test_record.avsc`)
 

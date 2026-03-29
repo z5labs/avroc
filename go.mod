@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/sourcegraph/conc v0.3.0
-	github.com/z5labs/avro-go v0.2.1
+	github.com/z5labs/avro-go v0.3.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
 )

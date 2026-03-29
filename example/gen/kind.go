@@ -8,6 +8,44 @@ import (
 	avro "github.com/z5labs/avro-go"
 )
 
+// Kind is a generated Avro enum type.
+type Kind int
+
+const (
+	KindFOO Kind = 0
+	KindBAR Kind = 1
+	KindBAZ Kind = 2
+)
+
+func (x Kind) MarshalAvroBinary(w *avro.BinaryWriter) error {
+	return w.WriteInt(int32(x))
+}
+
+func (x *Kind) UnmarshalAvroBinary(r *avro.BinaryReader) error {
+	v, err := r.ReadInt()
+	if err != nil {
+		return err
+	}
+	*x = Kind(v)
+	return nil
+}
+
+// MD5 is a generated Avro fixed type.
+type MD5 [16]byte
+
+func (x MD5) MarshalAvroBinary(w *avro.BinaryWriter) error {
+	return w.WriteFixed(x[:])
+}
+
+func (x *MD5) UnmarshalAvroBinary(r *avro.BinaryReader) error {
+	b, err := r.ReadFixed(16)
+	if err != nil {
+		return err
+	}
+	copy(x[:], b)
+	return nil
+}
+
 // TestRecordNullableHashUnion is a generated Avro union type.
 type TestRecordNullableHashUnion interface {
 	isTestRecordNullableHashUnion()
@@ -113,40 +151,6 @@ func (x *TestRecord) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	return nil
 }
 
-// Kind is a generated Avro enum type.
-type Kind int
-
-const (
-	KindFOO Kind = 0
-	KindBAR Kind = 1
-	KindBAZ Kind = 2
-)
-
-func (x Kind) MarshalAvroBinary(w *avro.BinaryWriter) error {
-	return w.WriteInt(int32(x))
-}
-
-func (x *Kind) UnmarshalAvroBinary(r *avro.BinaryReader) error {
-	v, err := r.ReadInt()
-	if err != nil {
-		return err
-	}
-	*x = Kind(v)
-	return nil
-}
-
-// MD5 is a generated Avro fixed type.
-type MD5 [16]byte
-
-func (x MD5) MarshalAvroBinary(w *avro.BinaryWriter) error {
-	return w.WriteFixed(x[:])
-}
-
-func (x *MD5) UnmarshalAvroBinary(r *avro.BinaryReader) error {
-	b, err := r.ReadFixed(16)
-	if err != nil {
-		return err
-	}
-	copy(x[:], b)
-	return nil
+func (x *TestRecord) Fingerprint() [8]byte {
+	return [8]byte{0x86, 0x70, 0x90, 0xbe, 0x55, 0x87, 0xee, 0xb3}
 }

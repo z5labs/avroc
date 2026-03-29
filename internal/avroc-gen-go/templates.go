@@ -60,7 +60,7 @@ func (cb *codeBuilder) newline() {
 }
 
 // generateFileCode generates the complete Go source code for a schema.
-func generateFileCode(packageName string, schema *avrocpb.Schema) string {
+func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject bool, fp [8]byte) string {
 	cb := &codeBuilder{}
 
 	// Collect all types to generate (including unions)
@@ -78,14 +78,63 @@ func generateFileCode(packageName string, schema *avrocpb.Schema) string {
 		cb.writef(fileHeaderNoImports, packageName)
 	}
 
+	// Determine the primary record name so we only emit Fingerprint for it.
+	primaryRecordName := schemaRecordName(schema)
+
 	for _, t := range types {
 		cb.newline()
 		generateType(cb, t)
 		generateMarshalMethod(cb, t)
 		generateUnmarshalMethod(cb, t)
+
+		if singleObject {
+			if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
+				if rec.Record.GetName() == primaryRecordName {
+					name := toPascalCase(rec.Record.GetName())
+					generateFingerprintMethod(cb, name, fp)
+				}
+			}
+		}
 	}
 
 	return cb.String()
+}
+
+// schemaRecordName returns the name of the schema's primary record type, or empty string.
+func schemaRecordName(schema *avrocpb.Schema) string {
+	if schema.Type == nil {
+		return ""
+	}
+	// Direct record type
+	if rec, ok := schema.Type.Type.(*avrocpb.Type_Record); ok {
+		return rec.Record.GetName()
+	}
+	// Ident reference to a record in schema.Types (e.g., "schema TestRecord;")
+	if ident, ok := schema.Type.Type.(*avrocpb.Type_Ident); ok {
+		refName := ident.Ident.GetValue()
+		for _, t := range schema.Types {
+			if rec, ok := t.Type.(*avrocpb.Type_Record); ok {
+				recName := rec.Record.GetName()
+				recNs := rec.Record.GetNamespace()
+				if recNs == "" {
+					recNs = schema.GetNamespace()
+				}
+				// Match bare name
+				if recName == refName {
+					return refName
+				}
+				// Match fully-qualified name (e.g., "com.example.Item")
+				fqName := recName
+				if recNs != "" {
+					fqName = recNs + "." + recName
+				}
+				if fqName == refName {
+					return recName
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // needsAvrolibImport checks if any types need the avrolib import.

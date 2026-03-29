@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+
+	avro "github.com/z5labs/avro-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -655,5 +657,189 @@ func TestGenerate_MissingPackageName(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error when package_name option is not set")
+	}
+}
+
+func TestGenerate_SingleObjectEncoding(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+						{
+							Name: proto.String("age"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{
+			{Name: proto.String("package_name"), Value: proto.String("avro")},
+			{Name: proto.String("encoding"), Value: proto.String("single_object")},
+		},
+		Schemas: []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	code := string(content)
+	validateGoSyntax(t, code)
+
+	expectations := []string{
+		"func (x *Person) Fingerprint() [8]byte {",
+		"return [8]byte{",
+	}
+	for _, exp := range expectations {
+		if !strings.Contains(code, exp) {
+			t.Errorf("expected generated code to contain %q, got:\n%s", exp, code)
+		}
+	}
+}
+
+func TestGenerate_SingleObjectEncoding_FingerprintComputation(t *testing.T) {
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Compute the fingerprint via our code.
+	fp := schemaFingerprint(schema)
+
+	// Independently compute the expected fingerprint.
+	pcf := `{"name":"com.example.Person","type":"record","fields":[{"name":"name","type":"string"}]}`
+
+	var expected [8]byte
+	fpVal := avro.Fingerprint64([]byte(pcf))
+	expected[0] = byte(fpVal)
+	expected[1] = byte(fpVal >> 8)
+	expected[2] = byte(fpVal >> 16)
+	expected[3] = byte(fpVal >> 24)
+	expected[4] = byte(fpVal >> 32)
+	expected[5] = byte(fpVal >> 40)
+	expected[6] = byte(fpVal >> 48)
+	expected[7] = byte(fpVal >> 56)
+
+	if fp != expected {
+		t.Errorf("fingerprint round-trip mismatch\ngot:  %v\nwant: %v", fp, expected)
+	}
+}
+
+func TestGenerate_WithoutEncodingOption_NoFingerprint(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Options:         []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
+		Schemas:         []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	code := string(content)
+	if strings.Contains(code, "Fingerprint") {
+		t.Errorf("expected no Fingerprint method without encoding option, got:\n%s", code)
+	}
+}
+
+func TestGenerate_InvalidEncodingOption(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	_, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{
+			{Name: proto.String("package_name"), Value: proto.String("avro")},
+			{Name: proto.String("encoding"), Value: proto.String("invalid_value")},
+		},
+		Schemas: []*avrocpb.Schema{schema},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid encoding option value")
+	}
+	if !strings.Contains(err.Error(), "unsupported encoding option") {
+		t.Errorf("expected error about unsupported encoding, got: %v", err)
 	}
 }
