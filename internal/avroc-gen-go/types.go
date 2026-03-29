@@ -24,6 +24,17 @@ var primitiveGoTypes = map[string]string{
 	"string":  "string",
 }
 
+// primitiveWriteMethod maps Avro primitive type names to BinaryWriter method names.
+var primitiveWriteMethod = map[string]string{
+	"boolean": "WriteBool",
+	"int":     "WriteInt",
+	"long":    "WriteLong",
+	"float":   "WriteFloat",
+	"double":  "WriteDouble",
+	"bytes":   "WriteBytes",
+	"string":  "WriteString",
+}
+
 // goTypeForIdent returns the Go type string for an Avro Ident.
 // For primitives, it returns the Go equivalent.
 // For named types, it returns the PascalCase Go identifier.
