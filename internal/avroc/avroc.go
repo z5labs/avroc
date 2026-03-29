@@ -252,6 +252,7 @@ func (f *optionFlag) Set(value string) error {
 func (f *optionFlag) options() []*avrocpb.Option {
 	opts := make([]*avrocpb.Option, len(f.values))
 	for i, v := range f.values {
+		// Cut is safe here; Set() already validated the "=" separator is present.
 		key, val, _ := strings.Cut(v, "=")
 		opts[i] = &avrocpb.Option{
 			Name:  proto.String(key),
