@@ -57,8 +57,9 @@ func generateFileCode(schema *avrocpb.Schema) string {
 
 // typeToGenerate wraps a type with optional context (e.g., field name for unions).
 type typeToGenerate struct {
-	typ       *avrocpb.Type
-	fieldName string // For unions: the field name this union belongs to
+	typ        *avrocpb.Type
+	recordName string // For unions: the containing record name
+	fieldName  string // For unions: the field name this union belongs to
 }
 
 // collectTypes extracts all types that need to be generated from a schema.
@@ -67,26 +68,27 @@ func collectTypes(schema *avrocpb.Schema) []typeToGenerate {
 
 	// Add the main schema type if present
 	if schema.Type != nil {
-		types = append(types, collectTypeAndNested(schema.Type, "")...)
+		types = append(types, collectTypeAndNested(schema.Type, "", "")...)
 	}
 
 	// Add additional types
 	for _, t := range schema.Types {
-		types = append(types, collectTypeAndNested(t, "")...)
+		types = append(types, collectTypeAndNested(t, "", "")...)
 	}
 
 	return types
 }
 
 // collectTypeAndNested collects a type and any nested types that need generation.
-func collectTypeAndNested(t *avrocpb.Type, parentFieldName string) []typeToGenerate {
+func collectTypeAndNested(t *avrocpb.Type, recordName string, parentFieldName string) []typeToGenerate {
 	var types []typeToGenerate
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Record:
 		// First collect nested types from fields
+		recName := v.Record.GetName()
 		for _, f := range v.Record.Fields {
-			nested := collectNestedTypes(f.Type, f.GetName())
+			nested := collectNestedTypes(f.Type, recName, f.GetName())
 			types = append(types, nested...)
 		}
 		// Then add the record itself
@@ -99,11 +101,11 @@ func collectTypeAndNested(t *avrocpb.Type, parentFieldName string) []typeToGener
 		types = append(types, typeToGenerate{typ: t})
 
 	case *avrocpb.Type_Union:
-		types = append(types, typeToGenerate{typ: t, fieldName: parentFieldName})
+		types = append(types, typeToGenerate{typ: t, recordName: recordName, fieldName: parentFieldName})
 
 	case *avrocpb.Type_Array:
 		// Check if items contain nested types
-		nested := collectNestedTypes(v.Array.Items, "")
+		nested := collectNestedTypes(v.Array.Items, recordName, "")
 		types = append(types, nested...)
 	}
 
@@ -111,26 +113,26 @@ func collectTypeAndNested(t *avrocpb.Type, parentFieldName string) []typeToGener
 }
 
 // collectNestedTypes finds types nested within a type that need generation.
-func collectNestedTypes(t *avrocpb.Type, fieldName string) []typeToGenerate {
+func collectNestedTypes(t *avrocpb.Type, recordName string, fieldName string) []typeToGenerate {
 	if t == nil {
 		return nil
 	}
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Union:
-		return []typeToGenerate{{typ: t, fieldName: fieldName}}
+		return []typeToGenerate{{typ: t, recordName: recordName, fieldName: fieldName}}
 
 	case *avrocpb.Type_Array:
-		return collectNestedTypes(v.Array.Items, fieldName)
+		return collectNestedTypes(v.Array.Items, recordName, fieldName)
 
 	case *avrocpb.Type_Record:
-		return collectTypeAndNested(t, fieldName)
+		return collectTypeAndNested(t, recordName, fieldName)
 
 	case *avrocpb.Type_EnumType:
-		return collectTypeAndNested(t, fieldName)
+		return collectTypeAndNested(t, recordName, fieldName)
 
 	case *avrocpb.Type_Fixed:
-		return collectTypeAndNested(t, fieldName)
+		return collectTypeAndNested(t, recordName, fieldName)
 	}
 
 	return nil
@@ -148,20 +150,21 @@ func generateType(cb *codeBuilder, ttg typeToGenerate) {
 	case *avrocpb.Type_Fixed:
 		generateFixed(cb, v.Fixed)
 	case *avrocpb.Type_Union:
-		generateUnion(cb, v.Union, ttg.fieldName)
+		generateUnion(cb, v.Union, ttg.recordName, ttg.fieldName)
 	}
 }
 
 // generateRecord generates a Go struct for an Avro record.
 func generateRecord(cb *codeBuilder, r *avrocpb.Record) {
 	name := toPascalCase(r.GetName())
+	recordName := r.GetName()
 
 	cb.writef("// %s is a generated Avro record type.\n", name)
 	cb.writef("type %s struct {\n", name)
 
 	for _, f := range r.Fields {
 		fieldName := toFieldName(f.GetName())
-		fieldType := fieldTypeString(f)
+		fieldType := fieldTypeString(f, recordName)
 		cb.writef("\t%s %s\n", fieldName, fieldType)
 	}
 
@@ -192,8 +195,8 @@ func generateFixed(cb *codeBuilder, f *avrocpb.Fixed) {
 }
 
 // generateUnion generates a Go interface and concrete types for an Avro union.
-func generateUnion(cb *codeBuilder, u *avrocpb.Union, fieldName string) {
-	unionName := unionTypeName(fieldName)
+func generateUnion(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldName string) {
+	unionName := unionTypeName(recordName, fieldName)
 	methodName := "is" + unionName
 
 	cb.writef("// %s is a generated Avro union type.\n", unionName)
@@ -215,7 +218,7 @@ func generateUnionMember(cb *codeBuilder, unionName string, t *avrocpb.Type) {
 	if isNullType(t) {
 		cb.writef("// %s represents the null value in the union.\n", memberName)
 		cb.writef("type %s struct{}\n\n", memberName)
-		cb.writef("func (%s) %s() {}\n", memberName, methodName)
+		cb.writef("func (_ %s) %s() {}\n", memberName, methodName)
 	} else {
 		goType := goTypeForType(t, "")
 		cb.writef("// %s wraps %s in the union.\n", memberName, goType)
@@ -223,19 +226,19 @@ func generateUnionMember(cb *codeBuilder, unionName string, t *avrocpb.Type) {
 		cb.writef("\tValue %s\n", goType)
 		cb.writeln("}")
 		cb.newline()
-		cb.writef("func (%s) %s() {}\n", memberName, methodName)
+		cb.writef("func (_ %s) %s() {}\n", memberName, methodName)
 	}
 }
 
 // fieldTypeString returns the Go type string for a field.
-func fieldTypeString(f *avrocpb.Field) string {
+func fieldTypeString(f *avrocpb.Field, recordName string) string {
 	if f == nil || f.Type == nil {
 		return "any"
 	}
 
-	// Check if this is a union type - use the field name to generate union type name
+	// Check if this is a union type - use the record and field name to generate union type name
 	if f.Type.GetUnion() != nil {
-		return unionTypeName(f.GetName())
+		return unionTypeName(recordName, f.GetName())
 	}
 
 	return goTypeForType(f.Type, "")

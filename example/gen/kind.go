@@ -14,27 +14,27 @@ const (
 // MD5 is a generated Avro fixed type.
 type MD5 [16]byte
 
-// NullableHashUnion is a generated Avro union type.
-type NullableHashUnion interface {
-	isNullableHashUnion()
+// TestRecordNullableHashUnion is a generated Avro union type.
+type TestRecordNullableHashUnion interface {
+	isTestRecordNullableHashUnion()
 }
 
-// NullableHashUnionNull represents the null value in the union.
-type NullableHashUnionNull struct{}
+// TestRecordNullableHashUnionNull represents the null value in the union.
+type TestRecordNullableHashUnionNull struct{}
 
-func (NullableHashUnionNull) isNullableHashUnion() {}
+func (_ TestRecordNullableHashUnionNull) isTestRecordNullableHashUnion() {}
 
-// NullableHashUnionMD5 wraps MD5 in the union.
-type NullableHashUnionMD5 struct {
+// TestRecordNullableHashUnionMD5 wraps MD5 in the union.
+type TestRecordNullableHashUnionMD5 struct {
 	Value MD5
 }
 
-func (NullableHashUnionMD5) isNullableHashUnion() {}
+func (_ TestRecordNullableHashUnionMD5) isTestRecordNullableHashUnion() {}
 
 // TestRecord is a generated Avro record type.
 type TestRecord struct {
 	Name         string
 	Kind         Kind
 	Hash         MD5
-	NullableHash NullableHashUnion
+	NullableHash TestRecordNullableHashUnion
 }

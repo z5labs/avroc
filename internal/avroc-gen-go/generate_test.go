@@ -7,6 +7,8 @@ package avrocgengo
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,16 @@ import (
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"google.golang.org/protobuf/proto"
 )
+
+// validateGoSyntax parses the Go source code and returns an error if it's invalid.
+func validateGoSyntax(t *testing.T, code string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	_, err := parser.ParseFile(fset, "test.go", code, parser.AllErrors)
+	if err != nil {
+		t.Errorf("generated code is not valid Go syntax: %v\n\nCode:\n%s", err, code)
+	}
+}
 
 func TestGenerate_Record(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -63,6 +75,9 @@ func TestGenerate_Record(t *testing.T) {
 	}
 
 	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
 
 	// Check that the generated code contains expected elements
 	// Note: go/format may add alignment spaces, so we check for key patterns
@@ -116,6 +131,9 @@ func TestGenerate_Enum(t *testing.T) {
 
 	code := string(content)
 
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
+
 	// Note: go/format adds alignment spaces, so check for key substrings
 	expectations := []string{
 		"package avro",
@@ -166,6 +184,9 @@ func TestGenerate_Fixed(t *testing.T) {
 	}
 
 	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
 
 	expectations := []string{
 		"package avro",
@@ -225,16 +246,20 @@ func TestGenerate_Union(t *testing.T) {
 
 	code := string(content)
 
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
+
+	// Union type names now include record name prefix to avoid collisions
 	expectations := []string{
 		"package avro",
 		"type Event struct",
-		"Data DataUnion",
-		"type DataUnion interface",
-		"isDataUnion()",
-		"type DataUnionNull struct{}",
-		"type DataUnionString struct",
+		"Data EventDataUnion",
+		"type EventDataUnion interface",
+		"isEventDataUnion()",
+		"type EventDataUnionNull struct{}",
+		"type EventDataUnionString struct",
 		"Value string",
-		"type DataUnionInt struct",
+		"type EventDataUnionInt struct",
 		"Value int32",
 	}
 
@@ -288,6 +313,9 @@ func TestGenerate_Array(t *testing.T) {
 	}
 
 	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
 
 	expectations := []string{
 		"package avro",
@@ -343,6 +371,9 @@ func TestGenerate_Map(t *testing.T) {
 	}
 
 	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
 
 	expectations := []string{
 		"package avro",
@@ -407,6 +438,9 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 	}
 
 	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
 
 	expectations := []string{
 		"type Order struct",

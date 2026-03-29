@@ -63,7 +63,12 @@ func goTypeForType(t *avrocpb.Type, unionName string) string {
 		valueType := goTypeForIdent(v.MapType.GetValues())
 		return "map[string]" + valueType
 	case *avrocpb.Type_Union:
-		// Union types are represented as interfaces
+		// Union types are represented as interfaces. If no union name is
+		// provided (e.g., in nested contexts like array item types), fall
+		// back to a compilable generic type.
+		if unionName == "" {
+			return "any"
+		}
 		return unionName
 	default:
 		return "any"
@@ -107,9 +112,13 @@ func toFieldName(name string) string {
 	return toPascalCase(name)
 }
 
-// unionTypeName generates a name for a union type based on the field it belongs to.
-func unionTypeName(fieldName string) string {
-	return toPascalCase(fieldName) + "Union"
+// unionTypeName generates a name for a union type based on the record and field it belongs to.
+// This includes the record name to avoid collisions when multiple records have fields with the same name.
+func unionTypeName(recordName string, fieldName string) string {
+	if recordName == "" {
+		return toPascalCase(fieldName) + "Union"
+	}
+	return toPascalCase(recordName) + toPascalCase(fieldName) + "Union"
 }
 
 // isNullType returns true if the type is the null primitive.

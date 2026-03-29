@@ -67,19 +67,21 @@ func TestGoTypeForIdent(t *testing.T) {
 
 func TestUnionTypeName(t *testing.T) {
 	tests := []struct {
-		fieldName string
-		want      string
+		recordName string
+		fieldName  string
+		want       string
 	}{
-		{"value", "ValueUnion"},
-		{"my_field", "MyFieldUnion"},
-		{"status", "StatusUnion"},
+		{"", "value", "ValueUnion"},
+		{"", "my_field", "MyFieldUnion"},
+		{"Person", "address", "PersonAddressUnion"},
+		{"MyRecord", "status", "MyRecordStatusUnion"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.fieldName, func(t *testing.T) {
-			got := unionTypeName(tt.fieldName)
+		t.Run(tt.recordName+"_"+tt.fieldName, func(t *testing.T) {
+			got := unionTypeName(tt.recordName, tt.fieldName)
 			if got != tt.want {
-				t.Errorf("unionTypeName(%q) = %q, want %q", tt.fieldName, got, tt.want)
+				t.Errorf("unionTypeName(%q, %q) = %q, want %q", tt.recordName, tt.fieldName, got, tt.want)
 			}
 		})
 	}

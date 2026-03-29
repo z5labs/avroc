@@ -52,23 +52,22 @@ func generateSchemaFile(outputDir string, schema *avrocpb.Schema) (string, error
 	// Generate the Go source code
 	code := generateFileCode(schema)
 
+	// Determine the filename from the schema
+	filename := schemaFilename(schema)
+	outputPath := filepath.Join(outputDir, filename)
+
 	// Format the code using go/format
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
-		// If formatting fails, write the unformatted code for debugging
-		formatted = []byte(code)
+		return "", fmt.Errorf("failed to format generated code for %s: %w", outputPath, err)
 	}
-
-	// Determine the filename from the schema
-	filename := schemaFilename(schema)
-	filepath := filepath.Join(outputDir, filename)
 
 	// Write the file
-	if err := os.WriteFile(filepath, formatted, 0o644); err != nil {
-		return "", fmt.Errorf("failed to write file %s: %w", filepath, err)
+	if err := os.WriteFile(outputPath, formatted, 0o644); err != nil {
+		return "", fmt.Errorf("failed to write file %s: %w", outputPath, err)
 	}
 
-	return filepath, nil
+	return outputPath, nil
 }
 
 // schemaFilename determines the output filename for a schema.
