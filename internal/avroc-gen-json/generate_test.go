@@ -722,3 +722,175 @@ func TestGenerate_RecordWithOwnNamespace(t *testing.T) {
 		t.Errorf("expected namespace 'com.other', got %v", result["namespace"])
 	}
 }
+
+func TestGenerate_IdentMainTypeResolvesFromTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Mimics IDL with "schema TestRecord;" where Type is an Ident
+	// and the actual definitions are in Types.
+	size := int32(16)
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("org.apache.avro.test"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("TestRecord")}},
+		},
+		Types: []*avrocpb.Type{
+			{
+				Type: &avrocpb.Type_EnumType{
+					EnumType: &avrocpb.Enum{
+						Name: proto.String("Kind"),
+						Values: []*avrocpb.Ident{
+							{Value: proto.String("FOO")},
+							{Value: proto.String("BAR")},
+							{Value: proto.String("BAZ")},
+						},
+					},
+				},
+			},
+			{
+				Type: &avrocpb.Type_Fixed{
+					Fixed: &avrocpb.Fixed{
+						Name: proto.String("MD5"),
+						Size: &size,
+					},
+				},
+			},
+			{
+				Type: &avrocpb.Type_Record{
+					Record: &avrocpb.Record{
+						Name: proto.String("TestRecord"),
+						Fields: []*avrocpb.Field{
+							{
+								Name: proto.String("name"),
+								Type: &avrocpb.Type{
+									Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								},
+							},
+							{
+								Name: proto.String("kind"),
+								Type: &avrocpb.Type{
+									Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("Kind")}},
+								},
+							},
+							{
+								Name: proto.String("hash"),
+								Type: &avrocpb.Type{
+									Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("MD5")}},
+								},
+							},
+							{
+								Name: proto.String("nullableHash"),
+								Type: &avrocpb.Type{
+									Type: &avrocpb.Type_Union{
+										Union: &avrocpb.Union{
+											Types: []*avrocpb.Type{
+												{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("null")}}},
+												{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("MD5")}}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Schemas:         []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if len(resp.OutputFiles) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(resp.OutputFiles))
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	validateJSON(t, content)
+
+	var result map[string]any
+	if err := json.Unmarshal(content, &result); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	// Main type should be the resolved TestRecord, not just a string
+	if result["type"] != "record" {
+		t.Errorf("expected type 'record', got %v", result["type"])
+	}
+	if result["name"] != "TestRecord" {
+		t.Errorf("expected name 'TestRecord', got %v", result["name"])
+	}
+	if result["namespace"] != "org.apache.avro.test" {
+		t.Errorf("expected namespace 'org.apache.avro.test', got %v", result["namespace"])
+	}
+
+	fields := result["fields"].([]any)
+	if len(fields) != 4 {
+		t.Fatalf("expected 4 fields, got %d", len(fields))
+	}
+
+	// "name" field should be a primitive string type
+	field0 := fields[0].(map[string]any)
+	if field0["type"] != "string" {
+		t.Errorf("expected field 'name' type 'string', got %v", field0["type"])
+	}
+
+	// "kind" field should have the Kind enum inlined
+	field1 := fields[1].(map[string]any)
+	kindType, ok := field1["type"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'kind' field type to be an inlined enum object, got %T: %v", field1["type"], field1["type"])
+	}
+	if kindType["type"] != "enum" {
+		t.Errorf("expected kind type 'enum', got %v", kindType["type"])
+	}
+	if kindType["name"] != "Kind" {
+		t.Errorf("expected kind name 'Kind', got %v", kindType["name"])
+	}
+
+	// "hash" field should have the MD5 fixed type inlined
+	field2 := fields[2].(map[string]any)
+	hashType, ok := field2["type"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'hash' field type to be an inlined fixed object, got %T: %v", field2["type"], field2["type"])
+	}
+	if hashType["type"] != "fixed" {
+		t.Errorf("expected hash type 'fixed', got %v", hashType["type"])
+	}
+	if hashType["size"] != float64(16) {
+		t.Errorf("expected hash size 16, got %v", hashType["size"])
+	}
+
+	// "nullableHash" union should reference MD5 by name (already defined)
+	field3 := fields[3].(map[string]any)
+	unionTypes, ok := field3["type"].([]any)
+	if !ok {
+		t.Fatalf("expected 'nullableHash' type to be a union array, got %T", field3["type"])
+	}
+	if len(unionTypes) != 2 {
+		t.Fatalf("expected 2 union types, got %d", len(unionTypes))
+	}
+	if unionTypes[0] != "null" {
+		t.Errorf("expected union[0] = 'null', got %v", unionTypes[0])
+	}
+	// MD5 was already inlined in field "hash", so here it should be a name reference
+	if unionTypes[1] != "MD5" {
+		t.Errorf("expected union[1] = 'MD5' (name reference), got %v", unionTypes[1])
+	}
+
+	// Verify output filename uses the Ident name
+	expectedFilename := filepath.Join(tmpDir, "test_record.avsc")
+	if resp.OutputFiles[0] != expectedFilename {
+		t.Errorf("expected output file %q, got %q", expectedFilename, resp.OutputFiles[0])
+	}
+}

@@ -66,38 +66,78 @@ func generateSchemaFile(outputDir string, schema *avrocpb.Schema) (string, error
 	return outputPath, nil
 }
 
+// schemaConverter holds state for converting a protobuf Schema to Avro JSON,
+// tracking named type definitions so they can be inlined on first use and
+// referenced by name on subsequent uses.
+type schemaConverter struct {
+	namespace  string
+	namedTypes map[string]*avrocpb.Type
+	defined    map[string]bool
+}
+
+func newSchemaConverter(schema *avrocpb.Schema) *schemaConverter {
+	c := &schemaConverter{
+		namespace:  schema.GetNamespace(),
+		namedTypes: make(map[string]*avrocpb.Type),
+		defined:    make(map[string]bool),
+	}
+	for _, t := range schema.GetTypes() {
+		if name := typeName(t); name != "" {
+			c.namedTypes[name] = t
+		}
+	}
+	return c
+}
+
 // schemaToJSON converts a protobuf Schema to its Avro JSON schema representation.
 func schemaToJSON(schema *avrocpb.Schema) any {
+	c := newSchemaConverter(schema)
+
 	if schema.Type != nil {
-		return typeToJSON(schema.Type, schema.GetNamespace())
+		return c.typeToJSON(schema.Type)
 	}
 	return nil
 }
 
 // typeToJSON converts a protobuf Type to its Avro JSON schema representation.
-func typeToJSON(t *avrocpb.Type, namespace string) any {
+func (c *schemaConverter) typeToJSON(t *avrocpb.Type) any {
 	if t == nil {
 		return nil
 	}
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Record:
-		return recordToJSON(v.Record, namespace)
+		return c.recordToJSON(v.Record)
 	case *avrocpb.Type_EnumType:
-		return enumToJSON(v.EnumType, namespace)
+		return c.enumToJSON(v.EnumType)
 	case *avrocpb.Type_Array:
-		return arrayToJSON(v.Array, namespace)
+		return c.arrayToJSON(v.Array)
 	case *avrocpb.Type_MapType:
 		return mapToJSON(v.MapType)
 	case *avrocpb.Type_Union:
-		return unionToJSON(v.Union, namespace)
+		return c.unionToJSON(v.Union)
 	case *avrocpb.Type_Fixed:
-		return fixedToJSON(v.Fixed, namespace)
+		return c.fixedToJSON(v.Fixed)
 	case *avrocpb.Type_Ident:
-		return v.Ident.GetValue()
+		return c.identToJSON(v.Ident)
 	default:
 		return nil
 	}
+}
+
+// identToJSON resolves an identifier. Primitive types are returned as strings.
+// Named types are inlined on first use and referenced by name afterwards.
+func (c *schemaConverter) identToJSON(ident *avrocpb.Ident) any {
+	name := ident.GetValue()
+
+	// Check if it's a named type we can resolve
+	if t, ok := c.namedTypes[name]; ok && !c.defined[name] {
+		c.defined[name] = true
+		return c.typeToJSON(t)
+	}
+
+	// Primitive type or already-defined named type: return as string
+	return name
 }
 
 // avroRecord represents an Avro record type in JSON schema format.
@@ -148,15 +188,15 @@ type avroFixed struct {
 	Size      int32    `json:"size"`
 }
 
-func recordToJSON(r *avrocpb.Record, namespace string) avroRecord {
+func (c *schemaConverter) recordToJSON(r *avrocpb.Record) avroRecord {
 	ns := r.GetNamespace()
 	if ns == "" {
-		ns = namespace
+		ns = c.namespace
 	}
 
 	fields := make([]avroField, 0, len(r.GetFields()))
 	for _, f := range r.GetFields() {
-		fields = append(fields, fieldToJSON(f, ns))
+		fields = append(fields, c.fieldToJSON(f))
 	}
 
 	return avroRecord{
@@ -168,7 +208,7 @@ func recordToJSON(r *avrocpb.Record, namespace string) avroRecord {
 	}
 }
 
-func fieldToJSON(f *avrocpb.Field, namespace string) avroField {
+func (c *schemaConverter) fieldToJSON(f *avrocpb.Field) avroField {
 	var order string
 	switch f.GetSortOrder() {
 	case avrocpb.SortOrder_SORT_ORDER_DESC:
@@ -179,16 +219,16 @@ func fieldToJSON(f *avrocpb.Field, namespace string) avroField {
 
 	return avroField{
 		Name:    f.GetName(),
-		Type:    typeToJSON(f.GetType(), namespace),
+		Type:    c.typeToJSON(f.GetType()),
 		Aliases: f.GetAliases(),
 		Order:   order,
 	}
 }
 
-func enumToJSON(e *avrocpb.Enum, namespace string) avroEnum {
+func (c *schemaConverter) enumToJSON(e *avrocpb.Enum) avroEnum {
 	ns := e.GetNamespace()
 	if ns == "" {
-		ns = namespace
+		ns = c.namespace
 	}
 
 	symbols := make([]string, 0, len(e.GetValues()))
@@ -211,10 +251,10 @@ func enumToJSON(e *avrocpb.Enum, namespace string) avroEnum {
 	}
 }
 
-func arrayToJSON(a *avrocpb.Array, namespace string) avroArray {
+func (c *schemaConverter) arrayToJSON(a *avrocpb.Array) avroArray {
 	return avroArray{
 		Type:  "array",
-		Items: typeToJSON(a.GetItems(), namespace),
+		Items: c.typeToJSON(a.GetItems()),
 	}
 }
 
@@ -225,18 +265,18 @@ func mapToJSON(m *avrocpb.Map) avroMap {
 	}
 }
 
-func unionToJSON(u *avrocpb.Union, namespace string) []any {
+func (c *schemaConverter) unionToJSON(u *avrocpb.Union) []any {
 	types := make([]any, 0, len(u.GetTypes()))
 	for _, t := range u.GetTypes() {
-		types = append(types, typeToJSON(t, namespace))
+		types = append(types, c.typeToJSON(t))
 	}
 	return types
 }
 
-func fixedToJSON(f *avrocpb.Fixed, namespace string) avroFixed {
+func (c *schemaConverter) fixedToJSON(f *avrocpb.Fixed) avroFixed {
 	ns := f.GetNamespace()
 	if ns == "" {
-		ns = namespace
+		ns = c.namespace
 	}
 
 	return avroFixed{
@@ -254,6 +294,10 @@ func schemaFilename(schema *avrocpb.Schema) string {
 	if schema.Type != nil {
 		if name := typeName(schema.Type); name != "" {
 			return toSnakeCase(name) + ".avsc"
+		}
+		// If primary type is an Ident, try resolving it from Types
+		if ident, ok := schema.Type.Type.(*avrocpb.Type_Ident); ok {
+			return toSnakeCase(ident.Ident.GetValue()) + ".avsc"
 		}
 	}
 

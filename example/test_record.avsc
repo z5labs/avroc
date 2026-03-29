@@ -1,0 +1,40 @@
+{
+  "type": "record",
+  "name": "TestRecord",
+  "namespace": "org.apache.avro.test",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "kind",
+      "type": {
+        "type": "enum",
+        "name": "Kind",
+        "namespace": "org.apache.avro.test",
+        "symbols": [
+          "FOO",
+          "BAR",
+          "BAZ"
+        ]
+      }
+    },
+    {
+      "name": "hash",
+      "type": {
+        "type": "fixed",
+        "name": "MD5",
+        "namespace": "org.apache.avro.test",
+        "size": 16
+      }
+    },
+    {
+      "name": "nullableHash",
+      "type": [
+        "null",
+        "MD5"
+      ]
+    }
+  ]
+}
