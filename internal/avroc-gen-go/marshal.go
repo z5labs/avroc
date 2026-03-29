@@ -76,6 +76,11 @@ func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
 		cb.writeln("\t}")
+	case *avrocpb.Type_Fixed:
+		cb.writef("\terr = x.%s.MarshalAvroBinary(w)\n", fieldName)
+		cb.writeln("\tif err != nil {")
+		cb.writeln("\t\treturn err")
+		cb.writeln("\t}")
 	}
 }
 
@@ -104,12 +109,12 @@ func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName stri
 	cb.writeln("\t\tif err != nil {")
 	cb.writeln("\t\t\treturn err")
 	cb.writeln("\t\t}")
-	cb.writef("\t\tfor _, v := range x.%s {\n", fieldName)
+	cb.writef("\t\tfor i := range x.%s {\n", fieldName)
 
-	// Generate write for each element
+	// Generate write for each element using index to ensure addressability
 	itemType := arr.GetItems()
 	if itemType != nil {
-		generateItemWrite(cb, itemType, "v", "\t\t\t")
+		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -127,16 +132,16 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 	cb.writeln("\t\tif err != nil {")
 	cb.writeln("\t\t\treturn err")
 	cb.writeln("\t\t}")
-	cb.writef("\t\tfor k, v := range x.%s {\n", fieldName)
+	cb.writef("\t\tfor k := range x.%s {\n", fieldName)
 	cb.writeln("\t\t\terr = w.WriteString(k)")
 	cb.writeln("\t\t\tif err != nil {")
 	cb.writeln("\t\t\t\treturn err")
 	cb.writeln("\t\t\t}")
 
-	// Generate write for map value
+	// Generate write for map value using index access for addressability
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueIdentWrite(cb, valueType, "v", "\t\t\t")
+		generateValueIdentWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -161,10 +166,17 @@ func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent 
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
+	case *avrocpb.Type_Fixed:
+		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
+		cb.writef("%sif err != nil {\n", indent)
+		cb.writef("%s\treturn err\n", indent)
+		cb.writef("%s}\n", indent)
 	}
 }
 
 // generateValueIdentWrite generates write code for a value with an ident type.
+// The varName may be non-addressable (e.g., a map index), so for named types
+// with pointer receivers we copy to a local variable first.
 func generateValueIdentWrite(cb *codeBuilder, ident *avrocpb.Ident, varName string, indent string) {
 	typeName := ident.GetValue()
 
@@ -174,10 +186,14 @@ func generateValueIdentWrite(cb *codeBuilder, ident *avrocpb.Ident, varName stri
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
 	} else {
-		// Named type reference
-		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
+		// Named type reference. Use a temporary variable to ensure addressability
+		// for pointer-receiver methods (e.g., when varName is a map index).
+		cb.writef("%s{\n", indent)
+		cb.writef("%s\ttmp := %s\n", indent, varName)
+		cb.writef("%s\terr = tmp.MarshalAvroBinary(w)\n", indent)
+		cb.writef("%s\tif err != nil {\n", indent)
+		cb.writef("%s\t\treturn err\n", indent)
+		cb.writef("%s\t}\n", indent)
 		cb.writef("%s}\n", indent)
 	}
 }
@@ -253,6 +269,11 @@ func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Ty
 			generateUnionArrayMarshal(cb, v.Array)
 		case *avrocpb.Type_MapType:
 			generateUnionMapMarshal(cb, v.MapType)
+		case *avrocpb.Type_Fixed:
+			cb.writeln("\terr = x.Value.MarshalAvroBinary(w)")
+			cb.writeln("\tif err != nil {")
+			cb.writeln("\t\treturn err")
+			cb.writeln("\t}")
 		}
 		cb.writeln("\treturn nil")
 	}
@@ -267,11 +288,11 @@ func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array) {
 	cb.writeln("\t\tif err != nil {")
 	cb.writeln("\t\t\treturn err")
 	cb.writeln("\t\t}")
-	cb.writeln("\t\tfor _, v := range x.Value {")
+	cb.writeln("\t\tfor i := range x.Value {")
 
 	itemType := arr.GetItems()
 	if itemType != nil {
-		generateItemWrite(cb, itemType, "v", "\t\t\t")
+		generateItemWrite(cb, itemType, "x.Value[i]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -289,7 +310,7 @@ func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
 	cb.writeln("\t\tif err != nil {")
 	cb.writeln("\t\t\treturn err")
 	cb.writeln("\t\t}")
-	cb.writeln("\t\tfor k, v := range x.Value {")
+	cb.writeln("\t\tfor k := range x.Value {")
 	cb.writeln("\t\t\terr = w.WriteString(k)")
 	cb.writeln("\t\t\tif err != nil {")
 	cb.writeln("\t\t\t\treturn err")
@@ -297,7 +318,7 @@ func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
 
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueIdentWrite(cb, valueType, "v", "\t\t\t")
+		generateValueIdentWrite(cb, valueType, "x.Value[k]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")

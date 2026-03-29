@@ -296,8 +296,8 @@ func TestMarshal_ArrayField(t *testing.T) {
 		"func (x *Numbers) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
 		"if len(x.Values) > 0",
 		"w.WriteLong(int64(len(x.Values)))",
-		"for _, v := range x.Values",
-		"w.WriteInt(v)",
+		"for i := range x.Values",
+		"w.WriteInt(x.Values[i])",
 		// Block terminator
 		"w.WriteLong(0)",
 	}
@@ -358,9 +358,9 @@ func TestMarshal_MapField(t *testing.T) {
 		"func (x *Config) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
 		"if len(x.Settings) > 0",
 		"w.WriteLong(int64(len(x.Settings)))",
-		"for k, v := range x.Settings",
+		"for k := range x.Settings",
 		"w.WriteString(k)",
-		"w.WriteString(v)",
+		"w.WriteString(x.Settings[k])",
 		// Block terminator
 		"w.WriteLong(0)",
 	}
@@ -393,6 +393,23 @@ func TestMarshal_NestedRecord(t *testing.T) {
 							Name: proto.String("customer"),
 							Type: &avrocpb.Type{
 								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("Customer")}},
+							},
+						},
+					},
+				},
+			},
+		},
+		Types: []*avrocpb.Type{
+			{
+				Type: &avrocpb.Type_Record{
+					Record: &avrocpb.Record{
+						Name: proto.String("Customer"),
+						Fields: []*avrocpb.Field{
+							{
+								Name: proto.String("name"),
+								Type: &avrocpb.Type{
+									Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								},
 							},
 						},
 					},
