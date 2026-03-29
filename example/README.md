@@ -1,29 +1,36 @@
 # avroc Example
 
-This example demonstrates using `avroc` to generate Go types from an Avro IDL schema.
+This example demonstrates using `avroc` to generate code from an Avro IDL schema.
 
 ## Schema
 
 The `schema.avdl` file contains an example schema based on the [Apache Avro documentation](https://avro.apache.org/docs/1.12.0/idl-language/#schemaavdl).
 
-## Generating Go Types
+## Generating Code
 
-To generate Go types from the schema:
+To generate code from the schema:
 
 ```bash
 # Build avroc tools (from repo root)
 go build -o ./bin/avroc ./cmd/avroc
 go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
+go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
 
-# Generate Go types
-PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen example/schema.avdl
+# Generate Go types and JSON schema
+PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -json_out=example example/schema.avdl
 ```
 
 ## Generated Output
 
-The generator produces a Go file in `gen/` containing:
+### Go (`gen/`)
+
+The Go generator produces a Go file in `gen/` containing:
 
 - `Kind` - an enum type with `KindFOO`, `KindBAR`, `KindBAZ` constants
 - `MD5` - a fixed 16-byte type
 - `NullableHashUnion` - a union interface with `NullableHashUnionNull` and `NullableHashUnionMD5` implementations
 - `TestRecord` - a struct with fields for name, kind, hash, and nullable hash
+
+### JSON Schema (`test_record.avsc`)
+
+The JSON generator produces an Avro JSON schema file (`.avsc`) following the [Avro specification](https://avro.apache.org/docs/1.12.0/specification/#schema-declaration). Named types are inlined on first use and referenced by name afterwards.
