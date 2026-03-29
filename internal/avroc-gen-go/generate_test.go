@@ -559,3 +559,106 @@ func TestGenerate_CreatesOutputDirectory(t *testing.T) {
 		t.Errorf("output file does not exist: %s", resp.OutputFiles[0])
 	}
 }
+
+func TestGenerate_PackageNameOption(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{
+			{
+				Name:  proto.String("package_name"),
+				Value: proto.String("mypackage"),
+			},
+		},
+		Schemas: []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	if len(resp.OutputFiles) != 1 {
+		t.Fatalf("expected 1 output file, got %d", len(resp.OutputFiles))
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	code := string(content)
+
+	validateGoSyntax(t, code)
+
+	if !strings.Contains(code, "package mypackage") {
+		t.Errorf("expected generated code to contain %q, got:\n%s", "package mypackage", code)
+	}
+	if strings.Contains(code, "package avro") {
+		t.Errorf("expected generated code to NOT contain %q, got:\n%s", "package avro", code)
+	}
+}
+
+func TestGenerate_DefaultPackageName(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name: proto.String("Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Schemas:         []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	code := string(content)
+
+	validateGoSyntax(t, code)
+
+	if !strings.Contains(code, "package avro") {
+		t.Errorf("expected generated code to contain default %q, got:\n%s", "package avro", code)
+	}
+}

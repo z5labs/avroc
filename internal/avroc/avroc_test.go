@@ -378,9 +378,94 @@ func TestPrintHelp(t *testing.T) {
 	if !bytes.Contains([]byte(output), []byte("-java_out string")) {
 		t.Errorf("output missing -java_out flag:\n%s", output)
 	}
+	if !bytes.Contains([]byte(output), []byte("-go_opt key=value")) {
+		t.Errorf("output missing -go_opt flag:\n%s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("-java_opt key=value")) {
+		t.Errorf("output missing -java_opt flag:\n%s", output)
+	}
 	if !bytes.Contains([]byte(output), []byte("Usage: avroc")) {
 		t.Errorf("output missing usage line:\n%s", output)
 	}
+}
+
+func TestOptionFlag(t *testing.T) {
+	t.Run("single option", func(t *testing.T) {
+		of := &optionFlag{}
+		if err := of.Set("package_name=my_package"); err != nil {
+			t.Fatal(err)
+		}
+
+		opts := of.options()
+		if len(opts) != 1 {
+			t.Fatalf("got %d options, want 1", len(opts))
+		}
+		if opts[0].GetName() != "package_name" {
+			t.Errorf("option name = %q, want %q", opts[0].GetName(), "package_name")
+		}
+		if opts[0].GetValue() != "my_package" {
+			t.Errorf("option value = %q, want %q", opts[0].GetValue(), "my_package")
+		}
+	})
+
+	t.Run("multiple options", func(t *testing.T) {
+		of := &optionFlag{}
+		if err := of.Set("package_name=my_package"); err != nil {
+			t.Fatal(err)
+		}
+		if err := of.Set("other_opt=other_val"); err != nil {
+			t.Fatal(err)
+		}
+
+		opts := of.options()
+		if len(opts) != 2 {
+			t.Fatalf("got %d options, want 2", len(opts))
+		}
+		if opts[0].GetName() != "package_name" {
+			t.Errorf("option[0] name = %q, want %q", opts[0].GetName(), "package_name")
+		}
+		if opts[1].GetName() != "other_opt" {
+			t.Errorf("option[1] name = %q, want %q", opts[1].GetName(), "other_opt")
+		}
+	})
+
+	t.Run("value with equals sign", func(t *testing.T) {
+		of := &optionFlag{}
+		if err := of.Set("key=val=ue"); err != nil {
+			t.Fatal(err)
+		}
+
+		opts := of.options()
+		if len(opts) != 1 {
+			t.Fatalf("got %d options, want 1", len(opts))
+		}
+		if opts[0].GetName() != "key" {
+			t.Errorf("option name = %q, want %q", opts[0].GetName(), "key")
+		}
+		if opts[0].GetValue() != "val=ue" {
+			t.Errorf("option value = %q, want %q", opts[0].GetValue(), "val=ue")
+		}
+	})
+
+	t.Run("invalid format", func(t *testing.T) {
+		of := &optionFlag{}
+		if err := of.Set("invalid"); err == nil {
+			t.Fatal("expected error for option without '='")
+		}
+	})
+
+	t.Run("string representation", func(t *testing.T) {
+		of := &optionFlag{}
+		if err := of.Set("a=b"); err != nil {
+			t.Fatal(err)
+		}
+		if err := of.Set("c=d"); err != nil {
+			t.Fatal(err)
+		}
+		if of.String() != "a=b,c=d" {
+			t.Errorf("String() = %q, want %q", of.String(), "a=b,c=d")
+		}
+	})
 }
 
 func TestMain_PathNotSet(t *testing.T) {
@@ -495,7 +580,7 @@ func TestGeneratorGenerate(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	err := g.generate(ctx, outputDir, schema)
+	err := g.generate(ctx, outputDir, nil, schema)
 	if err != nil {
 		t.Fatal(err)
 	}

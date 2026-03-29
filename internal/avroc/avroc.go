@@ -51,11 +51,15 @@ func Main(ctx context.Context, cli cli.Context) int {
 	flags := flag.NewFlagSet("avroc", flag.ContinueOnError)
 	flags.Usage = func() {}
 
+	optFlags := make(map[string]*optionFlag)
 	for name := range generators {
 		generatorName := strings.TrimPrefix(name, "avroc-gen-")
-		flagName := generatorName + "_out"
 
-		flags.String(flagName, "", fmt.Sprintf("Output directory for the %q generator", generatorName))
+		flags.String(generatorName+"_out", "", fmt.Sprintf("Output directory for the %q generator", generatorName))
+
+		of := &optionFlag{}
+		optFlags[generatorName] = of
+		flags.Var(of, generatorName+"_opt", fmt.Sprintf("Options for the %q generator (key=value)", generatorName))
 	}
 
 	err = flags.Parse(cli.Args)
@@ -106,6 +110,10 @@ func Main(ctx context.Context, cli cli.Context) int {
 
 	genPool := pool.New().WithContext(ctx)
 	flags.Visit(func(f *flag.Flag) {
+		if !strings.HasSuffix(f.Name, "_out") {
+			return
+		}
+
 		genPool.Go(func(ctx context.Context) error {
 			flagName := strings.TrimSuffix(f.Name, "_out")
 			generatorName := "avroc-gen-" + flagName
@@ -121,6 +129,11 @@ func Main(ctx context.Context, cli cli.Context) int {
 				return fmt.Errorf("empty output directory for generator %q", generatorName)
 			}
 
+			var options []*avrocpb.Option
+			if of, ok := optFlags[flagName]; ok {
+				options = of.options()
+			}
+
 			g := generator{
 				log:            cli.Log,
 				env:            cli.Env,
@@ -128,7 +141,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 				executablePath: executablePath,
 			}
 
-			return g.generate(ctx, output, schemas...)
+			return g.generate(ctx, output, options, schemas...)
 		})
 	})
 
@@ -204,9 +217,48 @@ func printHelp(w io.Writer, generators ...string) error {
 		if err != nil {
 			return err
 		}
+
+		_, err = fmt.Fprintf(w, "  -%s_opt key=value\n", name)
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintf(w, "        Options for the %q generator (can be specified multiple times)\n", name)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// optionFlag implements flag.Value to support repeated key=value flag usage.
+type optionFlag struct {
+	values []string
+}
+
+func (f *optionFlag) String() string {
+	return strings.Join(f.values, ",")
+}
+
+func (f *optionFlag) Set(value string) error {
+	if !strings.Contains(value, "=") {
+		return fmt.Errorf("option must be in key=value format: %q", value)
+	}
+	f.values = append(f.values, value)
+	return nil
+}
+
+func (f *optionFlag) options() []*avrocpb.Option {
+	opts := make([]*avrocpb.Option, len(f.values))
+	for i, v := range f.values {
+		key, val, _ := strings.Cut(v, "=")
+		opts[i] = &avrocpb.Option{
+			Name:  proto.String(key),
+			Value: proto.String(val),
+		}
+	}
+	return opts
 }
 
 func parseIDL(path string) (_ *idl.File, err error) {
@@ -228,7 +280,7 @@ type generator struct {
 	executablePath string
 }
 
-func (g generator) generate(ctx context.Context, output string, schemas ...*avrocpb.Schema) (err error) {
+func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
 	socketFile, err := os.CreateTemp("", g.name+"-*.sock")
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create temporary socket file", slog.String("generator", g.name), slog.Any("error", err))
@@ -274,6 +326,7 @@ func (g generator) generate(ctx context.Context, output string, schemas ...*avro
 	client := avrocpb.NewGeneratorClient(cc)
 	resp, err := client.Generate(rpcCtx, &avrocpb.GenerateRequest{
 		OutputDirectory: &output,
+		Options:         options,
 		Schemas:         schemas,
 	})
 	if err != nil {
