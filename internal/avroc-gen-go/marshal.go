@@ -18,6 +18,8 @@ func generateMarshalMethod(cb *codeBuilder, ttg typeToGenerate) {
 		generateRecordMarshal(cb, v.Record)
 	case *avrocpb.Type_EnumType:
 		generateEnumMarshal(cb, v.EnumType)
+	case *avrocpb.Type_Fixed:
+		generateFixedMarshal(cb, v.Fixed)
 	case *avrocpb.Type_Union:
 		generateUnionMarshal(cb, v.Union, ttg.recordName, ttg.fieldName)
 	}
@@ -187,6 +189,16 @@ func generateEnumMarshal(cb *codeBuilder, e *avrocpb.Enum) {
 	cb.newline()
 	cb.writef("func (x %s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", name)
 	cb.writeln("\treturn w.WriteInt(int32(x))")
+	cb.writeln("}")
+}
+
+// generateFixedMarshal generates the MarshalAvroBinary method for a fixed type.
+func generateFixedMarshal(cb *codeBuilder, f *avrocpb.Fixed) {
+	name := toPascalCase(f.GetName())
+
+	cb.newline()
+	cb.writef("func (x %s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", name)
+	cb.writeln("\treturn w.WriteFixed(x[:])")
 	cb.writeln("}")
 }
 

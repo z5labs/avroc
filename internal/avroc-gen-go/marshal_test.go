@@ -77,6 +77,53 @@ func TestMarshal_Record(t *testing.T) {
 	}
 }
 
+func TestMarshal_Fixed(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	size := int32(16)
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Fixed{
+				Fixed: &avrocpb.Fixed{
+					Name: proto.String("MD5"),
+					Size: &size,
+				},
+			},
+		},
+	}
+
+	svc := &generatorService{}
+	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+		OutputDirectory: proto.String(tmpDir),
+		Schemas:         []*avrocpb.Schema{schema},
+	})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	content, err := os.ReadFile(resp.OutputFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	code := string(content)
+
+	// Validate that the generated code is syntactically valid Go
+	validateGoSyntax(t, code)
+
+	expectations := []string{
+		"func (x MD5) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"return w.WriteFixed(x[:])",
+	}
+
+	for _, exp := range expectations {
+		if !strings.Contains(code, exp) {
+			t.Errorf("expected generated code to contain %q, got:\n%s", exp, code)
+		}
+	}
+}
+
 func TestMarshal_Enum(t *testing.T) {
 	tmpDir := t.TempDir()
 
