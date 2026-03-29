@@ -32,11 +32,14 @@ func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRe
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	packageName := "avro"
+	var packageName string
 	for _, opt := range req.GetOptions() {
 		if opt.GetName() == "package_name" {
 			packageName = opt.GetValue()
 		}
+	}
+	if packageName == "" {
+		return nil, fmt.Errorf("package_name option is required")
 	}
 
 	var outputFiles []string

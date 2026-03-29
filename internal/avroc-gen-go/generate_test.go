@@ -59,6 +59,7 @@ func TestGenerate_Record(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -118,6 +119,7 @@ func TestGenerate_Enum(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -172,6 +174,7 @@ func TestGenerate_Fixed(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -233,6 +236,7 @@ func TestGenerate_Union(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -301,6 +305,7 @@ func TestGenerate_Array(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -359,6 +364,7 @@ func TestGenerate_Map(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -426,6 +432,7 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -544,6 +551,7 @@ func TestGenerate_CreatesOutputDirectory(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(outputDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -618,7 +626,7 @@ func TestGenerate_PackageNameOption(t *testing.T) {
 	}
 }
 
-func TestGenerate_DefaultPackageName(t *testing.T) {
+func TestGenerate_MissingPackageName(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	schema := &avrocpb.Schema{
@@ -641,24 +649,11 @@ func TestGenerate_DefaultPackageName(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
+	_, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
 		Schemas:         []*avrocpb.Schema{schema},
 	})
-	if err != nil {
-		t.Fatalf("Generate failed: %v", err)
-	}
-
-	content, err := os.ReadFile(resp.OutputFiles[0])
-	if err != nil {
-		t.Fatalf("failed to read output file: %v", err)
-	}
-
-	code := string(content)
-
-	validateGoSyntax(t, code)
-
-	if !strings.Contains(code, "package avro") {
-		t.Errorf("expected generated code to contain default %q, got:\n%s", "package avro", code)
+	if err == nil {
+		t.Fatal("expected error when package_name option is not set")
 	}
 }

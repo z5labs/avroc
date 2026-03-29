@@ -31,7 +31,7 @@ func generateRecordMarshal(cb *codeBuilder, r *avrocpb.Record) {
 	recordName := r.GetName()
 
 	cb.newline()
-	cb.writef("func (x *%s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", name)
+	cb.writef("func (x *%s) MarshalAvroBinary(w *avro.BinaryWriter) error {\n", name)
 
 	fields := r.GetFields()
 	if len(fields) == 0 {
@@ -203,7 +203,7 @@ func generateEnumMarshal(cb *codeBuilder, e *avrocpb.Enum) {
 	name := toPascalCase(e.GetName())
 
 	cb.newline()
-	cb.writef("func (x %s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", name)
+	cb.writef("func (x %s) MarshalAvroBinary(w *avro.BinaryWriter) error {\n", name)
 	cb.writeln("\treturn w.WriteInt(int32(x))")
 	cb.writeln("}")
 }
@@ -213,7 +213,7 @@ func generateFixedMarshal(cb *codeBuilder, f *avrocpb.Fixed) {
 	name := toPascalCase(f.GetName())
 
 	cb.newline()
-	cb.writef("func (x %s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", name)
+	cb.writef("func (x %s) MarshalAvroBinary(w *avro.BinaryWriter) error {\n", name)
 	cb.writeln("\treturn w.WriteFixed(x[:])")
 	cb.writeln("}")
 }
@@ -232,7 +232,7 @@ func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Ty
 	memberName := unionMemberName(unionName, t)
 
 	cb.newline()
-	cb.writef("func (x %s) MarshalAvroBinary(w *avrolib.BinaryWriter) error {\n", memberName)
+	cb.writef("func (x %s) MarshalAvroBinary(w *avro.BinaryWriter) error {\n", memberName)
 
 	if isNullType(t) {
 		// Null member: just write the index

@@ -46,6 +46,7 @@ func TestMarshal_Record(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -63,7 +64,7 @@ func TestMarshal_Record(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x *Person) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x *Person) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"w.WriteString(x.Name)",
 		"w.WriteInt(x.Age)",
 		"var err error",
@@ -96,6 +97,7 @@ func TestMarshal_Fixed(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -113,7 +115,7 @@ func TestMarshal_Fixed(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x MD5) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x MD5) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"return w.WriteFixed(x[:])",
 	}
 
@@ -145,6 +147,7 @@ func TestMarshal_Enum(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -162,7 +165,7 @@ func TestMarshal_Enum(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x Status) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x Status) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"return w.WriteInt(int32(x))",
 	}
 
@@ -206,6 +209,7 @@ func TestMarshal_Union(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -224,16 +228,16 @@ func TestMarshal_Union(t *testing.T) {
 
 	expectations := []string{
 		// Union interface includes MarshalAvroBinary
-		"MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"MarshalAvroBinary(w *avro.BinaryWriter) error",
 		// Null member writes index 0
-		"func (x EventDataUnionNull) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x EventDataUnionNull) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"return w.WriteLong(0)",
 		// String member writes index 1 then value
-		"func (x EventDataUnionString) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x EventDataUnionString) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"w.WriteLong(1)",
 		"w.WriteString(x.Value)",
 		// Int member writes index 2 then value
-		"func (x EventDataUnionInt) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x EventDataUnionInt) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"w.WriteLong(2)",
 		"w.WriteInt(x.Value)",
 	}
@@ -276,6 +280,7 @@ func TestMarshal_ArrayField(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -293,7 +298,7 @@ func TestMarshal_ArrayField(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x *Numbers) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x *Numbers) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"if len(x.Values) > 0",
 		"w.WriteLong(int64(len(x.Values)))",
 		"for i := range x.Values",
@@ -338,6 +343,7 @@ func TestMarshal_MapField(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -355,7 +361,7 @@ func TestMarshal_MapField(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x *Config) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x *Config) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"if len(x.Settings) > 0",
 		"w.WriteLong(int64(len(x.Settings)))",
 		"for k := range x.Settings",
@@ -421,6 +427,7 @@ func TestMarshal_NestedRecord(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -438,7 +445,7 @@ func TestMarshal_NestedRecord(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x *Order) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x *Order) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"w.WriteString(x.Id)",
 		// Nested record delegates to MarshalAvroBinary
 		"x.Customer.MarshalAvroBinary(w)",
@@ -512,6 +519,7 @@ func TestMarshal_AllPrimitiveTypes(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -563,6 +571,7 @@ func TestMarshal_EmptyRecord(t *testing.T) {
 	svc := &generatorService{}
 	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
 		OutputDirectory: proto.String(tmpDir),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas:         []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -580,7 +589,7 @@ func TestMarshal_EmptyRecord(t *testing.T) {
 	validateGoSyntax(t, code)
 
 	expectations := []string{
-		"func (x *Empty) MarshalAvroBinary(w *avrolib.BinaryWriter) error",
+		"func (x *Empty) MarshalAvroBinary(w *avro.BinaryWriter) error",
 		"return nil",
 	}
 
