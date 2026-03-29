@@ -2,6 +2,10 @@
 
 package avro
 
+import (
+	avrolib "github.com/z5labs/avro-go"
+)
+
 // Kind is a generated Avro enum type.
 type Kind int
 
@@ -11,12 +15,21 @@ const (
 	KindBAZ Kind = 2
 )
 
+func (x Kind) MarshalAvroBinary(w *avrolib.BinaryWriter) error {
+	return w.WriteInt(int32(x))
+}
+
 // MD5 is a generated Avro fixed type.
 type MD5 [16]byte
+
+func (x MD5) MarshalAvroBinary(w *avrolib.BinaryWriter) error {
+	return w.WriteFixed(x[:])
+}
 
 // TestRecordNullableHashUnion is a generated Avro union type.
 type TestRecordNullableHashUnion interface {
 	isTestRecordNullableHashUnion()
+	MarshalAvroBinary(w *avrolib.BinaryWriter) error
 }
 
 // TestRecordNullableHashUnionNull represents the null value in the union.
@@ -31,10 +44,48 @@ type TestRecordNullableHashUnionMD5 struct {
 
 func (_ TestRecordNullableHashUnionMD5) isTestRecordNullableHashUnion() {}
 
+func (x TestRecordNullableHashUnionNull) MarshalAvroBinary(w *avrolib.BinaryWriter) error {
+	return w.WriteLong(0)
+}
+
+func (x TestRecordNullableHashUnionMD5) MarshalAvroBinary(w *avrolib.BinaryWriter) error {
+	var err error
+	err = w.WriteLong(1)
+	if err != nil {
+		return err
+	}
+	err = x.Value.MarshalAvroBinary(w)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // TestRecord is a generated Avro record type.
 type TestRecord struct {
 	Name         string
 	Kind         Kind
 	Hash         MD5
 	NullableHash TestRecordNullableHashUnion
+}
+
+func (x *TestRecord) MarshalAvroBinary(w *avrolib.BinaryWriter) error {
+	var err error
+	err = w.WriteString(x.Name)
+	if err != nil {
+		return err
+	}
+	err = x.Kind.MarshalAvroBinary(w)
+	if err != nil {
+		return err
+	}
+	err = x.Hash.MarshalAvroBinary(w)
+	if err != nil {
+		return err
+	}
+	err = x.NullableHash.MarshalAvroBinary(w)
+	if err != nil {
+		return err
+	}
+	return nil
 }
