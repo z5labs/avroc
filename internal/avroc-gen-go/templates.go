@@ -105,8 +105,20 @@ func schemaRecordName(schema *avrocpb.Schema) string {
 	if schema.Type == nil {
 		return ""
 	}
+	// Direct record type
 	if rec, ok := schema.Type.Type.(*avrocpb.Type_Record); ok {
 		return rec.Record.GetName()
+	}
+	// Ident reference to a record in schema.Types (e.g., "schema TestRecord;")
+	if ident, ok := schema.Type.Type.(*avrocpb.Type_Ident); ok {
+		refName := ident.Ident.GetValue()
+		for _, t := range schema.Types {
+			if rec, ok := t.Type.(*avrocpb.Type_Record); ok {
+				if rec.Record.GetName() == refName {
+					return refName
+				}
+			}
+		}
 	}
 	return ""
 }
