@@ -108,6 +108,7 @@ Generates idiomatic Go types with binary Avro serialization support.
 | Option | Required | Description |
 |---|---|---|
 | `package_name` | Yes | The Go package name for all generated files. |
+| `encoding` | No | Set to `single_object` to generate a `Fingerprint()` method on the primary record type for [Avro Single Object Encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding). |
 
 **Generated types:**
 
