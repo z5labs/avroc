@@ -167,9 +167,21 @@ func (c *canonicalConverter) identCanonical(sb *strings.Builder, ident *avrocpb.
 	}
 
 	// Named type reference: inline on first use, name-reference on subsequent.
+	// First, try to resolve using the identifier as-is (which may be bare or
+	// fully-qualified, depending on how the schema was constructed).
 	if t, ok := c.namedTypes[name]; ok && !c.defined[name] {
 		c.typeCanonical(sb, t)
 		return
+	}
+
+	// If the identifier is fully-qualified but namedTypes/defined are keyed by
+	// bare name, fall back to resolving by the short (unqualified) name.
+	if idx := strings.LastIndex(name, "."); idx != -1 {
+		short := name[idx+1:]
+		if t, ok := c.namedTypes[short]; ok && !c.defined[short] {
+			c.typeCanonical(sb, t)
+			return
+		}
 	}
 
 	// Already defined or unknown: emit as FQ name string.

@@ -114,8 +114,22 @@ func schemaRecordName(schema *avrocpb.Schema) string {
 		refName := ident.Ident.GetValue()
 		for _, t := range schema.Types {
 			if rec, ok := t.Type.(*avrocpb.Type_Record); ok {
-				if rec.Record.GetName() == refName {
+				recName := rec.Record.GetName()
+				recNs := rec.Record.GetNamespace()
+				if recNs == "" {
+					recNs = schema.GetNamespace()
+				}
+				// Match bare name
+				if recName == refName {
 					return refName
+				}
+				// Match fully-qualified name (e.g., "com.example.Item")
+				fqName := recName
+				if recNs != "" {
+					fqName = recNs + "." + recName
+				}
+				if fqName == refName {
+					return recName
 				}
 			}
 		}

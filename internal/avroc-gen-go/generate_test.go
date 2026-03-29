@@ -720,7 +720,7 @@ func TestGenerate_SingleObjectEncoding(t *testing.T) {
 	}
 }
 
-func TestGenerate_SingleObjectEncoding_RoundTrip(t *testing.T) {
+func TestGenerate_SingleObjectEncoding_FingerprintComputation(t *testing.T) {
 	schema := &avrocpb.Schema{
 		Namespace: proto.String("com.example"),
 		Type: &avrocpb.Type{
