@@ -17,7 +17,7 @@ go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
 go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
 
 # Generate Go types and JSON schema
-PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -json_out=example example/schema.avdl
+PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -json_out=example example/schema.avdl
 ```
 
 ## Generated Output

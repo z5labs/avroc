@@ -32,10 +32,20 @@ func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRe
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
+	var packageName string
+	for _, opt := range req.GetOptions() {
+		if opt.GetName() == "package_name" {
+			packageName = opt.GetValue()
+		}
+	}
+	if packageName == "" {
+		return nil, fmt.Errorf("package_name option is required")
+	}
+
 	var outputFiles []string
 
 	for _, schema := range req.Schemas {
-		filename, err := generateSchemaFile(outputDir, schema)
+		filename, err := generateSchemaFile(outputDir, packageName, schema)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate schema: %w", err)
 		}
@@ -48,9 +58,9 @@ func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRe
 }
 
 // generateSchemaFile generates a Go file for a single schema.
-func generateSchemaFile(outputDir string, schema *avrocpb.Schema) (string, error) {
+func generateSchemaFile(outputDir string, packageName string, schema *avrocpb.Schema) (string, error) {
 	// Generate the Go source code
-	code := generateFileCode(schema)
+	code := generateFileCode(packageName, schema)
 
 	// Determine the filename from the schema
 	filename := schemaFilename(schema)
