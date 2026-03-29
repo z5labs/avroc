@@ -1,0 +1,25 @@
+/*
+ * Example Avro IDL schema based on the Apache Avro documentation.
+ * https://avro.apache.org/docs/1.12.0/idl-language/#schemaavdl
+ *
+ * Note: Some features are simplified for parser compatibility.
+ */
+
+namespace org.apache.avro.test;
+
+schema TestRecord;
+
+enum Kind {
+  FOO,
+  BAR,
+  BAZ
+}
+
+fixed MD5(16);
+
+record TestRecord {
+  string name;
+  Kind kind;
+  MD5 hash;
+  union { null, MD5 } nullableHash;
+}
