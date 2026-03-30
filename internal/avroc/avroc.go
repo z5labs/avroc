@@ -42,7 +42,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 	}
 
 	paths := strings.Split(path, ":")
-	generators, err := lookupGenerators(cli.Fs, paths...)
+	generators, err := lookupGenerators(ctx, cli.Log, cli.Fs, paths...)
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
 		return 1
@@ -154,7 +154,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 	return 0
 }
 
-func lookupGenerators(root fs.FS, dirs ...string) (map[string]string, error) {
+func lookupGenerators(ctx context.Context, log *slog.Logger, root fs.FS, dirs ...string) (map[string]string, error) {
 	generatorIndex := make(map[string]string)
 
 	for _, dir := range dirs {
@@ -162,6 +162,13 @@ func lookupGenerators(root fs.FS, dirs ...string) (map[string]string, error) {
 
 		err := fs.WalkDir(root, dir, func(path string, d fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			if errors.Is(err, fs.ErrPermission) {
+				log.WarnContext(ctx, "skipping path due to permission error", slog.String("path", path), slog.Any("error", err))
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
 				return nil
 			}
 			if err != nil {
