@@ -1,0 +1,1 @@
+{"name":"org.apache.avro.test.TestRecord","type":"record","fields":[{"name":"name","type":"string"},{"name":"kind","type":{"name":"org.apache.avro.test.Kind","type":"enum","symbols":["FOO","BAR","BAZ"]}},{"name":"hash","type":{"name":"org.apache.avro.test.MD5","type":"fixed","size":16}},{"name":"nullableHash","type":["null","org.apache.avro.test.MD5"]}]}

@@ -15,9 +15,10 @@ To generate code from the schema:
 go build -o ./bin/avroc ./cmd/avroc
 go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
 go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
+go build -o ./bin/avroc-gen-pcf ./cmd/avroc-gen-pcf
 
-# Generate Go types and JSON schema
-PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example example/schema.avdl
+# Generate Go types, JSON schema, and Parsing Canonical Form
+PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example -pcf_out=example/pcf example/schema.avdl
 ```
 
 ## Generated Output
@@ -36,3 +37,7 @@ With `encoding=single_object`, the primary record type also includes a `Fingerpr
 ### JSON Schema (`test_record.avsc`)
 
 The JSON generator produces an Avro JSON schema file (`.avsc`) following the [Avro specification](https://avro.apache.org/docs/1.12.0/specification/#schema-declaration). Named types are inlined on first use and referenced by name afterwards.
+
+### Parsing Canonical Form (`pcf/test_record.avsc`)
+
+The PCF generator produces a compact JSON file containing the [Avro Parsing Canonical Form](https://avro.apache.org/docs/1.12.0/specification/#parsing-canonical-form-for-schemas) of the schema. Named types are inlined on first use and referenced by their fully-qualified name on subsequent uses. This form is useful for schema validation, fingerprinting, and ensuring interoperability across systems.
