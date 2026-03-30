@@ -43,6 +43,9 @@ go install github.com/z5labs/avroc/cmd/avroc-gen-go@latest
 
 # Avro JSON schema generator
 go install github.com/z5labs/avroc/cmd/avroc-gen-json@latest
+
+# Avro Parsing Canonical Form generator
+go install github.com/z5labs/avroc/cmd/avroc-gen-pcf@latest
 ```
 
 ## Usage
@@ -83,19 +86,21 @@ record TestRecord {
 }
 ```
 
-Generate Go types and an Avro JSON schema file:
+Generate Go types, an Avro JSON schema file, and a Parsing Canonical Form file:
 
 ```bash
 avroc \
   -go_out=./gen \
   -go_opt=package_name=mypackage \
   -json_out=. \
+  -pcf_out=./pcf \
   schema.avdl
 ```
 
 This produces:
 - `./gen/test_record.go` — Go types with `MarshalAvroBinary` / `UnmarshalAvroBinary` methods
 - `./test_record.avsc` — Avro JSON schema
+- `./pcf/test_record.avsc` — Avro Parsing Canonical Form
 
 See the [`example/`](example/) directory for a working example.
 
@@ -127,6 +132,12 @@ Generates idiomatic Go types with binary Avro serialization support.
 ### `avroc-gen-json`
 
 Generates [Avro JSON schema](https://avro.apache.org/docs/current/specification/#schema-declaration) files (`.avsc`). Named types are inlined on their first use and referenced by name afterwards.
+
+No options required.
+
+### `avroc-gen-pcf`
+
+Generates [Avro Parsing Canonical Form](https://avro.apache.org/docs/1.12.0/specification/#parsing-canonical-form-for-schemas) files (`.avsc`). The output is a compact JSON representation with attribute names and type ordering normalized per the Avro specification. Named types are inlined on first use and referenced by their fully-qualified name on subsequent uses. The file content is written as exact canonical bytes — no trailing newline — so it can be used directly for fingerprinting.
 
 No options required.
 
