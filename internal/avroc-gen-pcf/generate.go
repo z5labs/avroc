@@ -62,7 +62,7 @@ func generateSchemaFile(outputDir string, schema *avrocpb.Schema) (string, error
 	filename := schemaFilename(schema)
 	outputPath := filepath.Join(outputDir, filename)
 
-	if err := os.WriteFile(outputPath, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write file %s: %w", outputPath, err)
 	}
 
@@ -120,7 +120,7 @@ func (c *canonicalConverter) typeToCanonical(t *avrocpb.Type) (canonical.Schema,
 	case *avrocpb.Type_Union:
 		return c.unionToCanonical(v.Union)
 	case *avrocpb.Type_Ident:
-		return c.identToCanonical(v.Ident), nil
+		return c.identToCanonical(v.Ident)
 	default:
 		return canonical.Schema{}, fmt.Errorf("unsupported type: %T", t.Type)
 	}
@@ -182,7 +182,10 @@ func (c *canonicalConverter) arrayToCanonical(a *avrocpb.Array) (canonical.Schem
 }
 
 func (c *canonicalConverter) mapToCanonical(m *avrocpb.Map) (canonical.Schema, error) {
-	values := c.identToCanonical(m.GetValues())
+	values, err := c.identToCanonical(m.GetValues())
+	if err != nil {
+		return canonical.Schema{}, err
+	}
 	return canonical.MapSchema(canonical.Map{Values: values}), nil
 }
 
@@ -201,25 +204,23 @@ func (c *canonicalConverter) unionToCanonical(u *avrocpb.Union) (canonical.Schem
 // identToCanonical resolves an identifier. Avro primitive types are returned
 // as-is. Named types that have not yet been defined are inlined on first use.
 // Already-defined named types are returned as their fully-qualified name.
-func (c *canonicalConverter) identToCanonical(ident *avrocpb.Ident) canonical.Schema {
+func (c *canonicalConverter) identToCanonical(ident *avrocpb.Ident) (canonical.Schema, error) {
 	name := ident.GetValue()
 
 	// Avro primitive types are returned directly
 	if isPrimitive(name) {
-		return canonical.PrimitiveSchema(canonical.Primitive(name))
+		return canonical.PrimitiveSchema(canonical.Primitive(name)), nil
 	}
 
 	// Compute the FQ name; namedTypes and defined are both keyed by FQ name
 	fqName := qualifyName(c.defaultNamespace, "", name)
 
 	if t, ok := c.namedTypes[fqName]; ok && !c.defined[fqName] {
-		if s, err := c.typeToCanonical(t); err == nil {
-			return s
-		}
+		return c.typeToCanonical(t)
 	}
 
 	// Already-defined named type: return as FQ name reference
-	return canonical.PrimitiveSchema(canonical.Primitive(fqName))
+	return canonical.PrimitiveSchema(canonical.Primitive(fqName)), nil
 }
 
 // isPrimitive returns true if the name is an Avro primitive type.

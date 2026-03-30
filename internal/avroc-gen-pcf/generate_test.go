@@ -199,7 +199,10 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 		t.Fatalf("expected 4 fields, got %d", len(fields))
 	}
 
-	kindField := fields[1].(map[string]any)
+	kindField, ok := fields[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected kind field to be a JSON object, got %T", fields[1])
+	}
 	kindType, ok := kindField["type"].(map[string]any)
 	if !ok {
 		t.Errorf("expected kind field type to be inlined object, got %T", kindField["type"])
@@ -207,7 +210,10 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 		t.Errorf("expected kind type=enum, got %v", kindType["type"])
 	}
 
-	hashField := fields[2].(map[string]any)
+	hashField, ok := fields[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hash field to be a JSON object, got %T", fields[2])
+	}
 	hashType, ok := hashField["type"].(map[string]any)
 	if !ok {
 		t.Errorf("expected hash field type to be inlined object, got %T", hashField["type"])
@@ -215,7 +221,10 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 		t.Errorf("expected hash type=fixed, got %v", hashType["type"])
 	}
 
-	nullableHashField := fields[3].(map[string]any)
+	nullableHashField, ok := fields[3].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nullableHash field to be a JSON object, got %T", fields[3])
+	}
 	nullableHashTypes, ok := nullableHashField["type"].([]any)
 	if !ok {
 		t.Fatalf("expected nullableHash field type to be union array, got %T", nullableHashField["type"])
