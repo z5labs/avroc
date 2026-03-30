@@ -9,9 +9,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -275,7 +277,7 @@ func TestLookupGenerators(t *testing.T) {
 			"usr/local/bin/other-tool":   &fstest.MapFile{Mode: 0o755},
 		}
 
-		got, err := lookupGenerators(fsys, "usr/local/bin")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "usr/local/bin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -294,7 +296,7 @@ func TestLookupGenerators(t *testing.T) {
 			"bin/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
 		}
 
-		got, err := lookupGenerators(fsys, "bin")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -310,7 +312,7 @@ func TestLookupGenerators(t *testing.T) {
 			"dir2/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
 		}
 
-		got, err := lookupGenerators(fsys, "dir1", "dir2")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "dir1", "dir2")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -325,7 +327,7 @@ func TestLookupGenerators(t *testing.T) {
 			"bin/avroc-gen-go": &fstest.MapFile{Mode: 0o644},
 		}
 
-		got, err := lookupGenerators(fsys, "bin")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -338,7 +340,7 @@ func TestLookupGenerators(t *testing.T) {
 	t.Run("nonexistent directory", func(t *testing.T) {
 		fsys := fstest.MapFS{}
 
-		got, err := lookupGenerators(fsys, "nonexistent")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "nonexistent")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -353,7 +355,7 @@ func TestLookupGenerators(t *testing.T) {
 			"bin": &fstest.MapFile{Mode: 0o755 | os.ModeDir},
 		}
 
-		got, err := lookupGenerators(fsys, "bin")
+		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -362,6 +364,55 @@ func TestLookupGenerators(t *testing.T) {
 			t.Fatalf("got %d generators, want 0", len(got))
 		}
 	})
+
+	t.Run("skips directory with permission error and continues", func(t *testing.T) {
+		fsys := &permErrorFS{
+			MapFS: fstest.MapFS{
+				"bin/avroc-gen-go": &fstest.MapFile{Mode: 0o755},
+			},
+			restrictedPath: "restricted",
+		}
+
+		var logBuf bytes.Buffer
+		log := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+		got, err := lookupGenerators(context.Background(), log, fsys, "restricted", "bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 1 {
+			t.Fatalf("got %d generators, want 1", len(got))
+		}
+		if got["avroc-gen-go"] != "/bin/avroc-gen-go" {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], "/bin/avroc-gen-go")
+		}
+
+		if !bytes.Contains(logBuf.Bytes(), []byte("permission")) {
+			t.Errorf("expected warning log for permission error, got: %s", logBuf.String())
+		}
+	})
+}
+
+// permErrorFS wraps a fstest.MapFS and returns fs.ErrPermission when opening paths
+// that match or are nested under restrictedPath.
+type permErrorFS struct {
+	fstest.MapFS
+	restrictedPath string
+}
+
+func (f *permErrorFS) Open(name string) (fs.File, error) {
+	if name == f.restrictedPath || strings.HasPrefix(name, f.restrictedPath+"/") {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return f.MapFS.Open(name)
+}
+
+func (f *permErrorFS) Stat(name string) (fs.FileInfo, error) {
+	if name == f.restrictedPath || strings.HasPrefix(name, f.restrictedPath+"/") {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrPermission}
+	}
+	return f.MapFS.Stat(name)
 }
 
 func TestPrintHelp(t *testing.T) {
