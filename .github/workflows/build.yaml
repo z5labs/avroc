@@ -61,3 +61,7 @@ jobs:
         - name: Run example
           shell: bash
           run: avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example -pcf_out=example/pcf example/schema.avdl
+
+        - name: Verify example output is up to date
+          shell: bash
+          run: git diff --exit-code -- example
