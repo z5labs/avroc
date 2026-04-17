@@ -46,10 +46,13 @@ jobs:
         - name: Build example binaries
           shell: bash
           run: |
-            go build -o ./bin/avroc ./cmd/avroc
-            go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
-            go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
-            go build -o ./bin/avroc-gen-pcf ./cmd/avroc-gen-pcf
+            ext=""
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
+            go build -o "./bin/avroc${ext}" ./cmd/avroc
+            go build -o "./bin/avroc-gen-go${ext}" ./cmd/avroc-gen-go
+            go build -o "./bin/avroc-gen-json${ext}" ./cmd/avroc-gen-json
+            go build -o "./bin/avroc-gen-pcf${ext}" ./cmd/avroc-gen-pcf
+            ls -la ./bin
 
         - name: Add bin to PATH
           shell: bash
