@@ -8,6 +8,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - '.github/workflows/build.yaml'
   pull_request:
     branches:
       - "main"
@@ -16,7 +17,11 @@ on:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
         - name: Checkout
           uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -26,6 +31,7 @@ jobs:
             go-version-file: go.mod
 
         - name: Lint Go Code
+          if: matrix.os == 'ubuntu-latest'
           uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
           with:
             version: latest
@@ -36,3 +42,26 @@ jobs:
 
         - name: Test
           run: go test -race -cover ./...
+
+        - name: Build example binaries
+          shell: bash
+          run: |
+            ext=""
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
+            go build -o "./bin/avroc${ext}" ./cmd/avroc
+            go build -o "./bin/avroc-gen-go${ext}" ./cmd/avroc-gen-go
+            go build -o "./bin/avroc-gen-json${ext}" ./cmd/avroc-gen-json
+            go build -o "./bin/avroc-gen-pcf${ext}" ./cmd/avroc-gen-pcf
+            ls -la ./bin
+
+        - name: Add bin to PATH
+          shell: bash
+          run: echo "${{ github.workspace }}/bin" >> "$GITHUB_PATH"
+
+        - name: Run example
+          shell: bash
+          run: avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example -pcf_out=example/pcf example/schema.avdl
+
+        - name: Verify example output is up to date
+          shell: bash
+          run: git diff --exit-code -- example

@@ -27,7 +27,6 @@ func main() {
 		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
 			return os.LookupEnv(key)
 		}),
-		Fs:   os.DirFS("/"),
 		Args: os.Args[1:],
 	})
 	os.Exit(code)

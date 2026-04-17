@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -271,13 +271,16 @@ func TestMapToProtoSchema_EnumNilDefault(t *testing.T) {
 }
 
 func TestLookupGenerators(t *testing.T) {
-	t.Run("finds executable generators", func(t *testing.T) {
+	discardLog := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dir := filepath.Join(string(filepath.Separator), "usr", "local", "bin")
+
+	t.Run("finds generator executables", func(t *testing.T) {
 		fsys := fstest.MapFS{
-			"usr/local/bin/avroc-gen-go": &fstest.MapFile{Mode: 0o755},
-			"usr/local/bin/other-tool":   &fstest.MapFile{Mode: 0o755},
+			generatorFixtureName("avroc-gen-go"): generatorFixtureFile(),
+			"other-tool":                         generatorFixtureFile(),
 		}
 
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "usr/local/bin")
+		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fsys), dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,18 +288,19 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d generators, want 1", len(got))
 		}
-		if got["avroc-gen-go"] != "/usr/local/bin/avroc-gen-go" {
-			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], "/usr/local/bin/avroc-gen-go")
+		want := filepath.Join(dir, generatorFixtureName("avroc-gen-go"))
+		if got["avroc-gen-go"] != want {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
 		}
 	})
 
 	t.Run("multiple generators in same directory", func(t *testing.T) {
 		fsys := fstest.MapFS{
-			"bin/avroc-gen-go":   &fstest.MapFile{Mode: 0o755},
-			"bin/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
+			generatorFixtureName("avroc-gen-go"):   generatorFixtureFile(),
+			generatorFixtureName("avroc-gen-java"): generatorFixtureFile(),
 		}
 
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
+		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fsys), dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,12 +311,19 @@ func TestLookupGenerators(t *testing.T) {
 	})
 
 	t.Run("multiple directories", func(t *testing.T) {
-		fsys := fstest.MapFS{
-			"dir1/avroc-gen-go":   &fstest.MapFile{Mode: 0o755},
-			"dir2/avroc-gen-java": &fstest.MapFile{Mode: 0o755},
+		dir1 := filepath.Join(string(filepath.Separator), "dir1")
+		dir2 := filepath.Join(string(filepath.Separator), "dir2")
+		openDir := func(d string) fs.FS {
+			switch d {
+			case dir1:
+				return fstest.MapFS{generatorFixtureName("avroc-gen-go"): generatorFixtureFile()}
+			case dir2:
+				return fstest.MapFS{generatorFixtureName("avroc-gen-java"): generatorFixtureFile()}
+			}
+			return fstest.MapFS{}
 		}
 
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "dir1", "dir2")
+		got, err := lookupGenerators(context.Background(), discardLog, openDir, dir1, dir2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -320,27 +331,18 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("got %d generators, want 2", len(got))
 		}
-	})
-
-	t.Run("skips non-executable files", func(t *testing.T) {
-		fsys := fstest.MapFS{
-			"bin/avroc-gen-go": &fstest.MapFile{Mode: 0o644},
+		if got["avroc-gen-go"] != filepath.Join(dir1, generatorFixtureName("avroc-gen-go")) {
+			t.Errorf("avroc-gen-go path = %q", got["avroc-gen-go"])
 		}
-
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if len(got) != 0 {
-			t.Fatalf("got %d generators, want 0 (file not executable)", len(got))
+		if got["avroc-gen-java"] != filepath.Join(dir2, generatorFixtureName("avroc-gen-java")) {
+			t.Errorf("avroc-gen-java path = %q", got["avroc-gen-java"])
 		}
 	})
 
 	t.Run("nonexistent directory", func(t *testing.T) {
-		fsys := fstest.MapFS{}
+		openDir := func(string) fs.FS { return &errFS{err: fs.ErrNotExist} }
 
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "nonexistent")
+		got, err := lookupGenerators(context.Background(), discardLog, openDir, "nonexistent")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -351,11 +353,7 @@ func TestLookupGenerators(t *testing.T) {
 	})
 
 	t.Run("empty directory", func(t *testing.T) {
-		fsys := fstest.MapFS{
-			"bin": &fstest.MapFile{Mode: 0o755 | os.ModeDir},
-		}
-
-		got, err := lookupGenerators(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), fsys, "bin")
+		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fstest.MapFS{}), dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -366,17 +364,18 @@ func TestLookupGenerators(t *testing.T) {
 	})
 
 	t.Run("skips directory with permission error and continues", func(t *testing.T) {
-		fsys := &permErrorFS{
-			MapFS: fstest.MapFS{
-				"bin/avroc-gen-go": &fstest.MapFile{Mode: 0o755},
-			},
-			restrictedPath: "restricted",
+		restricted := filepath.Join(string(filepath.Separator), "restricted")
+		openDir := func(d string) fs.FS {
+			if d == restricted {
+				return &errFS{err: fs.ErrPermission}
+			}
+			return fstest.MapFS{generatorFixtureName("avroc-gen-go"): generatorFixtureFile()}
 		}
 
 		var logBuf bytes.Buffer
 		log := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-		got, err := lookupGenerators(context.Background(), log, fsys, "restricted", "bin")
+		got, err := lookupGenerators(context.Background(), log, openDir, restricted, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -384,35 +383,31 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d generators, want 1", len(got))
 		}
-		if got["avroc-gen-go"] != "/bin/avroc-gen-go" {
-			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], "/bin/avroc-gen-go")
+		want := filepath.Join(dir, generatorFixtureName("avroc-gen-go"))
+		if got["avroc-gen-go"] != want {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
 		}
-
 		if !bytes.Contains(logBuf.Bytes(), []byte("permission")) {
 			t.Errorf("expected warning log for permission error, got: %s", logBuf.String())
 		}
 	})
 }
 
-// permErrorFS wraps a fstest.MapFS and returns fs.ErrPermission when opening paths
-// that match or are nested under restrictedPath.
-type permErrorFS struct {
-	fstest.MapFS
-	restrictedPath string
+func staticOpenDir(fsys fs.FS) func(string) fs.FS {
+	return func(string) fs.FS { return fsys }
 }
 
-func (f *permErrorFS) Open(name string) (fs.File, error) {
-	if name == f.restrictedPath || strings.HasPrefix(name, f.restrictedPath+"/") {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
-	}
-	return f.MapFS.Open(name)
+// errFS implements fs.FS and returns a fixed error for every operation.
+// Used to simulate real-filesystem failure modes (ErrNotExist, ErrPermission)
+// that MapFS cannot otherwise produce.
+type errFS struct{ err error }
+
+func (f *errFS) Open(name string) (fs.File, error) {
+	return nil, &fs.PathError{Op: "open", Path: name, Err: f.err}
 }
 
-func (f *permErrorFS) Stat(name string) (fs.FileInfo, error) {
-	if name == f.restrictedPath || strings.HasPrefix(name, f.restrictedPath+"/") {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrPermission}
-	}
-	return f.MapFS.Stat(name)
+func (f *errFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	return nil, &fs.PathError{Op: "read", Path: name, Err: f.err}
 }
 
 func TestPrintHelp(t *testing.T) {
@@ -541,8 +536,8 @@ func TestMain_NoIDLFiles(t *testing.T) {
 			}
 			return "", false
 		}),
-		Fs:   fstest.MapFS{},
-		Args: []string{},
+		OpenDir: staticOpenDir(fstest.MapFS{}),
+		Args:    []string{},
 	})
 
 	if code != 1 {
