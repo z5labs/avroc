@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -27,8 +28,8 @@ func main() {
 		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
 			return os.LookupEnv(key)
 		}),
-		Fs:   os.DirFS("/"),
-		Args: os.Args[1:],
+		OpenDir: func(dir string) fs.FS { return os.DirFS(dir) },
+		Args:    os.Args[1:],
 	})
 	os.Exit(code)
 }

@@ -16,6 +16,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -41,8 +42,8 @@ func Main(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
-	paths := strings.Split(path, ":")
-	generators, err := lookupGenerators(ctx, cli.Log, cli.Fs, paths...)
+	paths := filepath.SplitList(path)
+	generators, err := lookupGenerators(ctx, cli.Log, cli.OpenDir, paths...)
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
 		return 1
@@ -154,47 +155,33 @@ func Main(ctx context.Context, cli cli.Context) int {
 	return 0
 }
 
-func lookupGenerators(ctx context.Context, log *slog.Logger, root fs.FS, dirs ...string) (map[string]string, error) {
+func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string) fs.FS, dirs ...string) (map[string]string, error) {
 	generatorIndex := make(map[string]string)
 
 	for _, dir := range dirs {
-		dir = strings.TrimPrefix(dir, "/")
-
-		err := fs.WalkDir(root, dir, func(path string, d fs.DirEntry, err error) error {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			if errors.Is(err, fs.ErrPermission) {
-				log.WarnContext(ctx, "skipping path due to permission error", slog.String("path", path), slog.Any("error", err))
-				if d != nil && d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-
-			name := d.Name()
-			if !strings.HasPrefix(name, "avroc-gen-") {
-				return nil
-			}
-
-			info, infoErr := d.Info()
-			if infoErr != nil {
-				return nil
-			}
-
-			mode := info.Mode()
-			if !mode.IsRegular() || mode&0o111 == 0 {
-				return nil
-			}
-
-			generatorIndex[name] = "/" + path
-			return nil
-		})
+		fsys := openDir(dir)
+		entries, err := fs.ReadDir(fsys, ".")
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if errors.Is(err, fs.ErrPermission) {
+			log.WarnContext(ctx, "skipping path due to permission error", slog.String("path", dir), slog.Any("error", err))
+			continue
+		}
 		if err != nil {
 			return nil, err
+		}
+
+		for _, entry := range entries {
+			name := entry.Name()
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				continue
+			}
+			if !isGeneratorExecutable(name, info.Mode()) {
+				continue
+			}
+			generatorIndex[generatorKey(name)] = filepath.Join(dir, name)
 		}
 	}
 
