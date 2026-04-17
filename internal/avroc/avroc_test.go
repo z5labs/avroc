@@ -14,7 +14,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -588,12 +587,6 @@ func (s *testGeneratorServer) Generate(_ context.Context, req *avrocpb.GenerateR
 }
 
 func TestGeneratorGenerate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// gRPC's unix:// resolver cannot parse Windows absolute socket paths
-		// (drive-letter colon is read as host:port). Tracked separately; see #49.
-		t.Skip("unix socket transport not supported on Windows")
-	}
-
 	t.Setenv("AVROC_TEST_GENERATOR", "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

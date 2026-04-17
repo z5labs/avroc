@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -303,8 +304,16 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		_ = cmd.Wait()
 	}()
 
+	// Use the passthrough resolver with a custom dialer rather than "unix://".
+	// gRPC's URL-based target parsing mishandles Windows absolute paths (the
+	// drive-letter colon is read as host:port); passthrough hands the address
+	// to the dialer verbatim so the socket path is never URL-parsed.
 	cc, err := grpc.NewClient(
-		"unix://"+socketPath,
+		"passthrough:///"+socketPath,
+		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", addr)
+		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 	)
