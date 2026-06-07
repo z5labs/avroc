@@ -105,6 +105,15 @@ func TestLoadManifest(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects trailing content after the manifest object", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "go", "out": "gen"}]}{"generators": []}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
+			t.Fatal("expected error for trailing content, got nil")
+		}
+	})
+
 	t.Run("reports a missing manifest file", func(t *testing.T) {
 		if _, err := loadManifest(manifestContext(fstest.MapFS{}), "."); err == nil {
 			t.Fatal("expected error for missing manifest, got nil")

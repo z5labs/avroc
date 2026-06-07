@@ -8,7 +8,9 @@ package avroc
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"slices"
@@ -82,6 +84,13 @@ func loadManifest(cli cli.Context, workingDir string) (*Manifest, error) {
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", manifestFilename, err)
+	}
+
+	// Decode stops after the first JSON value; reject any trailing content so a
+	// malformed or accidentally concatenated manifest surfaces as an error
+	// instead of being silently ignored.
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("unexpected trailing data after JSON object in %s", manifestFilename)
 	}
 
 	if err := m.validate(); err != nil {

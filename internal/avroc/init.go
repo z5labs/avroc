@@ -21,7 +21,7 @@ import (
 // clobbers an existing manifest: if one is present it reports that and exits 0.
 func runInit(ctx context.Context, cli cli.Context) int {
 	if _, err := fs.Stat(cli.OpenDir(cli.WorkingDir), manifestFilename); err == nil {
-		fmt.Fprintf(os.Stdout, "%s already exists; not overwriting\n", manifestFilename)
+		_, _ = fmt.Fprintf(os.Stdout, "%s already exists; not overwriting\n", manifestFilename)
 		return 0
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		cli.Log.ErrorContext(ctx, "failed to check for existing manifest", slog.Any("error", err))
@@ -40,7 +40,7 @@ func runInit(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
-	fmt.Fprintf(os.Stdout, "created %s\n", manifestFilename)
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", manifestFilename)
 	return 0
 }
 

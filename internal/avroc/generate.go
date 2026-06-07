@@ -58,6 +58,7 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 
 	genPool := pool.New().WithContext(ctx)
 	for _, task := range tasks {
+		task := task // capture per goroutine
 		genPool.Go(func(ctx context.Context) error {
 			g := generator{
 				log:            cli.Log,
@@ -78,9 +79,11 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 }
 
 // planGenerators resolves every manifest generator into a runnable genTask. It
-// is a pure function of the manifest, the discovered generators, and the
-// working directory so it can be exercised without spawning subprocesses. Input
-// IDL files are parsed at most once even when shared across generators.
+// is derived entirely from the manifest, the discovered generators, and the
+// working directory — no generator subprocesses are spawned — so it can be
+// unit-tested in isolation. It does read and parse the declared input IDL files
+// from disk; each input is parsed at most once even when shared across
+// generators.
 func planGenerators(m *Manifest, generators map[string]string, workingDir string) ([]genTask, error) {
 	schemaCache := make(map[string]*avrocpb.Schema)
 

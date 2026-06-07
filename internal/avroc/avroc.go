@@ -51,12 +51,14 @@ func Main(ctx context.Context, cli cli.Context) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: avroc <command>")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  init       Scaffold an avroc.json manifest")
-	fmt.Fprintln(w, "  generate   Run the generators declared in avroc.json")
-	fmt.Fprintln(w, "  help       Show this help")
+	const usage = `Usage: avroc <command>
+
+Commands:
+  init       Scaffold an avroc.json manifest
+  generate   Run the generators declared in avroc.json
+  help       Show this help
+`
+	_, _ = io.WriteString(w, usage)
 }
 
 func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string) fs.FS, dirs ...string) (map[string]string, error) {
