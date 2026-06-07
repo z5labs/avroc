@@ -6,11 +6,38 @@
 package avroc
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/z5labs/avro-go/idl"
 )
+
+func TestSafeOutputPath(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "out")
+
+	t.Run("accepts relative paths", func(t *testing.T) {
+		for _, p := range []string{"person.go", "pkg/person.go", "a/b/c.avsc"} {
+			got, err := safeOutputPath(root, p)
+			if err != nil {
+				t.Errorf("path %q: unexpected error: %v", p, err)
+				continue
+			}
+			want := filepath.Join(root, filepath.FromSlash(p))
+			if got != want {
+				t.Errorf("path %q: got %q, want %q", p, got, want)
+			}
+		}
+	})
+
+	t.Run("rejects unsafe paths", func(t *testing.T) {
+		for _, p := range []string{"", "../escape.go", "a/../../escape.go", "/etc/passwd"} {
+			if _, err := safeOutputPath(root, p); err == nil {
+				t.Errorf("path %q: expected error, got nil", p)
+			}
+		}
+	})
+}
 
 func TestValidateSchema_PrimitiveIdents(t *testing.T) {
 	schema := &idl.Schema{

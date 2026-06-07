@@ -6,67 +6,75 @@
 package avrocgenpcf
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avro-go/canonical"
+	"github.com/z5labs/avroc/internal/avrocpb"
 )
 
 type generatorService struct {
 	avrocpb.UnimplementedGeneratorServer
 }
 
-// Generate implements the Generator gRPC service method.
-func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
-	outputDir := req.GetOutputDirectory()
-	if outputDir == "" {
-		return nil, fmt.Errorf("output directory is required")
-	}
-
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	var outputFiles []string
-
+// Generate implements the Generator gRPC service method, streaming each
+// generated file back to avroc, which performs the filesystem writes.
+func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
 	for _, schema := range req.Schemas {
-		filename, err := generateSchemaFile(outputDir, schema)
+		filename, content, err := buildSchemaFile(schema)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate schema: %w", err)
+			return fmt.Errorf("failed to generate schema: %w", err)
 		}
-		outputFiles = append(outputFiles, filename)
+		if err := sendFile(stream, filename, content); err != nil {
+			return err
+		}
 	}
 
-	return &avrocpb.GenerateResponse{
-		OutputFiles: outputFiles,
-	}, nil
+	return nil
 }
 
-// generateSchemaFile generates an Avro Parsing Canonical Form file for a single schema.
-func generateSchemaFile(outputDir string, schema *avrocpb.Schema) (string, error) {
+// buildSchemaFile generates the Avro Parsing Canonical Form for a single schema,
+// returning its relative filename and content.
+func buildSchemaFile(schema *avrocpb.Schema) (string, []byte, error) {
 	cs, err := schemaToCanonical(schema)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert schema to canonical form: %w", err)
+		return "", nil, fmt.Errorf("failed to convert schema to canonical form: %w", err)
 	}
 
 	data, err := json.Marshal(cs)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal canonical schema: %w", err)
+		return "", nil, fmt.Errorf("failed to marshal canonical schema: %w", err)
 	}
 
-	filename := schemaFilename(schema)
-	outputPath := filepath.Join(outputDir, filename)
+	return schemaFilename(schema), data, nil
+}
 
-	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
-		return "", fmt.Errorf("failed to write file %s: %w", outputPath, err)
+// maxChunkSize bounds each streamed GenerateResponse so messages stay well
+// under gRPC's 4MB default MaxRecvMsgSize.
+const maxChunkSize = 1 << 20 // 1 MiB
+
+// sendFile streams content to avroc as one or more chunks sharing path, with
+// last set on the final chunk. Empty content emits a single terminating chunk.
+func sendFile(stream avrocpb.Generator_GenerateServer, path string, content []byte) error {
+	for {
+		n := min(len(content), maxChunkSize)
+		chunk := content[:n]
+		content = content[n:]
+		last := len(content) == 0
+
+		err := stream.Send(&avrocpb.GenerateResponse{
+			Path:    &path,
+			Content: chunk,
+			Last:    &last,
+		})
+		if err != nil {
+			return err
+		}
+		if last {
+			return nil
+		}
 	}
-
-	return outputPath, nil
 }
 
 // canonicalConverter converts protobuf schema types to the Avro Parsing Canonical Form.

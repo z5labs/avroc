@@ -33,8 +33,8 @@ const (
 //
 // The Generator service defines the RPC method for generating code from Avro schemas.
 type GeneratorClient interface {
-	// The Generate method takes a GenerateRequest and returns a GenerateResponse.
-	Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (*GenerateResponse, error)
+	// Generate streams generated files back to avroc, which writes them.
+	Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GenerateResponse], error)
 }
 
 type generatorClient struct {
@@ -45,15 +45,24 @@ func NewGeneratorClient(cc grpc.ClientConnInterface) GeneratorClient {
 	return &generatorClient{cc}
 }
 
-func (c *generatorClient) Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (*GenerateResponse, error) {
+func (c *generatorClient) Generate(ctx context.Context, in *GenerateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GenerateResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GenerateResponse)
-	err := c.cc.Invoke(ctx, Generator_Generate_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Generator_ServiceDesc.Streams[0], Generator_Generate_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[GenerateRequest, GenerateResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Generator_GenerateClient = grpc.ServerStreamingClient[GenerateResponse]
 
 // GeneratorServer is the server API for Generator service.
 // All implementations must embed UnimplementedGeneratorServer
@@ -61,8 +70,8 @@ func (c *generatorClient) Generate(ctx context.Context, in *GenerateRequest, opt
 //
 // The Generator service defines the RPC method for generating code from Avro schemas.
 type GeneratorServer interface {
-	// The Generate method takes a GenerateRequest and returns a GenerateResponse.
-	Generate(context.Context, *GenerateRequest) (*GenerateResponse, error)
+	// Generate streams generated files back to avroc, which writes them.
+	Generate(*GenerateRequest, grpc.ServerStreamingServer[GenerateResponse]) error
 	mustEmbedUnimplementedGeneratorServer()
 }
 
@@ -73,8 +82,8 @@ type GeneratorServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGeneratorServer struct{}
 
-func (UnimplementedGeneratorServer) Generate(context.Context, *GenerateRequest) (*GenerateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Generate not implemented")
+func (UnimplementedGeneratorServer) Generate(*GenerateRequest, grpc.ServerStreamingServer[GenerateResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method Generate not implemented")
 }
 func (UnimplementedGeneratorServer) mustEmbedUnimplementedGeneratorServer() {}
 func (UnimplementedGeneratorServer) testEmbeddedByValue()                   {}
@@ -97,23 +106,16 @@ func RegisterGeneratorServer(s grpc.ServiceRegistrar, srv GeneratorServer) {
 	s.RegisterService(&Generator_ServiceDesc, srv)
 }
 
-func _Generator_Generate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GenerateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Generator_Generate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GenerateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(GeneratorServer).Generate(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Generator_Generate_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GeneratorServer).Generate(ctx, req.(*GenerateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(GeneratorServer).Generate(m, &grpc.GenericServerStream[GenerateRequest, GenerateResponse]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Generator_GenerateServer = grpc.ServerStreamingServer[GenerateResponse]
 
 // Generator_ServiceDesc is the grpc.ServiceDesc for Generator service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -121,12 +123,13 @@ func _Generator_Generate_Handler(srv interface{}, ctx context.Context, dec func(
 var Generator_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "Generator",
 	HandlerType: (*GeneratorServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "Generate",
-			Handler:    _Generator_Generate_Handler,
+			StreamName:    "Generate",
+			Handler:       _Generator_Generate_Handler,
+			ServerStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "generator.proto",
 }

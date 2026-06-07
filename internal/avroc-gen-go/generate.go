@@ -6,11 +6,8 @@
 package avrocgengo
 
 import (
-	"context"
 	"fmt"
 	"go/format"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
@@ -20,18 +17,9 @@ type generatorService struct {
 	avrocpb.UnimplementedGeneratorServer
 }
 
-// Generate implements the Generator gRPC service method.
-func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
-	outputDir := req.GetOutputDirectory()
-	if outputDir == "" {
-		return nil, fmt.Errorf("output directory is required")
-	}
-
-	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
-	}
-
+// Generate implements the Generator gRPC service method, streaming each
+// generated file back to avroc, which performs the filesystem writes.
+func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
 	var packageName string
 	var encoding string
 	for _, opt := range req.GetOptions() {
@@ -43,31 +31,57 @@ func (s *generatorService) Generate(ctx context.Context, req *avrocpb.GenerateRe
 		}
 	}
 	if packageName == "" {
-		return nil, fmt.Errorf("package_name option is required")
+		return fmt.Errorf("package_name option is required")
 	}
 
 	singleObject := encoding == "single_object"
 	if encoding != "" && !singleObject {
-		return nil, fmt.Errorf("unsupported encoding option: %q (supported: single_object)", encoding)
+		return fmt.Errorf("unsupported encoding option: %q (supported: single_object)", encoding)
 	}
-
-	var outputFiles []string
 
 	for _, schema := range req.Schemas {
-		filename, err := generateSchemaFile(outputDir, packageName, schema, singleObject)
+		filename, content, err := buildSchemaFile(packageName, schema, singleObject)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate schema: %w", err)
+			return fmt.Errorf("failed to generate schema: %w", err)
 		}
-		outputFiles = append(outputFiles, filename)
+		if err := sendFile(stream, filename, content); err != nil {
+			return err
+		}
 	}
 
-	return &avrocpb.GenerateResponse{
-		OutputFiles: outputFiles,
-	}, nil
+	return nil
 }
 
-// generateSchemaFile generates a Go file for a single schema.
-func generateSchemaFile(outputDir string, packageName string, schema *avrocpb.Schema, singleObject bool) (string, error) {
+// maxChunkSize bounds each streamed GenerateResponse so messages stay well
+// under gRPC's 4MB default MaxRecvMsgSize.
+const maxChunkSize = 1 << 20 // 1 MiB
+
+// sendFile streams content to avroc as one or more chunks sharing path, with
+// last set on the final chunk. Empty content emits a single terminating chunk.
+func sendFile(stream avrocpb.Generator_GenerateServer, path string, content []byte) error {
+	for {
+		n := min(len(content), maxChunkSize)
+		chunk := content[:n]
+		content = content[n:]
+		last := len(content) == 0
+
+		err := stream.Send(&avrocpb.GenerateResponse{
+			Path:    &path,
+			Content: chunk,
+			Last:    &last,
+		})
+		if err != nil {
+			return err
+		}
+		if last {
+			return nil
+		}
+	}
+}
+
+// buildSchemaFile generates the Go source for a single schema, returning its
+// relative filename and formatted content.
+func buildSchemaFile(packageName string, schema *avrocpb.Schema, singleObject bool) (string, []byte, error) {
 	// Compute fingerprint before code generation if single-object encoding is requested.
 	var fp [8]byte
 	if singleObject {
@@ -79,20 +93,14 @@ func generateSchemaFile(outputDir string, packageName string, schema *avrocpb.Sc
 
 	// Determine the filename from the schema
 	filename := schemaFilename(schema)
-	outputPath := filepath.Join(outputDir, filename)
 
 	// Format the code using go/format
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
-		return "", fmt.Errorf("failed to format generated code for %s: %w", outputPath, err)
+		return "", nil, fmt.Errorf("failed to format generated code for %s: %w", filename, err)
 	}
 
-	// Write the file
-	if err := os.WriteFile(outputPath, formatted, 0o644); err != nil {
-		return "", fmt.Errorf("failed to write file %s: %w", outputPath, err)
-	}
-
-	return outputPath, nil
+	return filename, formatted, nil
 }
 
 // schemaFilename determines the output filename for a schema.

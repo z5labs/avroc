@@ -12,12 +12,9 @@ import "option.proto";
 
 // The request message for the Generate RPC method.
 message GenerateRequest {
-    // The directory where the generated code should be placed.
-    string output_directory = 1;
-
     // Options to customize the code generation process.
-    repeated Option options = 2;
+    repeated Option options = 1;
 
     // The Avro schemas to be generate code for.
-    repeated Schema schemas = 3;
+    repeated Schema schemas = 2;
 }

@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
@@ -324,22 +323,67 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		err = errors.Join(err, cc.Close())
 	}()
 
-	rpcCtx, rpcCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer rpcCancel()
-
+	// No overall RPC timeout: a large streamed generation can legitimately run
+	// long. Cancellation flows from the signal-based parent context instead.
 	client := avrocpb.NewGeneratorClient(cc)
-	resp, err := client.Generate(rpcCtx, &avrocpb.GenerateRequest{
-		OutputDirectory: &output,
-		Options:         options,
-		Schemas:         schemas,
+	stream, err := client.Generate(ctx, &avrocpb.GenerateRequest{
+		Options: options,
+		Schemas: schemas,
 	})
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to generate code", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
 
-	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.Any("output_files", resp.GetOutputFiles()))
+	outputFiles, err := g.writeStream(output, stream)
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to write generated output", slog.String("generator", g.name), slog.Any("error", err))
+		return err
+	}
+
+	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.Any("output_files", outputFiles))
 	return nil
+}
+
+// writeStream consumes the generator's server stream, reassembling each file
+// from its ordered chunks and writing it under output. Each path is validated
+// to stay within output before anything is written. It returns the OS-native
+// paths of the files written.
+func (g generator) writeStream(output string, stream avrocpb.Generator_GenerateClient) ([]string, error) {
+	pending := make(map[string][]byte)
+	var written []string
+
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return written, nil
+		}
+		if err != nil {
+			return written, err
+		}
+
+		path := msg.GetPath()
+		pending[path] = append(pending[path], msg.GetContent()...)
+		if !msg.GetLast() {
+			continue
+		}
+
+		content := pending[path]
+		delete(pending, path)
+
+		dst, err := safeOutputPath(output, path)
+		if err != nil {
+			return written, fmt.Errorf("generator %q returned unsafe path %q: %w", g.name, path, err)
+		}
+
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return written, fmt.Errorf("failed to create output directory for %q: %w", dst, err)
+		}
+		if err := os.WriteFile(dst, content, 0o644); err != nil {
+			return written, fmt.Errorf("failed to write file %q: %w", dst, err)
+		}
+		written = append(written, dst)
+	}
 }
 
 func (g generator) startGenerator(ctx context.Context, socket string) (*exec.Cmd, error) {
