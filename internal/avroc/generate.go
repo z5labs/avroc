@@ -58,7 +58,6 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 
 	genPool := pool.New().WithContext(ctx)
 	for _, task := range tasks {
-		task := task // capture per goroutine
 		genPool.Go(func(ctx context.Context) error {
 			g := generator{
 				log:            cli.Log,
