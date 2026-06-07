@@ -114,6 +114,51 @@ func TestLoadManifest(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects an absolute output directory", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "go", "out": "/etc"}]}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
+			t.Fatal("expected error for absolute out, got nil")
+		}
+	})
+
+	t.Run("rejects an output directory that escapes the project", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "go", "out": "../escape"}]}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
+			t.Fatal("expected error for traversing out, got nil")
+		}
+	})
+
+	t.Run("rejects an input that escapes the project", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"inputs": ["../secret.avdl"], "generators": [{"name": "go", "out": "gen"}]}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
+			t.Fatal("expected error for traversing input, got nil")
+		}
+	})
+
+	t.Run("rejects a per-generator input that escapes the project", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "go", "out": "gen", "inputs": ["/abs/schema.avdl"]}]}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
+			t.Fatal("expected error for absolute per-generator input, got nil")
+		}
+	})
+
+	t.Run("accepts \".\" as an output directory", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "json", "out": "."}]}`)},
+		}
+		if _, err := loadManifest(manifestContext(fsys), "."); err != nil {
+			t.Fatalf("unexpected error for out=\".\": %v", err)
+		}
+	})
+
 	t.Run("reports a missing manifest file", func(t *testing.T) {
 		if _, err := loadManifest(manifestContext(fstest.MapFS{}), "."); err == nil {
 			t.Fatal("expected error for missing manifest, got nil")

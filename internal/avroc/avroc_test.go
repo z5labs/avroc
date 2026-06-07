@@ -444,6 +444,18 @@ func TestMain_Dispatch(t *testing.T) {
 			t.Errorf("exit code = %d, want 0", code)
 		}
 	})
+
+	t.Run("init rejects extra arguments", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("init", "schema.avdl")); code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+	})
+
+	t.Run("generate rejects extra arguments", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("generate", "schema.avdl")); code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+	})
 }
 
 // TestHelperGenerator is a test function that doubles as a real generator subprocess.

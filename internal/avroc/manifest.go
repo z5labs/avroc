@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"path/filepath"
 	"slices"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
@@ -103,12 +104,25 @@ func (m *Manifest) validate() error {
 	if len(m.Generators) == 0 {
 		return fmt.Errorf("%s declares no generators", manifestFilename)
 	}
+	for _, in := range m.Inputs {
+		if !filepath.IsLocal(in) {
+			return fmt.Errorf("input %q must be a relative path within the project (no absolute paths or %q traversal)", in, "..")
+		}
+	}
 	for i, g := range m.Generators {
 		if g.Name == "" {
 			return fmt.Errorf("generator at index %d is missing a name", i)
 		}
 		if g.Out == "" {
 			return fmt.Errorf("generator %q is missing an output directory (out)", g.Name)
+		}
+		if !filepath.IsLocal(g.Out) {
+			return fmt.Errorf("generator %q output %q must be a relative path within the project (no absolute paths or %q traversal)", g.Name, g.Out, "..")
+		}
+		for _, in := range g.Inputs {
+			if !filepath.IsLocal(in) {
+				return fmt.Errorf("generator %q input %q must be a relative path within the project (no absolute paths or %q traversal)", g.Name, in, "..")
+			}
 		}
 	}
 	return nil

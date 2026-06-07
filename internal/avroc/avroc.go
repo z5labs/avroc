@@ -37,8 +37,14 @@ func Main(ctx context.Context, cli cli.Context) int {
 
 	switch cmd := cli.Args[0]; cmd {
 	case "init":
+		if code, ok := rejectExtraArgs(cmd, cli.Args[1:]); !ok {
+			return code
+		}
 		return runInit(ctx, cli)
 	case "generate":
+		if code, ok := rejectExtraArgs(cmd, cli.Args[1:]); !ok {
+			return code
+		}
 		return runGenerate(ctx, cli)
 	case "help", "-h", "-help", "--help":
 		printUsage(os.Stdout)
@@ -48,6 +54,19 @@ func Main(ctx context.Context, cli cli.Context) int {
 		printUsage(os.Stderr)
 		return 1
 	}
+}
+
+// rejectExtraArgs enforces that init and generate take no positional
+// arguments. The manifest is the sole source of inputs/generators, so a stray
+// argument — a typo or legacy flag-style usage like "avroc generate
+// schema.avdl" — should fail loudly instead of being silently ignored.
+func rejectExtraArgs(cmd string, extra []string) (int, bool) {
+	if len(extra) == 0 {
+		return 0, true
+	}
+	fmt.Fprintf(os.Stderr, "%s takes no arguments, got %v\n\n", cmd, extra)
+	printUsage(os.Stderr)
+	return 1, false
 }
 
 func printUsage(w io.Writer) {
