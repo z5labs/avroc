@@ -6,20 +6,28 @@ This example demonstrates using `avroc` to generate code from an Avro IDL schema
 
 The `schema.avdl` file contains an example schema based on the [Apache Avro documentation](https://avro.apache.org/docs/1.12.0/idl-language/#schemaavdl).
 
+## Manifest
+
+The generators and their configuration are declared in [`avroc.json`](avroc.json): the
+shared input (`schema.avdl`) plus a `go`, `json`, and `pcf` generator, each with its output
+directory and options. `avroc init` scaffolds a starter manifest; this example ships a
+ready-made one.
+
 ## Generating Code
 
 To generate code from the schema:
 
 ```bash
-# Build avroc tools (from repo root)
-go build -o ./bin/avroc ./cmd/avroc
-go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go
-go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json
-go build -o ./bin/avroc-gen-pcf ./cmd/avroc-gen-pcf
+# Install the avroc tools (so they are discovered on PATH as avroc-gen-<name>)
+go install ./cmd/...
 
-# Generate Go types, JSON schema, and Parsing Canonical Form
-PATH="$PWD/bin:$PATH" ./bin/avroc -go_out=example/gen -go_opt=package_name=avro -go_opt=encoding=single_object -json_out=example -pcf_out=example/pcf example/schema.avdl
+# From this example directory, run the generators declared in avroc.json
+cd example
+avroc generate
 ```
+
+This reads `avroc.json` and produces Go types (`gen/`), an Avro JSON schema
+(`test_record.avsc`), and a Parsing Canonical Form file (`pcf/test_record.avsc`).
 
 ## Generated Output
 
