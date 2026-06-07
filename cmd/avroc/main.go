@@ -28,8 +28,9 @@ func main() {
 		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
 			return os.LookupEnv(key)
 		}),
-		OpenDir: func(dir string) fs.FS { return os.DirFS(dir) },
-		Args:    os.Args[1:],
+		OpenDir:    func(dir string) fs.FS { return os.DirFS(dir) },
+		WorkingDir: ".",
+		Args:       os.Args[1:],
 	})
 	os.Exit(code)
 }

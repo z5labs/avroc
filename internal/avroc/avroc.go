@@ -8,151 +8,55 @@ package avroc
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
-	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 
-	"github.com/sourcegraph/conc/pool"
 	"github.com/z5labs/avro-go/idl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
 
+// Main dispatches to an avroc subcommand. Generators are declared in an
+// avroc.json manifest (see avroc init) and run with avroc generate.
 func Main(ctx context.Context, cli cli.Context) int {
-	path, ok := cli.Env.LookupEnv("PATH")
-	if !ok {
-		cli.Log.ErrorContext(
-			ctx,
-			"unable to lookup generators",
-			slog.Any("error", "PATH environment variable not set"),
-		)
+	if len(cli.Args) == 0 {
+		printUsage(os.Stderr)
 		return 1
 	}
 
-	paths := filepath.SplitList(path)
-	generators, err := lookupGenerators(ctx, cli.Log, cli.OpenDir, paths...)
-	if err != nil {
-		cli.Log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
-		return 1
-	}
-
-	flags := flag.NewFlagSet("avroc", flag.ContinueOnError)
-	flags.Usage = func() {}
-
-	optFlags := make(map[string]*optionFlag)
-	for name := range generators {
-		generatorName := strings.TrimPrefix(name, "avroc-gen-")
-
-		flags.String(generatorName+"_out", "", fmt.Sprintf("Output directory for the %q generator", generatorName))
-
-		of := &optionFlag{}
-		optFlags[generatorName] = of
-		flags.Var(of, generatorName+"_opt", fmt.Sprintf("Options for the %q generator (key=value)", generatorName))
-	}
-
-	err = flags.Parse(cli.Args)
-	if errors.Is(err, flag.ErrHelp) {
-		err = printHelp(os.Stdout, slices.Collect(maps.Keys(generators))...)
-		if err != nil {
-			cli.Log.ErrorContext(ctx, "failed to print help", slog.Any("error", err))
-			return 1
-		}
+	switch cmd := cli.Args[0]; cmd {
+	case "init":
+		return runInit(ctx, cli)
+	case "generate":
+		return runGenerate(ctx, cli)
+	case "help", "-h", "-help", "--help":
+		printUsage(os.Stdout)
 		return 0
-	}
-	if err != nil {
-		cli.Log.ErrorContext(ctx, "failed to parse flags", slog.Any("error", err))
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", cmd)
+		printUsage(os.Stderr)
 		return 1
 	}
+}
 
-	args := flags.Args()
-	if len(args) == 0 {
-		cli.Log.ErrorContext(ctx, "no IDL files provided")
-		return 1
-	}
-
-	schemas := make([]*avrocpb.Schema, len(args))
-	for i, arg := range args {
-		f, err := parseIDL(arg)
-		if err != nil {
-			cli.Log.ErrorContext(ctx, "failed to parse IDL file", slog.String("file", arg), slog.Any("error", err))
-			return 1
-		}
-		if f.Schema == nil {
-			cli.Log.ErrorContext(ctx, "IDL file does not contain a schema", slog.String("file", arg))
-			return 1
-		}
-
-		if err := validateSchema(f.Schema); err != nil {
-			cli.Log.ErrorContext(ctx, "schema validation failed", slog.String("file", arg), slog.Any("error", err))
-			return 1
-		}
-
-		schema, err := mapToProtoSchema(f.Schema)
-		if err != nil {
-			cli.Log.ErrorContext(ctx, "failed to map IDL file to proto schema", slog.String("file", arg), slog.Any("error", err))
-			return 1
-		}
-
-		schemas[i] = schema
-	}
-
-	genPool := pool.New().WithContext(ctx)
-	flags.Visit(func(f *flag.Flag) {
-		if !strings.HasSuffix(f.Name, "_out") {
-			return
-		}
-
-		genPool.Go(func(ctx context.Context) error {
-			flagName := strings.TrimSuffix(f.Name, "_out")
-			generatorName := "avroc-gen-" + flagName
-
-			executablePath, ok := generators[generatorName]
-			if !ok {
-				cli.Log.ErrorContext(ctx, "no generator found for flag", slog.String("flag", f.Name))
-				return nil
-			}
-
-			output := f.Value.String()
-			if output == "" {
-				return fmt.Errorf("empty output directory for generator %q", generatorName)
-			}
-
-			var options []*avrocpb.Option
-			if of, ok := optFlags[flagName]; ok {
-				options = of.options()
-			}
-
-			g := generator{
-				log:            cli.Log,
-				env:            cli.Env,
-				name:           generatorName,
-				executablePath: executablePath,
-			}
-
-			return g.generate(ctx, output, options, schemas...)
-		})
-	})
-
-	err = genPool.Wait()
-	if err != nil {
-		cli.Log.ErrorContext(ctx, "failed to run generators", slog.Any("error", err))
-		return 1
-	}
-
-	return 0
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: avroc <command>")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  init       Scaffold an avroc.json manifest")
+	fmt.Fprintln(w, "  generate   Run the generators declared in avroc.json")
+	fmt.Fprintln(w, "  help       Show this help")
 }
 
 func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string) fs.FS, dirs ...string) (map[string]string, error) {
@@ -186,74 +90,6 @@ func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string
 	}
 
 	return generatorIndex, nil
-}
-
-func printHelp(w io.Writer, generators ...string) error {
-	_, err := fmt.Fprintln(w, "Usage: avroc [options] <idl files>")
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintln(w, "Options:")
-	if err != nil {
-		return err
-	}
-
-	for _, gen := range generators {
-		name := strings.TrimPrefix(gen, "avroc-gen-")
-
-		_, err = fmt.Fprintf(w, "  -%s_out string\n", name)
-		if err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintf(w, "        Output directory for the %q generator\n", name)
-		if err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintf(w, "  -%s_opt key=value\n", name)
-		if err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintf(w, "        Options for the %q generator (can be specified multiple times)\n", name)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// optionFlag implements flag.Value to support repeated key=value flag usage.
-type optionFlag struct {
-	values []string
-}
-
-func (f *optionFlag) String() string {
-	return strings.Join(f.values, ",")
-}
-
-func (f *optionFlag) Set(value string) error {
-	if !strings.Contains(value, "=") {
-		return fmt.Errorf("option must be in key=value format: %q", value)
-	}
-	f.values = append(f.values, value)
-	return nil
-}
-
-func (f *optionFlag) options() []*avrocpb.Option {
-	opts := make([]*avrocpb.Option, len(f.values))
-	for i, v := range f.values {
-		// Cut is safe here; Set() already validated the "=" separator is present.
-		key, val, _ := strings.Cut(v, "=")
-		opts[i] = &avrocpb.Option{
-			Name:  proto.String(key),
-			Value: proto.String(val),
-		}
-	}
-	return opts
 }
 
 func parseIDL(path string) (_ *idl.File, err error) {

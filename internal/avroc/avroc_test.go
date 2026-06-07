@@ -410,139 +410,40 @@ func (f *errFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	return nil, &fs.PathError{Op: "read", Path: name, Err: f.err}
 }
 
-func TestPrintHelp(t *testing.T) {
-	var buf bytes.Buffer
-	err := printHelp(&buf, "avroc-gen-go", "avroc-gen-java")
-	if err != nil {
-		t.Fatal(err)
+func TestMain_Dispatch(t *testing.T) {
+	newContext := func(args ...string) cli.Context {
+		return cli.Context{
+			Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Env:        cli.EnvironmentFunc(func(string) (string, bool) { return "", false }),
+			OpenDir:    staticOpenDir(fstest.MapFS{}),
+			WorkingDir: t.TempDir(),
+			Args:       args,
+		}
 	}
 
-	output := buf.String()
-	if !bytes.Contains([]byte(output), []byte("-go_out string")) {
-		t.Errorf("output missing -go_out flag:\n%s", output)
-	}
-	if !bytes.Contains([]byte(output), []byte("-java_out string")) {
-		t.Errorf("output missing -java_out flag:\n%s", output)
-	}
-	if !bytes.Contains([]byte(output), []byte("-go_opt key=value")) {
-		t.Errorf("output missing -go_opt flag:\n%s", output)
-	}
-	if !bytes.Contains([]byte(output), []byte("-java_opt key=value")) {
-		t.Errorf("output missing -java_opt flag:\n%s", output)
-	}
-	if !bytes.Contains([]byte(output), []byte("Usage: avroc")) {
-		t.Errorf("output missing usage line:\n%s", output)
-	}
-}
-
-func TestOptionFlag(t *testing.T) {
-	t.Run("single option", func(t *testing.T) {
-		of := &optionFlag{}
-		if err := of.Set("package_name=my_package"); err != nil {
-			t.Fatal(err)
-		}
-
-		opts := of.options()
-		if len(opts) != 1 {
-			t.Fatalf("got %d options, want 1", len(opts))
-		}
-		if opts[0].GetName() != "package_name" {
-			t.Errorf("option name = %q, want %q", opts[0].GetName(), "package_name")
-		}
-		if opts[0].GetValue() != "my_package" {
-			t.Errorf("option value = %q, want %q", opts[0].GetValue(), "my_package")
+	t.Run("no arguments is a usage error", func(t *testing.T) {
+		if code := Main(context.Background(), newContext()); code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
 		}
 	})
 
-	t.Run("multiple options", func(t *testing.T) {
-		of := &optionFlag{}
-		if err := of.Set("package_name=my_package"); err != nil {
-			t.Fatal(err)
-		}
-		if err := of.Set("other_opt=other_val"); err != nil {
-			t.Fatal(err)
-		}
-
-		opts := of.options()
-		if len(opts) != 2 {
-			t.Fatalf("got %d options, want 2", len(opts))
-		}
-		if opts[0].GetName() != "package_name" {
-			t.Errorf("option[0] name = %q, want %q", opts[0].GetName(), "package_name")
-		}
-		if opts[1].GetName() != "other_opt" {
-			t.Errorf("option[1] name = %q, want %q", opts[1].GetName(), "other_opt")
+	t.Run("unknown command is an error", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("bogus")); code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
 		}
 	})
 
-	t.Run("value with equals sign", func(t *testing.T) {
-		of := &optionFlag{}
-		if err := of.Set("key=val=ue"); err != nil {
-			t.Fatal(err)
-		}
-
-		opts := of.options()
-		if len(opts) != 1 {
-			t.Fatalf("got %d options, want 1", len(opts))
-		}
-		if opts[0].GetName() != "key" {
-			t.Errorf("option name = %q, want %q", opts[0].GetName(), "key")
-		}
-		if opts[0].GetValue() != "val=ue" {
-			t.Errorf("option value = %q, want %q", opts[0].GetValue(), "val=ue")
+	t.Run("help exits 0", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("help")); code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
 		}
 	})
 
-	t.Run("invalid format", func(t *testing.T) {
-		of := &optionFlag{}
-		if err := of.Set("invalid"); err == nil {
-			t.Fatal("expected error for option without '='")
+	t.Run("init scaffolds and exits 0", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("init")); code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
 		}
 	})
-
-	t.Run("string representation", func(t *testing.T) {
-		of := &optionFlag{}
-		if err := of.Set("a=b"); err != nil {
-			t.Fatal(err)
-		}
-		if err := of.Set("c=d"); err != nil {
-			t.Fatal(err)
-		}
-		if of.String() != "a=b,c=d" {
-			t.Errorf("String() = %q, want %q", of.String(), "a=b,c=d")
-		}
-	})
-}
-
-func TestMain_PathNotSet(t *testing.T) {
-	code := Main(context.Background(), cli.Context{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
-			return "", false
-		}),
-	})
-
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-}
-
-func TestMain_NoIDLFiles(t *testing.T) {
-	code := Main(context.Background(), cli.Context{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
-			if key == "PATH" {
-				return "/nonexistent", true
-			}
-			return "", false
-		}),
-		OpenDir: staticOpenDir(fstest.MapFS{}),
-		Args:    []string{},
-	})
-
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
 }
 
 // TestHelperGenerator is a test function that doubles as a real generator subprocess.

@@ -1,0 +1,23 @@
+{
+  "inputs": [
+    "schema.avdl"
+  ],
+  "generators": [
+    {
+      "name": "go",
+      "out": "gen",
+      "options": {
+        "encoding": "single_object",
+        "package_name": "avro"
+      }
+    },
+    {
+      "name": "json",
+      "out": "."
+    },
+    {
+      "name": "pcf",
+      "out": "pcf"
+    }
+  ]
+}

@@ -24,5 +24,8 @@ type Context struct {
 	Log     *slog.Logger
 	Env     Environment
 	OpenDir func(dir string) fs.FS
-	Args    []string
+	// WorkingDir is the directory avroc reads the manifest from and resolves
+	// relative manifest paths (inputs, output dirs) against.
+	WorkingDir string
+	Args       []string
 }
