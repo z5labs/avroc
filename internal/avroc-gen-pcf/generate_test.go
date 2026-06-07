@@ -6,7 +6,6 @@
 package avrocgenpcf
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -44,9 +43,8 @@ func TestGenerate_Record(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
-		Schemas:         []*avrocpb.Schema{schema},
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -153,9 +151,8 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
-		Schemas:         []*avrocpb.Schema{schema},
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -235,17 +232,6 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 	// MD5 was already defined, so it should be a reference string
 	if nullableHashTypes[1] != "org.apache.avro.test.MD5" {
 		t.Errorf("expected second union type=org.apache.avro.test.MD5, got %v", nullableHashTypes[1])
-	}
-}
-
-func TestGenerate_EmptyOutputDir(t *testing.T) {
-	svc := &generatorService{}
-	_, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(""),
-		Schemas:         []*avrocpb.Schema{},
-	})
-	if err == nil {
-		t.Fatal("expected error for empty output directory")
 	}
 }
 

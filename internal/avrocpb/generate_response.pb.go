@@ -26,11 +26,21 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// The response message for the Generate RPC method.
+// One streamed chunk of generated output. A file is the ordered concatenation
+// of all chunks sharing the same `path`, terminated by the chunk whose `last`
+// is true.
 type GenerateResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The list of generated output files.
-	OutputFiles   []string `protobuf:"bytes,1,rep,name=output_files,json=outputFiles" json:"output_files,omitempty"`
+	// Path of the generated file, relative to the output root, using forward
+	// slashes regardless of OS. avroc joins this onto the -<name>_out directory
+	// and MUST reject absolute paths or any path that escapes the output root
+	// (e.g. containing "..").
+	Path *string `protobuf:"bytes,1,opt,name=path" json:"path,omitempty"`
+	// A chunk of the file's content. Each message is kept comfortably under the
+	// 4MB default MaxRecvMsgSize so the limit never needs raising.
+	Content []byte `protobuf:"bytes,2,opt,name=content" json:"content,omitempty"`
+	// True on the final chunk for `path`.
+	Last          *bool `protobuf:"varint,3,opt,name=last" json:"last,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,20 +75,36 @@ func (*GenerateResponse) Descriptor() ([]byte, []int) {
 	return file_generate_response_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GenerateResponse) GetOutputFiles() []string {
+func (x *GenerateResponse) GetPath() string {
+	if x != nil && x.Path != nil {
+		return *x.Path
+	}
+	return ""
+}
+
+func (x *GenerateResponse) GetContent() []byte {
 	if x != nil {
-		return x.OutputFiles
+		return x.Content
 	}
 	return nil
+}
+
+func (x *GenerateResponse) GetLast() bool {
+	if x != nil && x.Last != nil {
+		return *x.Last
+	}
+	return false
 }
 
 var File_generate_response_proto protoreflect.FileDescriptor
 
 const file_generate_response_proto_rawDesc = "" +
 	"\n" +
-	"\x17generate_response.proto\"5\n" +
-	"\x10GenerateResponse\x12!\n" +
-	"\foutput_files\x18\x01 \x03(\tR\voutputFilesB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x17generate_response.proto\"T\n" +
+	"\x10GenerateResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\x12\x12\n" +
+	"\x04last\x18\x03 \x01(\bR\x04lastB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_generate_response_proto_rawDescOnce sync.Once

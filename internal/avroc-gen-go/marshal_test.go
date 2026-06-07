@@ -6,7 +6,6 @@
 package avrocgengo
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -44,10 +43,9 @@ func TestMarshal_Record(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -95,10 +93,9 @@ func TestMarshal_Fixed(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -145,10 +142,9 @@ func TestMarshal_Enum(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -207,10 +203,9 @@ func TestMarshal_Union(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -278,10 +273,9 @@ func TestMarshal_ArrayField(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -341,10 +335,9 @@ func TestMarshal_MapField(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -425,10 +418,9 @@ func TestMarshal_NestedRecord(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -517,10 +509,9 @@ func TestMarshal_AllPrimitiveTypes(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -569,10 +560,9 @@ func TestMarshal_EmptyRecord(t *testing.T) {
 	}
 
 	svc := &generatorService{}
-	resp, err := svc.Generate(context.Background(), &avrocpb.GenerateRequest{
-		OutputDirectory: proto.String(tmpDir),
+	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
-		Schemas:         []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)

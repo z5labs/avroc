@@ -561,7 +561,7 @@ func TestHelperGenerator(t *testing.T) {
 	}
 
 	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
-	avrocpb.RegisterGeneratorServer(srv, &testGeneratorServer{})
+	avrocpb.RegisterGeneratorServer(srv, &testGeneratorServer{path: os.Getenv("AVROC_TEST_GEN_PATH")})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -578,12 +578,20 @@ func TestHelperGenerator(t *testing.T) {
 
 type testGeneratorServer struct {
 	avrocpb.UnimplementedGeneratorServer
+	path string
 }
 
-func (s *testGeneratorServer) Generate(_ context.Context, req *avrocpb.GenerateRequest) (*avrocpb.GenerateResponse, error) {
-	return &avrocpb.GenerateResponse{
-		OutputFiles: []string{req.GetOutputDirectory() + "/output.go"},
-	}, nil
+func (s *testGeneratorServer) Generate(_ *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
+	path := s.path
+	if path == "" {
+		path = "output.go"
+	}
+	last := true
+	return stream.Send(&avrocpb.GenerateResponse{
+		Path:    &path,
+		Content: []byte("package main\n"),
+		Last:    &last,
+	})
 }
 
 func TestGeneratorGenerate(t *testing.T) {
@@ -629,6 +637,154 @@ func TestGeneratorGenerate(t *testing.T) {
 	err := g.generate(ctx, outputDir, nil, schema)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// avroc, not the generator, performs the write. Confirm the streamed file
+	// landed under the output directory.
+	written := filepath.Join(outputDir, "output.go")
+	if _, err := os.Stat(written); err != nil {
+		t.Errorf("expected generated file at %q: %v", written, err)
+	}
+}
+
+// fakeClientStream replays a fixed sequence of GenerateResponse messages,
+// implementing avrocpb.Generator_GenerateClient for writeStream tests.
+type fakeClientStream struct {
+	grpc.ClientStream
+	msgs []*avrocpb.GenerateResponse
+	i    int
+}
+
+func (f *fakeClientStream) Recv() (*avrocpb.GenerateResponse, error) {
+	if f.i >= len(f.msgs) {
+		return nil, io.EOF
+	}
+	m := f.msgs[f.i]
+	f.i++
+	return m, nil
+}
+
+func TestWriteStream(t *testing.T) {
+	g := generator{
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		name: "avroc-gen-test",
+	}
+
+	t.Run("writes reassembled file under output root", func(t *testing.T) {
+		root := t.TempDir()
+		path := "pkg/person.go"
+		last := func(b bool) *bool { return &b }
+		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+			{Path: &path, Content: []byte("package pkg\n"), Last: last(false)},
+			{Path: &path, Content: []byte("// trailer\n"), Last: last(true)},
+		}}
+
+		written, err := g.writeStream(root, stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(written) != 1 {
+			t.Fatalf("expected 1 written file, got %d", len(written))
+		}
+
+		got, err := os.ReadFile(filepath.Join(root, "pkg", "person.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "package pkg\n// trailer\n"; string(got) != want {
+			t.Errorf("content = %q, want %q", string(got), want)
+		}
+	})
+
+	t.Run("rejects paths that escape the output root", func(t *testing.T) {
+		for _, bad := range []string{"../escape.go", "/etc/evil.go", "a/../../escape.go"} {
+			root := t.TempDir()
+			path := bad
+			last := true
+			stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+				{Path: &path, Content: []byte("package x\n"), Last: &last},
+			}}
+
+			if _, err := g.writeStream(root, stream); err == nil {
+				t.Errorf("path %q: expected error, got nil", bad)
+			}
+
+			// Nothing must be written next to the output root.
+			if _, err := os.Stat(filepath.Join(filepath.Dir(root), "escape.go")); !os.IsNotExist(err) {
+				t.Errorf("path %q: file escaped the output root", bad)
+			}
+		}
+	})
+
+	t.Run("errors when the stream ends with an unterminated file", func(t *testing.T) {
+		root := t.TempDir()
+		path := "pkg/person.go"
+		last := func(b bool) *bool { return &b }
+		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+			{Path: &path, Content: []byte("package pkg\n"), Last: last(false)},
+			// No terminating chunk: the stream just ends.
+		}}
+
+		if _, err := g.writeStream(root, stream); err == nil {
+			t.Fatal("expected error for unterminated file, got nil")
+		}
+
+		// The partial file must not be left behind in the output tree.
+		if _, err := os.Stat(filepath.Join(root, "pkg", "person.go")); !os.IsNotExist(err) {
+			t.Errorf("partial file was not discarded: %v", err)
+		}
+	})
+
+	t.Run("errors when a chunk follows a terminated file", func(t *testing.T) {
+		root := t.TempDir()
+		path := "person.go"
+		last := func(b bool) *bool { return &b }
+		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+			{Path: &path, Content: []byte("package pkg\n"), Last: last(true)},
+			{Path: &path, Content: []byte("// extra\n"), Last: last(true)},
+		}}
+
+		if _, err := g.writeStream(root, stream); err == nil {
+			t.Fatal("expected error for chunk after termination, got nil")
+		}
+	})
+}
+
+func TestGeneratorGenerate_RejectsUnsafePath(t *testing.T) {
+	t.Setenv("AVROC_TEST_GENERATOR", "1")
+	t.Setenv("AVROC_TEST_GEN_PATH", "../escape.go")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	g := generator{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		env: cli.EnvironmentFunc(func(key string) (string, bool) {
+			if key == "AVROC_GENERATOR_ARGS" {
+				return "-test.run=TestHelperGenerator --", true
+			}
+			return "", false
+		}),
+		name:           "avroc-gen-test",
+		executablePath: os.Args[0],
+	}
+
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{Name: proto.String("User")},
+			},
+		},
+	}
+
+	outputDir := t.TempDir()
+	if err := g.generate(ctx, outputDir, nil, schema); err == nil {
+		t.Fatal("expected error for generator returning an escaping path")
+	}
+
+	if _, err := os.Stat(filepath.Join(filepath.Dir(outputDir), "escape.go")); !os.IsNotExist(err) {
+		t.Errorf("file escaped the output root")
 	}
 }
 

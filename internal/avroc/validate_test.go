@@ -6,11 +6,47 @@
 package avroc
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/z5labs/avro-go/idl"
 )
+
+func TestSafeOutputPath(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "out")
+
+	// safeOutputPath returns an absolute path (it resolves root via
+	// filepath.Abs). Compute the expected value from the same absolute root so
+	// the assertion is OS-independent: on Windows a rooted-but-volume-less path
+	// like "\out" gains the current drive letter ("C:\out") once made absolute.
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatalf("failed to resolve absolute root: %v", err)
+	}
+
+	t.Run("accepts relative paths", func(t *testing.T) {
+		for _, p := range []string{"person.go", "pkg/person.go", "a/b/c.avsc"} {
+			got, err := safeOutputPath(root, p)
+			if err != nil {
+				t.Errorf("path %q: unexpected error: %v", p, err)
+				continue
+			}
+			want := filepath.Join(rootAbs, filepath.FromSlash(p))
+			if got != want {
+				t.Errorf("path %q: got %q, want %q", p, got, want)
+			}
+		}
+	})
+
+	t.Run("rejects unsafe paths", func(t *testing.T) {
+		for _, p := range []string{"", "../escape.go", "a/../../escape.go", "/etc/passwd"} {
+			if _, err := safeOutputPath(root, p); err == nil {
+				t.Errorf("path %q: expected error, got nil", p)
+			}
+		}
+	})
+}
 
 func TestValidateSchema_PrimitiveIdents(t *testing.T) {
 	schema := &idl.Schema{

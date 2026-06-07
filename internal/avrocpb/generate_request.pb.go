@@ -29,12 +29,10 @@ const (
 // The request message for the Generate RPC method.
 type GenerateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The directory where the generated code should be placed.
-	OutputDirectory *string `protobuf:"bytes,1,opt,name=output_directory,json=outputDirectory" json:"output_directory,omitempty"`
 	// Options to customize the code generation process.
-	Options []*Option `protobuf:"bytes,2,rep,name=options" json:"options,omitempty"`
+	Options []*Option `protobuf:"bytes,1,rep,name=options" json:"options,omitempty"`
 	// The Avro schemas to be generate code for.
-	Schemas       []*Schema `protobuf:"bytes,3,rep,name=schemas" json:"schemas,omitempty"`
+	Schemas       []*Schema `protobuf:"bytes,2,rep,name=schemas" json:"schemas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -69,13 +67,6 @@ func (*GenerateRequest) Descriptor() ([]byte, []int) {
 	return file_generate_request_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GenerateRequest) GetOutputDirectory() string {
-	if x != nil && x.OutputDirectory != nil {
-		return *x.OutputDirectory
-	}
-	return ""
-}
-
 func (x *GenerateRequest) GetOptions() []*Option {
 	if x != nil {
 		return x.Options
@@ -94,11 +85,10 @@ var File_generate_request_proto protoreflect.FileDescriptor
 
 const file_generate_request_proto_rawDesc = "" +
 	"\n" +
-	"\x16generate_request.proto\x1a\fschema.proto\x1a\foption.proto\"\x82\x01\n" +
-	"\x0fGenerateRequest\x12)\n" +
-	"\x10output_directory\x18\x01 \x01(\tR\x0foutputDirectory\x12!\n" +
-	"\aoptions\x18\x02 \x03(\v2\a.OptionR\aoptions\x12!\n" +
-	"\aschemas\x18\x03 \x03(\v2\a.SchemaR\aschemasB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x16generate_request.proto\x1a\fschema.proto\x1a\foption.proto\"W\n" +
+	"\x0fGenerateRequest\x12!\n" +
+	"\aoptions\x18\x01 \x03(\v2\a.OptionR\aoptions\x12!\n" +
+	"\aschemas\x18\x02 \x03(\v2\a.SchemaR\aschemasB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_generate_request_proto_rawDescOnce sync.Once
