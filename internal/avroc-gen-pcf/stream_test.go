@@ -50,12 +50,26 @@ func generateToDir(t *testing.T, svc *generatorService, dir string, req *avrocpb
 
 	contents := make(map[string][]byte)
 	var order []string
+	done := make(map[string]bool)
 	for _, m := range cs.msgs {
 		p := m.GetPath()
+		// Enforce the streaming contract: last=true terminates a file, and no
+		// further chunks may reference that path afterwards.
+		if done[p] {
+			t.Fatalf("generator sent a chunk for path %q after it was terminated with last=true", p)
+		}
 		if _, ok := contents[p]; !ok {
 			order = append(order, p)
 		}
 		contents[p] = append(contents[p], m.GetContent()...)
+		if m.GetLast() {
+			done[p] = true
+		}
+	}
+	for _, p := range order {
+		if !done[p] {
+			t.Fatalf("generator never terminated path %q with last=true", p)
+		}
 	}
 
 	res := &genResult{}

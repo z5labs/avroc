@@ -345,17 +345,37 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	return nil
 }
 
-// writeStream consumes the generator's server stream, reassembling each file
-// from its ordered chunks and writing it under output. Each path is validated
-// to stay within output before anything is written. It returns the OS-native
-// paths of the files written.
+// writeStream consumes the generator's server stream, writing each file's
+// ordered chunks directly to disk under output rather than buffering whole
+// files in memory. A path is validated to stay within output and its file is
+// created on the first chunk, so an unsafe or buggy generator cannot force
+// avroc to buffer arbitrary content before being rejected. A file is only
+// considered written once a chunk with last=true terminates it; the stream
+// ending with files still open, or any chunk arriving after a file's
+// terminating chunk, is reported as an error. It returns the OS-native paths
+// of the files written.
 func (g generator) writeStream(output string, stream avrocpb.Generator_GenerateClient) ([]string, error) {
-	pending := make(map[string][]byte)
+	open := make(map[string]*os.File)
+	finalized := make(map[string]struct{})
 	var written []string
+
+	// On any early return, discard files that never received their terminating
+	// chunk so partial/corrupt output is not left behind in the output tree.
+	defer func() {
+		for path, f := range open {
+			name := f.Name()
+			_ = f.Close()
+			_ = os.Remove(name)
+			delete(open, path)
+		}
+	}()
 
 	for {
 		msg, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
+			if len(open) > 0 {
+				return written, fmt.Errorf("generator %q closed the stream with %d unterminated file(s)", g.name, len(open))
+			}
 			return written, nil
 		}
 		if err != nil {
@@ -363,26 +383,41 @@ func (g generator) writeStream(output string, stream avrocpb.Generator_GenerateC
 		}
 
 		path := msg.GetPath()
-		pending[path] = append(pending[path], msg.GetContent()...)
+		if _, done := finalized[path]; done {
+			return written, fmt.Errorf("generator %q sent a chunk for already-completed file %q", g.name, path)
+		}
+
+		f, ok := open[path]
+		if !ok {
+			dst, err := safeOutputPath(output, path)
+			if err != nil {
+				return written, fmt.Errorf("generator %q returned unsafe path %q: %w", g.name, path, err)
+			}
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return written, fmt.Errorf("failed to create output directory for %q: %w", dst, err)
+			}
+			f, err = os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+			if err != nil {
+				return written, fmt.Errorf("failed to create file %q: %w", dst, err)
+			}
+			open[path] = f
+		}
+
+		if _, err := f.Write(msg.GetContent()); err != nil {
+			return written, fmt.Errorf("failed to write file %q: %w", f.Name(), err)
+		}
+
 		if !msg.GetLast() {
 			continue
 		}
 
-		content := pending[path]
-		delete(pending, path)
-
-		dst, err := safeOutputPath(output, path)
-		if err != nil {
-			return written, fmt.Errorf("generator %q returned unsafe path %q: %w", g.name, path, err)
+		name := f.Name()
+		delete(open, path)
+		finalized[path] = struct{}{}
+		if err := f.Close(); err != nil {
+			return written, fmt.Errorf("failed to close file %q: %w", name, err)
 		}
-
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return written, fmt.Errorf("failed to create output directory for %q: %w", dst, err)
-		}
-		if err := os.WriteFile(dst, content, 0o644); err != nil {
-			return written, fmt.Errorf("failed to write file %q: %w", dst, err)
-		}
-		written = append(written, dst)
+		written = append(written, name)
 	}
 }
 

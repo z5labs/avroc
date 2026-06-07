@@ -715,6 +715,39 @@ func TestWriteStream(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("errors when the stream ends with an unterminated file", func(t *testing.T) {
+		root := t.TempDir()
+		path := "pkg/person.go"
+		last := func(b bool) *bool { return &b }
+		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+			{Path: &path, Content: []byte("package pkg\n"), Last: last(false)},
+			// No terminating chunk: the stream just ends.
+		}}
+
+		if _, err := g.writeStream(root, stream); err == nil {
+			t.Fatal("expected error for unterminated file, got nil")
+		}
+
+		// The partial file must not be left behind in the output tree.
+		if _, err := os.Stat(filepath.Join(root, "pkg", "person.go")); !os.IsNotExist(err) {
+			t.Errorf("partial file was not discarded: %v", err)
+		}
+	})
+
+	t.Run("errors when a chunk follows a terminated file", func(t *testing.T) {
+		root := t.TempDir()
+		path := "person.go"
+		last := func(b bool) *bool { return &b }
+		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
+			{Path: &path, Content: []byte("package pkg\n"), Last: last(true)},
+			{Path: &path, Content: []byte("// extra\n"), Last: last(true)},
+		}}
+
+		if _, err := g.writeStream(root, stream); err == nil {
+			t.Fatal("expected error for chunk after termination, got nil")
+		}
+	})
 }
 
 func TestGeneratorGenerate_RejectsUnsafePath(t *testing.T) {

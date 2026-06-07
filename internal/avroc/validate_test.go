@@ -16,6 +16,15 @@ import (
 func TestSafeOutputPath(t *testing.T) {
 	root := filepath.Join(string(filepath.Separator), "out")
 
+	// safeOutputPath returns an absolute path (it resolves root via
+	// filepath.Abs). Compute the expected value from the same absolute root so
+	// the assertion is OS-independent: on Windows a rooted-but-volume-less path
+	// like "\out" gains the current drive letter ("C:\out") once made absolute.
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatalf("failed to resolve absolute root: %v", err)
+	}
+
 	t.Run("accepts relative paths", func(t *testing.T) {
 		for _, p := range []string{"person.go", "pkg/person.go", "a/b/c.avsc"} {
 			got, err := safeOutputPath(root, p)
@@ -23,7 +32,7 @@ func TestSafeOutputPath(t *testing.T) {
 				t.Errorf("path %q: unexpected error: %v", p, err)
 				continue
 			}
-			want := filepath.Join(root, filepath.FromSlash(p))
+			want := filepath.Join(rootAbs, filepath.FromSlash(p))
 			if got != want {
 				t.Errorf("path %q: got %q, want %q", p, got, want)
 			}
