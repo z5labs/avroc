@@ -244,6 +244,40 @@ func TestRunGet(t *testing.T) {
 			t.Fatalf("exit code = %d, want 1", code)
 		}
 	})
+
+	t.Run("extra positional arguments are rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"generators":[{"name":"json","out":"."}]}`)
+		c := getContext(dir)
+		c.Args = []string{"get", "foo"}
+		if code := runGet(context.Background(), c); code != 1 {
+			t.Fatalf("exit code = %d, want 1", code)
+		}
+	})
+
+	t.Run("removes a stale lockfile when no generators have a source", func(t *testing.T) {
+		dir := t.TempDir()
+
+		// First acquire with an OCI source so a lockfile exists.
+		writeManifest(t, dir, manifest)
+		f := &fakeFetcher{digests: map[string]string{"ghcr.io/z5labs/avroc-gen-go:v0.1.0": "sha256:aaa"}}
+		if code := getWithFetcher(context.Background(), getContext(dir), f, false); code != 0 {
+			t.Fatalf("first get exit = %d", code)
+		}
+		if _, err := os.Stat(filepath.Join(dir, lockFilename)); err != nil {
+			t.Fatalf("expected lockfile after first get: %v", err)
+		}
+
+		// Remove the OCI source from the manifest and re-run: the lockfile is now
+		// stale and must be deleted.
+		writeManifest(t, dir, `{"generators":[{"name":"json","out":"."}]}`)
+		if code := getWithFetcher(context.Background(), getContext(dir), &fakeFetcher{}, false); code != 0 {
+			t.Fatalf("second get exit = %d", code)
+		}
+		if _, err := os.Stat(filepath.Join(dir, lockFilename)); !os.IsNotExist(err) {
+			t.Errorf("expected stale lockfile to be removed, stat err = %v", err)
+		}
+	})
 }
 
 func TestMain_DispatchGet(t *testing.T) {

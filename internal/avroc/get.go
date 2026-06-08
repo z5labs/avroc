@@ -33,6 +33,12 @@ func runGet(ctx context.Context, c cli.Context) int {
 		}
 		return 1
 	}
+	// get takes the -upgrade flag but no positional arguments; reject leftovers
+	// (a typo or misuse like "avroc get foo") instead of silently ignoring them,
+	// consistent with init and generate.
+	if code, ok := rejectExtraArgs("get", flags.Args()); !ok {
+		return code
+	}
 
 	return getWithFetcher(ctx, c, remoteFetcher{}, *upgrade)
 }
@@ -108,7 +114,15 @@ func getWithFetcher(ctx context.Context, c cli.Context, fetcher imageFetcher, up
 	}
 
 	if len(locked) == 0 {
-		c.Log.InfoContext(ctx, "no OCI generators to acquire; nothing to lock")
+		// No OCI-sourced generators: an existing lockfile no longer reflects the
+		// manifest (e.g. sources were removed), so delete it rather than leaving
+		// a stale pin behind.
+		dst := filepath.Join(c.WorkingDir, lockFilename)
+		if err := os.Remove(dst); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			c.Log.ErrorContext(ctx, "failed to remove stale lockfile", slog.String("path", dst), slog.Any("error", err))
+			return 1
+		}
+		c.Log.InfoContext(ctx, "no OCI generators to acquire; lockfile not needed")
 		return 0
 	}
 
