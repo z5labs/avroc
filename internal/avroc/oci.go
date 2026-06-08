@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/z5labs/avroc/internal/cli"
 
@@ -46,24 +45,24 @@ func remoteOptions(ctx context.Context) []remote.Option {
 	return []remote.Option{
 		remote.WithContext(ctx),
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		remote.WithPlatform(hostPlatform()),
 	}
 }
 
+// resolve returns the digest the tag points at. No platform is selected, so the
+// digest is the manifest the registry serves for the tag — an image manifest
+// for a single-arch image, or the multi-arch index digest otherwise. Keeping it
+// platform-independent means a committed avroc.lock is identical on every
+// developer machine and CI runner rather than churning per OS/arch.
 func (remoteFetcher) resolve(ctx context.Context, ref string) (string, error) {
 	r, err := name.ParseReference(ref)
 	if err != nil {
 		return "", fmt.Errorf("invalid image reference %q: %w", ref, err)
 	}
-	img, err := remote.Image(r, remoteOptions(ctx)...)
+	desc, err := remote.Head(r, remoteOptions(ctx)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve %q: %w", ref, err)
 	}
-	h, err := img.Digest()
-	if err != nil {
-		return "", err
-	}
-	return h.String(), nil
+	return desc.Digest.String(), nil
 }
 
 func (remoteFetcher) pull(ctx context.Context, ref, cacheDir string) (string, error) {
@@ -80,31 +79,28 @@ func (remoteFetcher) pull(ctx context.Context, ref, cacheDir string) (string, er
 		}
 	}
 
-	img, err := remote.Image(r, remoteOptions(ctx)...)
+	desc, err := remote.Get(r, remoteOptions(ctx)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to pull %q: %w", ref, err)
 	}
-	h, err := img.Digest()
-	if err != nil {
-		return "", err
-	}
 
-	if err := writeImageToCache(cacheDir, h, img); err != nil {
+	if err := writeToCache(cacheDir, desc); err != nil {
 		return "", err
 	}
 	// Re-open and verify what was written so a torn or corrupt cache entry is
 	// caught here rather than at generation time.
-	if err := verifyCached(cacheDir, h.String()); err != nil {
-		return "", fmt.Errorf("cached image %q failed verification: %w", h.String(), err)
+	if err := verifyCached(cacheDir, desc.Digest.String()); err != nil {
+		return "", fmt.Errorf("cached image %q failed verification: %w", desc.Digest, err)
 	}
-	return h.String(), nil
+	return desc.Digest.String(), nil
 }
 
-// writeImageToCache stores img as a self-contained OCI image layout under a
+// writeToCache stores the descriptor's content (a single image or a full
+// multi-arch index, faithfully) as a self-contained OCI layout under a
 // per-digest directory. The directory is rebuilt from scratch so a previous
 // partial write cannot leave mixed content behind.
-func writeImageToCache(cacheDir string, h v1.Hash, img v1.Image) error {
-	dir := imageCachePath(cacheDir, h)
+func writeToCache(cacheDir string, desc *remote.Descriptor) error {
+	dir := imageCachePath(cacheDir, desc.Digest)
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("failed to clear cache dir %q: %w", dir, err)
 	}
@@ -115,16 +111,33 @@ func writeImageToCache(cacheDir string, h v1.Hash, img v1.Image) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize cache layout %q: %w", dir, err)
 	}
+
+	if desc.MediaType.IsIndex() {
+		idx, err := desc.ImageIndex()
+		if err != nil {
+			return fmt.Errorf("failed to read image index %q: %w", desc.Digest, err)
+		}
+		if err := lp.AppendIndex(idx); err != nil {
+			return fmt.Errorf("failed to write image index to cache %q: %w", dir, err)
+		}
+		return nil
+	}
+
+	img, err := desc.Image()
+	if err != nil {
+		return fmt.Errorf("failed to read image %q: %w", desc.Digest, err)
+	}
 	if err := lp.AppendImage(img); err != nil {
 		return fmt.Errorf("failed to write image to cache %q: %w", dir, err)
 	}
 	return nil
 }
 
-// verifyCached confirms the image pinned to digest is present in the cache and
-// that its recomputed manifest digest matches. It is the verify-against-lock
-// primitive: get uses it to skip re-pulling, and the execution work (#70) uses
-// it before running a cached generator.
+// verifyCached confirms the content pinned to digest is present in the cache and
+// that its recomputed digest matches. It handles both single images and
+// multi-arch indexes. It is the verify-against-lock primitive: get uses it to
+// skip re-pulling, and the execution work (#70) uses it before running a cached
+// generator.
 func verifyCached(cacheDir, digest string) error {
 	h, err := v1.NewHash(digest)
 	if err != nil {
@@ -135,18 +148,47 @@ func verifyCached(cacheDir, digest string) error {
 	if err != nil {
 		return fmt.Errorf("image %q not cached: %w", digest, err)
 	}
-	img, err := lp.Image(h)
+	ii, err := lp.ImageIndex()
 	if err != nil {
-		return fmt.Errorf("image %q not found in cache: %w", digest, err)
+		return fmt.Errorf("failed to read cache layout for %q: %w", digest, err)
 	}
-	got, err := img.Digest()
+	manifest, err := ii.IndexManifest()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read cache index for %q: %w", digest, err)
 	}
-	if got != h {
-		return fmt.Errorf("cached image digest %q does not match expected %q", got, h)
+
+	for _, d := range manifest.Manifests {
+		if d.Digest != h {
+			continue
+		}
+		got, err := recomputeCachedDigest(ii, d)
+		if err != nil {
+			return err
+		}
+		if got != h {
+			return fmt.Errorf("cached digest %q does not match expected %q", got, h)
+		}
+		return nil
 	}
-	return nil
+	return fmt.Errorf("image %q not found in cache", digest)
+}
+
+// recomputeCachedDigest re-reads the cached object referenced by d and returns
+// its computed digest, so verification is content-based rather than trusting the
+// recorded descriptor.
+func recomputeCachedDigest(ii v1.ImageIndex, d v1.Descriptor) (v1.Hash, error) {
+	if d.MediaType.IsIndex() {
+		child, err := ii.ImageIndex(d.Digest)
+		if err != nil {
+			return v1.Hash{}, fmt.Errorf("cached index %q not readable: %w", d.Digest, err)
+		}
+		return child.Digest()
+	}
+	child, err := ii.Image(d.Digest)
+	if err != nil {
+		return v1.Hash{}, fmt.Errorf("cached image %q not readable: %w", d.Digest, err)
+	}
+	return child.Digest()
 }
 
 // imageCachePath is the per-digest directory holding one image's OCI layout.
@@ -165,8 +207,4 @@ func cacheDir(env cli.Environment) (string, error) {
 		return "", fmt.Errorf("failed to determine user cache dir (set AVROC_CACHE to override): %w", err)
 	}
 	return filepath.Join(base, "avroc"), nil
-}
-
-func hostPlatform() v1.Platform {
-	return v1.Platform{OS: runtime.GOOS, Architecture: runtime.GOARCH}
 }

@@ -82,6 +82,15 @@ func TestLoadLockfile(t *testing.T) {
 			t.Fatal("expected an error for trailing data, got nil")
 		}
 	})
+
+	t.Run("rejects a newer schema version", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			lockFilename: &fstest.MapFile{Data: []byte(`{"version":999,"generators":[]}`)},
+		}
+		if _, err := loadLockfile(lockContext(fsys), "."); err == nil {
+			t.Fatal("expected an error for a newer schema version, got nil")
+		}
+	})
 }
 
 func TestLockfileFind(t *testing.T) {

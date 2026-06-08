@@ -111,6 +111,9 @@ avroc get -upgrade    # re-resolve floating tags to fresh digests and rewrite th
 - **Reproducible by default.** When a lockfile already pins a generator's `name` + `source` +
   `version`, that digest is reused on rerun rather than re-resolving the tag, so an unchanged
   manifest + lockfile always acquires the same images. Use `-upgrade` to move to newer digests.
+  The pinned digest is the platform-independent manifest the tag points at (the multi-arch index
+  for multi-arch images), so a committed `avroc.lock` is identical across developer machines and
+  CI regardless of OS/arch.
 - **Verified.** Pulled content is fetched by digest and verified against it; a populated cache
   lets later runs proceed offline.
 - **Cache location.** Images are cached under your user cache directory (`os.UserCacheDir()` /

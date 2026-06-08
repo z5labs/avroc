@@ -7,6 +7,7 @@ package avroc
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,14 @@ func loadLockfile(cli cli.Context, workingDir string) (*lockfile, error) {
 		return nil, fmt.Errorf("unexpected trailing data after JSON object in %s", lockFilename)
 	}
 
+	// Fail fast on a newer schema than this build understands rather than
+	// silently misreading fields; a future release can add a migration path.
+	// Version 0 (the field omitted) is treated as the current schema for
+	// backward tolerance of hand-written lockfiles.
+	if l.Version > lockfileVersion {
+		return nil, fmt.Errorf("%s has version %d, which is newer than this avroc supports (%d); upgrade avroc", lockFilename, l.Version, lockfileVersion)
+	}
+
 	return &l, nil
 }
 
@@ -98,8 +107,16 @@ func marshalLock(l *lockfile) ([]byte, error) {
 	if out.Version == 0 {
 		out.Version = lockfileVersion
 	}
+	// Sort by the full tuple, not just Name: the manifest validator does not
+	// enforce unique generator names, so comparing only Name could reorder
+	// equal-named entries non-deterministically and break byte-identical output.
 	slices.SortFunc(out.Generators, func(a, b lockedGenerator) int {
-		return strings.Compare(a.Name, b.Name)
+		return cmp.Or(
+			strings.Compare(a.Name, b.Name),
+			strings.Compare(a.Source, b.Source),
+			strings.Compare(a.Version, b.Version),
+			strings.Compare(a.Digest, b.Digest),
+		)
 	})
 
 	data, err := json.MarshalIndent(out, "", "  ")

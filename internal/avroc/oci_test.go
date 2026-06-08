@@ -60,6 +60,37 @@ func pushTestImage(t *testing.T, repo, tag string) (src, digest string, stop fun
 	return src, h.String(), s.Close
 }
 
+// pushTestIndex pushes a multi-arch image index and returns its source
+// reference and the platform-independent index digest.
+func pushTestIndex(t *testing.T, repo, tag string) (src, digest string, stop func()) {
+	t.Helper()
+
+	s := httptest.NewServer(registry.New())
+	host := "localhost" + strings.TrimPrefix(s.URL, "http://127.0.0.1")
+	src = host + "/" + repo
+
+	idx, err := random.Index(1024, 1, 2)
+	if err != nil {
+		s.Close()
+		t.Fatalf("random.Index: %v", err)
+	}
+	ref, err := name.ParseReference(src + ":" + tag)
+	if err != nil {
+		s.Close()
+		t.Fatalf("ParseReference: %v", err)
+	}
+	if err := remote.WriteIndex(ref, idx, remote.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
+		s.Close()
+		t.Fatalf("remote.WriteIndex: %v", err)
+	}
+	h, err := idx.Digest()
+	if err != nil {
+		s.Close()
+		t.Fatalf("idx.Digest: %v", err)
+	}
+	return src, h.String(), s.Close
+}
+
 func TestOCIRemoteFetcher(t *testing.T) {
 	ctx := context.Background()
 
@@ -110,6 +141,32 @@ func TestOCIRemoteFetcher(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("pull = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("multi-arch index resolves and caches by its platform-independent digest", func(t *testing.T) {
+		src, want, stop := pushTestIndex(t, "avroc-gen-go", "v0.1.0")
+		defer stop()
+		cache := t.TempDir()
+
+		// resolve returns the index digest, not a per-platform image digest.
+		got, err := remoteFetcher{}.resolve(ctx, src+":v0.1.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("resolve = %q, want index digest %q", got, want)
+		}
+
+		stored, err := remoteFetcher{}.pull(ctx, src+"@"+want, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored != want {
+			t.Errorf("pull = %q, want %q", stored, want)
+		}
+		if err := verifyCached(cache, want); err != nil {
+			t.Errorf("verifyCached for index: %v", err)
 		}
 	})
 
@@ -211,7 +268,9 @@ func TestImageCachePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := imageCachePath("/cache", h)
-	want := "/cache/images/sha256-" + strings.Repeat("b", 64)
+	// Build the expected path with filepath.Join so the separator matches the
+	// host OS (backslash on Windows), keeping the assertion platform-agnostic.
+	want := filepath.Join("/cache", "images", "sha256-"+strings.Repeat("b", 64))
 	if got != want {
 		t.Errorf("imageCachePath = %q, want %q", got, want)
 	}
