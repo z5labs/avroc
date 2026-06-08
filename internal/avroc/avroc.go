@@ -41,6 +41,10 @@ func Main(ctx context.Context, cli cli.Context) int {
 			return code
 		}
 		return runInit(ctx, cli)
+	case "get":
+		// get owns its own flag parsing (-upgrade), so it is not routed through
+		// rejectExtraArgs.
+		return runGet(ctx, cli)
 	case "generate":
 		if code, ok := rejectExtraArgs(cmd, cli.Args[1:]); !ok {
 			return code
@@ -74,6 +78,7 @@ func printUsage(w io.Writer) {
 
 Commands:
   init       Scaffold an avroc.json manifest
+  get        Resolve and pull generator images, pinning them in avroc.lock
   generate   Run the generators declared in avroc.json
   help       Show this help
 `

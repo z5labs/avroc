@@ -6,6 +6,7 @@ A modular code generator for messages and services defined in [Avro IDL](https:/
 
 - **Declarative manifest** — a project's generators and their configuration live in a checked-in `avroc.json` manifest, so generator selection and options are diffable, reviewable, and shared across a team and CI. `avroc init` scaffolds one to get started.
 - **Dynamic generator discovery** — avroc discovers generator plugins on your `PATH` using the naming convention `avroc-gen-<name>`; a manifest entry's `name` resolves to the matching `avroc-gen-<name>` executable.
+- **Reproducible generator acquisition** — `avroc get` resolves each generator's OCI image tag to an immutable digest, pulls it into a local cache without a Docker daemon, and pins it in a committed `avroc.lock`, so every developer and CI run uses the exact same toolchain.
 - **Type validation** — avroc resolves all type references in your Avro IDL schemas and reports errors for any undefined types before invoking generators.
 - **Value validation** — avroc validates field defaults and enum defaults against their declared types, catching mistakes (e.g. a `null` default on an `int` field) at generation time.
 - **Parallel generation** — all generators run concurrently, so code generation scales with the number of plugins you use.
@@ -52,10 +53,11 @@ go install github.com/z5labs/avroc/cmd/avroc-gen-pcf@latest
 
 ## Usage
 
-avroc is driven by a project manifest (`avroc.json`) and exposes two commands:
+avroc is driven by a project manifest (`avroc.json`) and exposes these commands:
 
 ```
 avroc init        # scaffold a starter avroc.json (never clobbers an existing one)
+avroc get         # resolve & pull generator images, pinning them in avroc.lock
 avroc generate    # run the generators declared in avroc.json
 ```
 
@@ -93,6 +95,37 @@ The manifest declares the input IDL files and the generators to run:
 > A generator whose `name` is not found on `PATH` is reported as an error. If such an entry
 > also names an OCI `source`, avroc explains that containerized execution is not yet
 > supported — that lands in a follow-on release.
+
+### Acquiring generators (`avroc get` and `avroc.lock`)
+
+`avroc get` reads the manifest and, for every generator that declares an OCI `source`, resolves
+its floating `version` tag to an immutable `sha256:` digest, pulls the image into a local cache
+(no Docker daemon required), and records the resolved digest in a committed **`avroc.lock`**
+lockfile — the reproducibility record, analogous to `.terraform.lock.hcl`:
+
+```bash
+avroc get             # resolve, pull, and pin every OCI generator
+avroc get -upgrade    # re-resolve floating tags to fresh digests and rewrite the lock
+```
+
+- **Reproducible by default.** When a lockfile already pins a generator's `name` + `source` +
+  `version`, that digest is reused on rerun rather than re-resolving the tag, so an unchanged
+  manifest + lockfile always acquires the same images. Use `-upgrade` to move to newer digests.
+  The pinned digest is the platform-independent manifest the tag points at (the multi-arch index
+  for multi-arch images), so a committed `avroc.lock` is identical across developer machines and
+  CI regardless of OS/arch.
+- **Verified.** Pulled content is fetched by digest and verified against it; a populated cache
+  lets later runs proceed offline.
+- **Cache location.** Images are cached under your user cache directory (`os.UserCacheDir()` /
+  `avroc`, e.g. `~/.cache/avroc` on Linux). Override the location with the `AVROC_CACHE`
+  environment variable.
+- **Registry auth.** Authentication is resolved through the standard Docker keychain
+  (`~/.docker/config.json` and platform keychains), so a prior `docker login ghcr.io` enables
+  authenticated and private `ghcr.io` pulls with no extra configuration.
+
+> Generators without an OCI `source` (PATH-based) are skipped by `avroc get`. Running the pinned
+> images is handled by a follow-on release; today `avroc generate` resolves generators from
+> `PATH`.
 
 ### Example
 
