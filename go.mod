@@ -3,7 +3,7 @@ module github.com/z5labs/avroc
 go 1.25.0
 
 require (
-	github.com/google/go-containerregistry v0.21.7
+	github.com/google/go-containerregistry v0.21.8
 	github.com/sourcegraph/conc v0.3.0
 	github.com/z5labs/avro-go v0.5.0
 	google.golang.org/grpc v1.82.1
@@ -13,7 +13,7 @@ require (
 require (
 	github.com/docker/cli v29.6.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
