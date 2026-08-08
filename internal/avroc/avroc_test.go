@@ -285,6 +285,14 @@ const testDescriptorGlob = "avroc-gen-test-descriptor-*/" + descriptorFilename
 // it, so the test is "at least one decodes and equals req" rather than "exactly
 // one file exists": a stale file cannot make this pass, and cannot make it fail
 // either.
+//
+// Making good on the second half is why a match that cannot be read or decoded
+// is skipped rather than returned as an error. A file that vanished between the
+// glob and the read, or that some earlier run left half-written, is not evidence
+// about the descriptor this invocation wrote — but it would sit ahead of it in
+// the glob's sorted order often enough to make the failure look real. The last
+// such error is kept only to be quoted when nothing matched, so a genuinely
+// unreadable descriptor still says why rather than reporting a bare miss.
 func findDescriptorMatching(req *avrocpb.GenerateRequest) error {
 	matches, err := filepath.Glob(filepath.Join(os.TempDir(), testDescriptorGlob))
 	if err != nil {
@@ -294,20 +302,26 @@ func findDescriptorMatching(req *avrocpb.GenerateRequest) error {
 		return fmt.Errorf("no descriptor file under %q while the generator is running", os.TempDir())
 	}
 
+	var skipped error
 	for _, m := range matches {
 		b, err := os.ReadFile(m)
 		if err != nil {
-			return fmt.Errorf("failed to read descriptor %q: %w", m, err)
+			skipped = fmt.Errorf("failed to read descriptor %q: %w", m, err)
+			continue
 		}
 		var onDisk avrocpb.GenerateRequest
 		if err := proto.Unmarshal(b, &onDisk); err != nil {
-			return fmt.Errorf("descriptor %q does not decode: %w", m, err)
+			skipped = fmt.Errorf("descriptor %q does not decode: %w", m, err)
+			continue
 		}
 		if proto.Equal(&onDisk, req) {
 			return nil
 		}
 	}
 
+	if skipped != nil {
+		return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received; last unusable one: %w", len(matches), skipped)
+	}
 	return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received", len(matches))
 }
 
