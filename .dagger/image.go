@@ -170,8 +170,20 @@ func (m *Avroc) Publish(
 		variants = append(variants, m.image(p))
 	}
 
+	// Half a credential is refused rather than quietly dropped. Skipping the
+	// auth because one of the two is missing turns a typo into an anonymous
+	// push, which fails at the registry with a message about permissions rather
+	// than about the argument that was actually wrong — and on a registry that
+	// happened to allow it, would not fail at all.
+	switch {
+	case username != "" && password == nil:
+		return "", errors.New("username was given without password: both are needed to authenticate, and publishing with neither pushes anonymously")
+	case username == "" && password != nil:
+		return "", errors.New("password was given without username: both are needed to authenticate, and publishing with neither pushes anonymously")
+	}
+
 	c := dag.Container()
-	if username != "" && password != nil {
+	if username != "" {
 		c = c.WithRegistryAuth(address, username, password)
 	}
 	return c.Publish(ctx, address, dagger.ContainerPublishOpts{PlatformVariants: variants})
@@ -322,12 +334,30 @@ func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) e
 func (m *Avroc) checkImageConfig(ctx context.Context, image *dagger.Container) []error {
 	var errs []error
 
+	// The structural half of the entrypoint guarantee. Exactly one element,
+	// because "the arguments a caller passes to docker run are avroc's
+	// arguments" is only true when there is nothing in Entrypoint for them to
+	// arrive after; and that element has to be an executable the image actually
+	// ships, because Entrypoint is otherwise free to name a path that is not
+	// there and fail at run time in somebody else's pipeline.
+	//
+	// It is deliberately not compared to a literal, since the CLI's own path is
+	// implementation detail and pinning it here would make a promise this
+	// project has explicitly not made. What pins the entrypoint to the CLI
+	// rather than to one of the generators is checkImageGenerates, which runs
+	// `generate` through it and byte-compares the result: the guarantee is about
+	// behaviour, so the behaviour is what checks it.
+	executables := imageExecutablePaths()
 	entrypoint, err := image.Entrypoint(ctx)
 	switch {
 	case err != nil:
 		errs = append(errs, fmt.Errorf("reading Entrypoint: %w", err))
 	case len(entrypoint) == 0:
 		errs = append(errs, errors.New("the image's Entrypoint is empty: a derived image inherits no program"))
+	case len(entrypoint) > 1:
+		errs = append(errs, fmt.Errorf("the image's Entrypoint is %v, want exactly one element: a caller's arguments are avroc's arguments, and anything else here would come before them", entrypoint))
+	case !slices.Contains(executables, entrypoint[0]):
+		errs = append(errs, fmt.Errorf("the image's Entrypoint is %v, which is not one of the executables the image ships (%v)", entrypoint, executables))
 	}
 
 	args, err := image.DefaultArgs(ctx)
@@ -405,6 +435,17 @@ func imageContents() map[string]imageEntry {
 // generator image is built against.
 func imageExecutables() []string {
 	return []string{"avroc", "avroc-gen-go", "avroc-gen-json", "avroc-gen-pcf"}
+}
+
+// imageExecutablePaths is imageExecutables where they land, which is what an
+// Entrypoint would have to name.
+func imageExecutablePaths() []string {
+	names := imageExecutables()
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		paths = append(paths, pluginDir+"/"+name)
+	}
+	return paths
 }
 
 // imageEntry is one path's expected ownership and mode.
