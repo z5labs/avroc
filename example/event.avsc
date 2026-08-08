@@ -1,0 +1,22 @@
+{
+  "type": "array",
+  "items": {
+    "type": "record",
+    "name": "Event",
+    "namespace": "org.apache.avro.test",
+    "fields": [
+      {
+        "name": "id",
+        "type": "long"
+      },
+      {
+        "name": "value",
+        "type": "double"
+      },
+      {
+        "name": "ok",
+        "type": "boolean"
+      }
+    ]
+  }
+}

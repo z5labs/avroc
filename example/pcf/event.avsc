@@ -1,0 +1,1 @@
+{"type":"array","items":{"name":"org.apache.avro.test.Event","type":"record","fields":[{"name":"id","type":"long"},{"name":"value","type":"double"},{"name":"ok","type":"boolean"}]}}

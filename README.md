@@ -340,6 +340,30 @@ Generates idiomatic Go types with binary Avro serialization support.
 | `boolean` | `bool` |
 | `bytes` | `[]byte` |
 
+**Streaming an array root.** A schema whose root type is `array<T>` says the file it
+describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader alongside `T`
+itself. For `schema array<Event>;`:
+
+```go
+for ev, err := range StreamEvents(r) { // r is any io.Reader
+    if err != nil {
+        return err
+    }
+    fmt.Println(ev.Id)
+}
+```
+
+`NewEventReader(r)` returns the reader that iterator is built on. It embeds
+[avro-go](https://github.com/z5labs/avro-go)'s `*avro.ArrayReader`, which owns the block
+framing: its `Next` decodes into a destination you own, so one `Event` can be reused for the
+whole stream, and its `SkipBlock` discards a block that declared its encoded size without
+decoding a single item. The array is never materialised — memory is a function of what you
+keep, not of how long the stream is.
+
+The item type has to be one this generator gave an `UnmarshalAvroBinary` — a `record`, an
+`enum`, a `fixed`, or a reference to one. `array<string>` and nested arrays generate the
+types they always did and no reader.
+
 ### `avroc-gen-json`
 
 Generates [Avro JSON schema](https://avro.apache.org/docs/current/specification/#schema-declaration) files (`.avsc`). avroc decides where each named type is written out in full and where it is referenced by its fully-qualified name; the generator follows that ordering.

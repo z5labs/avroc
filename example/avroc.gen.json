@@ -1,8 +1,11 @@
 {
   "version": 1,
   "files": [
+    "event.avsc",
     "gen/test_record.go",
+    "pcf/event.avsc",
     "pcf/test_record.avsc",
+    "stream/event.go",
     "test_record.avsc"
   ]
 }

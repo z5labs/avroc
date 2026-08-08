@@ -98,12 +98,14 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	testCases := []struct {
 		name    string
 		options []*avrocpb.Option
+		schemas []*avrocpb.Schema
 	}{
 		{
 			name: "plain",
 			options: []*avrocpb.Option{
 				{Name: proto.String("package_name"), Value: proto.String("avro")},
 			},
+			schemas: determinismSchemas(),
 		},
 		{
 			// The fingerprint is computed rather than copied, so it is the part of
@@ -113,6 +115,19 @@ func TestGenerateIsDeterministic(t *testing.T) {
 				{Name: proto.String("encoding"), Value: proto.String("single_object")},
 				{Name: proto.String("package_name"), Value: proto.String("avro")},
 			},
+			schemas: determinismSchemas(),
+		},
+		{
+			// An array root emits a whole file section the other roots do not —
+			// the streaming reader, and the io and iter imports it pulls in — so
+			// it is its own case rather than another schema in the list above.
+			// It cannot be one anyway: single-object encoding refuses a
+			// non-record root, and both option sets run over the same schemas.
+			name: "array root",
+			options: []*avrocpb.Option{
+				{Name: proto.String("package_name"), Value: proto.String("stream")},
+			},
+			schemas: []*avrocpb.Schema{arrayRootSchema()},
 		},
 	}
 
@@ -120,7 +135,7 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assertRepeatedGenerationsAreIdentical(t, &avrocpb.GenerateRequest{
 				Options: tc.options,
-				Schemas: determinismSchemas(),
+				Schemas: tc.schemas,
 			})
 		})
 	}
