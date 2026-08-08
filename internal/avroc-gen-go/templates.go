@@ -100,9 +100,9 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject b
 	// Collect all types to generate (including unions)
 	types := collectTypes(schema)
 
-	// The streaming reader an array root gets, decided before the preamble
-	// because it is what pulls io and iter into the import block.
-	stream := streamReaderFor(schema)
+	// The streaming reader and writer an array root gets, decided before the
+	// preamble because they are what pull io and iter into the import block.
+	stream := arrayStreamFor(schema)
 
 	imports := fileImports{
 		fmt:     needsFmtImport(types),
@@ -131,11 +131,12 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject b
 		}
 	}
 
-	// Last, and after every type it names has been written: the reader is about
-	// the file rather than about any one type in it, and a person reading the
-	// file meets the item type before the stream over it.
+	// Last, and after every type they name have been written: the reader and
+	// the writer are about the file rather than about any one type in it, and a
+	// person reading the file meets the item type before the stream over it.
 	if stream != nil {
 		generateStreamReader(cb, *stream)
+		generateStreamWriter(cb, *stream)
 	}
 
 	return cb.String()

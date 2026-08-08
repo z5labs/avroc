@@ -100,3 +100,56 @@ func (x *EventReader) All() iter.Seq2[*Event, error] {
 func StreamEvents(r io.Reader) iter.Seq2[*Event, error] {
 	return NewEventReader(r).All()
 }
+
+// EventWriter writes a stream of Event values as an Avro array without
+// materialising it.
+//
+// The embedded [avro.ArrayWriter] is the whole of the block framing, including
+// the zero-count block that terminates the array. Its Close writes that block,
+// so Close is neither optional nor merely a flush: a writer that is never
+// closed leaves a truncated array behind, which reading it back reports as
+// [avro.ErrTruncatedArray]. WriteEvents closes for you.
+type EventWriter struct {
+	*avro.ArrayWriter
+}
+
+// NewEventWriter returns a writer encoding an Avro array of Event to w.
+//
+// By default the blocks it emits declare no size and nothing is buffered: each
+// item reaches w as it is written. Pass [avro.WithSizedBlocks] to batch items
+// into blocks that declare their encoded size, which a reader can discard with
+// SkipBlock instead of decoding, at the cost of a bounded buffer.
+func NewEventWriter(w io.Writer, opts ...avro.ArrayWriterOption) *EventWriter {
+	return &EventWriter{ArrayWriter: avro.NewArrayWriter(avro.NewBinaryWriter(w), opts...)}
+}
+
+// Write encodes v as the next item of the array.
+//
+// It is the embedded writer's Write with the stream's item type filled in: a
+// stream of Event holds Event values, and this is what makes writing anything
+// else a compile error rather than a convention. Call the embedded writer's
+// Write directly to write any [avro.BinaryMarshaler] instead.
+func (x *EventWriter) Write(v *Event) error {
+	return x.ArrayWriter.Write(v)
+}
+
+// WriteEvents encodes the Event values f writes as an Avro array in w,
+// terminating the array once f returns without error. It is the ordinary way
+// to produce such a stream:
+//
+//	err := WriteEvents(w, func(s *EventWriter) error {
+//		for _, v := range events {
+//			if err := s.Write(v); err != nil {
+//				return err
+//			}
+//		}
+//		return nil
+//	})
+//
+// If f returns an error the array is left unterminated, since a partial array
+// should not be presented as a complete one.
+func WriteEvents(w io.Writer, f func(*EventWriter) error, opts ...avro.ArrayWriterOption) error {
+	return avro.WriteArray(avro.NewBinaryWriter(w), func(a *avro.ArrayWriter) error {
+		return f(&EventWriter{ArrayWriter: a})
+	}, opts...)
+}

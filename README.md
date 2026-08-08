@@ -341,8 +341,8 @@ Generates idiomatic Go types with binary Avro serialization support.
 | `bytes` | `[]byte` |
 
 **Streaming an array root.** A schema whose root type is `array<T>` says the file it
-describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader alongside `T`
-itself. For `schema array<Event>;`:
+describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader and writer
+alongside `T` itself. For `schema array<Event>;`:
 
 ```go
 for ev, err := range StreamEvents(r) { // r is any io.Reader
@@ -360,9 +360,34 @@ whole stream, and its `SkipBlock` discards a block that declared its encoded siz
 decoding a single item. The array is never materialised — memory is a function of what you
 keep, not of how long the stream is.
 
-The item type has to be one this generator gave an `UnmarshalAvroBinary` — a `record`, an
-`enum`, a `fixed`, or a reference to one. `array<string>` and nested arrays generate the
-types they always did and no reader.
+Producing one is the same shape in reverse, and takes no `[]Event`:
+
+```go
+err := WriteEvents(w, func(s *EventWriter) error { // w is any io.Writer
+    for _, ev := range events {
+        if err := s.Write(ev); err != nil {
+            return err
+        }
+    }
+    return nil
+})
+```
+
+`WriteEvents` terminates the array once the callback returns without error, which is the
+close you would otherwise have to remember: an Avro array ends in a zero-count block, so a
+stream that is never closed is a *truncated* array and reading it back fails with
+`avro.ErrTruncatedArray`. `NewEventWriter(w, opts...)` is the explicit form, and its `Close`
+is the embedded `*avro.ArrayWriter`'s.
+
+Whether blocks carry their size is yours to choose, because it is a trade rather than a
+default worth picking for you. By default nothing is buffered and each item goes straight
+out. Pass `avro.WithSizedBlocks(n)` and items are batched into blocks that declare their
+encoded size — which is exactly what lets a reader's `SkipBlock` discard one without
+decoding it — at the cost of a buffer bounded by `n`. Both are conforming Avro.
+
+The item type has to be one this generator gave `MarshalAvroBinary` and `UnmarshalAvroBinary`
+— a `record`, an `enum`, a `fixed`, or a reference to one. `array<string>` and nested arrays
+generate the types they always did and no reader or writer.
 
 ### `avroc-gen-json`
 
