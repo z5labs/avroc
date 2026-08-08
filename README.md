@@ -129,6 +129,30 @@ That carries a trade, stated in full under
 The [container base-image contract](docs/container/SPEC.md) is what a Dockerfile building `FROM`
 the published image may rely on.
 
+### Generating in a pipeline, without a Dockerfile
+
+For a caller who wants the container path but would rather not write a Dockerfile, this
+repository publishes a companion [Dagger](https://dagger.io) module. It pulls the published
+images, composes the generators a project needs, runs `avroc generate` and hands the generated
+tree back:
+
+```bash
+dagger call -m github.com/z5labs/avroc/daggerverse/avroc \
+  with-generator --name go \
+  with-generator --name json \
+  generate --source . \
+  export --path .
+```
+
+Nothing is installed on the host and no image is built. `--version` picks the avroc release,
+`with-generator --image` takes a generator out of any image that carries one — including one
+this project has never heard of — and `with-generator-executable` takes one straight from a
+file, which is what a generator author reaches for before they have published anything.
+
+The module is a convenience over the container contract rather than a contract of its own, so
+it has no spec: `dagger call -m github.com/z5labs/avroc/daggerverse/avroc --help` and the module
+comment in [`daggerverse/avroc/main.go`](daggerverse/avroc/main.go) are its documentation.
+
 ### Example
 
 Given the following Avro IDL file (`schema.avdl`):

@@ -92,6 +92,35 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" <image> gener
 --address …` push one multi-platform index to the reference you give them, which
 is how to put an image on a registry of your own.
 
+### The companion Dagger module
+
+```sh
+dagger call companion-module                          # the check CI runs
+dagger call -m ./daggerverse/avroc --help             # its public surface
+```
+
+[`daggerverse/avroc/`](daggerverse/avroc/) is a **second, separate Dagger
+module**, published from this repository for other people's pipelines: a caller
+hands it a project directory and gets the generated tree back, having installed
+nothing and built no image. It is a convenience over
+[`docs/container/SPEC.md`](docs/container/SPEC.md) and not a contract of its own,
+so it gets no spec — what it needs to say it says in its module comment and in
+`dagger call --help`.
+
+`companion-module` is the check that keeps it honest. It composes avroc's three
+generators into the base image *this* pipeline just built — both ways the module
+offers, out of the generator images and out of the built executables — generates
+[`example/`](example/) through it, and requires the committed tree back byte for
+byte. The images are passed in rather than pulled because the module's defaults
+name a released image, and a check on the last release would keep passing through
+a pull request that broke this one.
+
+It is its own module rather than a few more functions on the root one because a
+caller who installs it should get the one function they came for, not this
+repository's `ci`, `release` and `publish`. The root module depends on it as a
+local dependency, which is what `dag.Companion(…)` in
+[`.dagger/companion_module.go`](.dagger/companion_module.go) is.
+
 ### The worked example
 
 ```sh
@@ -153,32 +182,44 @@ The version comes out of `dagger.json` rather than being typed in, because the
 provisions a different engine is a difference between your machine and CI, which
 is the one thing this module exists to prevent.
 
-### After changing the module
+### After changing a module
 
-`.dagger/dagger.gen.go` and `.dagger/internal/` are generated **and committed**.
-Regenerate them after editing `.dagger/main.go` or `dagger.json`, and commit the
-result alongside the change:
+`.dagger/dagger.gen.go` and `.dagger/internal/` are generated **and committed**,
+and so are `daggerverse/avroc/`'s. Regenerate them after editing either module's
+Go source or `dagger.json`, and commit the result alongside the change:
 
 ```sh
-dagger develop
+dagger develop                        # the root module
+dagger develop -m ./daggerverse/avroc # the companion module
 ```
 
+A change to the companion module's exported functions needs both, in that order:
+the root module's bindings for it are generated from its schema, so
+`.dagger/internal/dagger/companion.gen.go` moves with it.
+
+`dagger develop` rewrites `go.mod` from the SDK's template, which will pull the
+dependency versions **back down** to it — including ones Renovate has raised for
+a security advisory. Check `git diff -- '*/go.mod' '*/go.sum'` afterwards and
+restore anything it lowered; both modules pin the same set, so they move
+together.
+
 They are committed rather than ignored because Dagger is moving to requiring
-generated code in the tree by v1.0, and because it means the module builds from
-a checkout alone instead of only after somebody has run `dagger develop`.
-[`.dagger/.gitattributes`](.dagger/.gitattributes) marks them
-`linguist-generated`, so they stay collapsed in diffs and out of the
-repository's language statistics.
+generated code in the tree by v1.0, and because it means the modules build from
+a checkout alone instead of only after somebody has run `dagger develop`. Each
+module's `.gitattributes` marks them `linguist-generated`, so they stay
+collapsed in diffs and out of the repository's language statistics.
 
-A pull request whose `.dagger/main.go` or `dagger.json` moved without the
-generated files moving with it is a tree that does not build. Bumping a
-dependency pin counts: `dagger develop` rewrites `.dagger/internal/dagger/` from
-the dependency's schema, so the pin and the generated bindings have to land in
-the same commit.
+A pull request whose module source or `dagger.json` moved without the generated
+files moving with it is a tree that does not build. Bumping a dependency pin
+counts: `dagger develop` rewrites `internal/dagger/` from the dependency's
+schema, so the pin and the generated bindings have to land in the same commit.
 
-`.dagger/` is its own Go module. `go build ./...` and `go test ./...` at the
-repository root do not see it, and neither does `golangci-lint run` — which is
-why `dagger call ci` is the check that covers both trees.
+`.dagger/` and `daggerverse/avroc/` are each their own Go module. `go build
+./...` and `go test ./...` at the repository root do not see either, and neither
+does `golangci-lint run`. What compiles them is Dagger itself, since a module
+has to build before a single one of its functions can run: `dagger call ci`
+covers the root module, and `dagger call companion-module` covers both, because
+it is the root module calling the companion one.
 
 ## Why the module wraps the Z5Labs standard pipeline
 

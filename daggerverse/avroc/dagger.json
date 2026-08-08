@@ -1,0 +1,10 @@
+{
+  "name": "avroc",
+  "engineVersion": "v0.21.8",
+  "sdk": {
+    "source": "go"
+  },
+  "codegen": {
+    "automaticGitignore": false
+  }
+}
