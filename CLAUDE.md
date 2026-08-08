@@ -39,7 +39,8 @@ go test -v ./...
 1. avroc writes the descriptor into a directory created for that one invocation.
 2. avroc forks and execs `avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]`, both paths absolute, and waits for it to exit. Nothing else is on the vector, and in particular nothing comes from the environment — `AVROC_GENERATOR_ARGS` is gone.
 3. The generator writes its own files beneath `--out` and reports on stderr. A zero exit is the whole of the success signal; anything else fails the run, and nothing the generator left behind is adopted as output.
-4. Generators run concurrently via `sourcegraph/conc` pools. Cancellation flows from the signal-based parent context through `exec.CommandContext`, and every child is waited on — on success, on failure and on cancellation.
+4. `--out` is a **private, empty scratch directory** for that one invocation, and only a zero exit gets its contents merged into the project's output tree. See "The output directory and the merge" below.
+5. Generators run concurrently via `sourcegraph/conc` pools. Cancellation flows from the signal-based parent context through `exec.CommandContext`, and every child is waited on — on success, on failure and on cancellation.
 
 ### Diagnostics and the exit status
 
@@ -49,7 +50,16 @@ A failed invocation is reported as one of three things, because they need differ
 
 Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
 
-What is not yet there, so that it is not mistaken for a gap: `--out` is the project's own output directory rather than a private empty scratch directory, and avroc does not yet enforce the boundary or merge — that is #117, with collisions #118 and stale files #119. The generators here still emit chunks internally through the `Generator` service's stream type, reassembled in `internal/plugin`; #121–#123 replace that with a plain write and #124 deletes the service.
+What is not yet there, so that it is not mistaken for a gap: two generators producing the same output path is not detected (#118), and a file an earlier run produced that this one did not is not pruned (#119). The generators here still emit chunks internally through the `Generator` service's stream type, reassembled in `internal/plugin`; #121–#123 replace that with a plain write and #124 deletes the service.
+
+### The output directory and the merge
+
+`--out` is never the project's output directory. `internal/avroc/merge.go` creates a private scratch directory per invocation *inside* the project's output tree, hands that to the generator, and merges it in afterwards; `docs/plugin/SPEC.md`'s "The output directory" is normative.
+
+- **Empty, always.** A plugin may assume it exists, is writable and is empty, and must not expect a file it wrote on a previous run to be there. That emptiness is the mechanism behind everything else: the set of files a run produced is exactly the set found in the directory afterwards, with no marker inside a file and no bookkeeping asked of the plugin. #118 and #119 are derived from it too.
+- **Merged only on a zero exit.** A failure or a cancellation discards the directory instead, so nothing a failing generator left behind reaches the project — which is what makes the partially written failure the contract permits harmless. The removal is deferred, so it covers cancellation as well.
+- **Two phases, and that is the point.** `planMerge` resolves every file and creates every destination directory first, so a path a generator should not have produced fails the run with the project tree untouched. Only then does the commit phase run, and it does nothing but rename — atomic per file, so an interrupted merge leaves whole files rather than half-written ones. The scratch directory lives inside the output tree precisely so those are renames and not copies; the cross-filesystem fallback stages into the destination's own directory and renames, preserving the same property.
+- **avroc enforces the boundary rather than trusting it.** `safeOutputPath` rejects an absolute path or one that climbs out, and the walk refuses any non-regular entry. A symbolic link is the case a relative-path check alone does not catch — every path is beneath the scratch directory and only following the link leaves it — so links are refused, not resolved. `internal/plugin.OutputPath` keeps the same check on the generator side; the duplication is deliberate, because a third-party generator imports nothing from this repository.
 
 ### The capability handshake
 

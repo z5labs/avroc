@@ -8,46 +8,9 @@ package avroc
 import (
 	"errors"
 	"fmt"
-	"path"
-	"path/filepath"
-	"strings"
 
 	"github.com/z5labs/avro-go/idl"
 )
-
-// safeOutputPath resolves a generator-supplied relative path against the output
-// root, rejecting anything that is absolute or escapes the root. The supplied
-// path uses forward slashes regardless of OS. It returns the OS-native absolute
-// path to write to.
-func safeOutputPath(root, p string) (string, error) {
-	if p == "" {
-		return "", errors.New("path is empty")
-	}
-	if path.IsAbs(p) {
-		return "", fmt.Errorf("path %q is absolute", p)
-	}
-
-	osPath := filepath.FromSlash(p)
-	if filepath.IsAbs(osPath) || filepath.VolumeName(osPath) != "" {
-		return "", fmt.Errorf("path %q is absolute", p)
-	}
-
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-
-	full := filepath.Join(rootAbs, osPath)
-	rel, err := filepath.Rel(rootAbs, full)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %q escapes the output directory", p)
-	}
-
-	return full, nil
-}
 
 func validateSchema(schema *idl.Schema) error {
 	primitives := avroPrimitives()

@@ -39,7 +39,11 @@ type Invocation struct {
 	// makes it a temporary location avroc chose and not a place to hang meaning.
 	Descriptor string
 
-	// Out is the directory every generated file is written beneath.
+	// Out is the directory every generated file is written beneath. It is a
+	// private, empty scratch directory avroc made for this invocation alone —
+	// not the project's output tree, which avroc merges into itself — so
+	// nothing may be derived from the path and no file written on a previous
+	// run is in it.
 	Out string
 
 	// Options are the --opt pairs, in the order they appeared on the command
@@ -177,9 +181,10 @@ func (inv *Invocation) ReadDescriptor(stdin io.Reader) (*avrocpb.GenerateRequest
 // directory, refusing anything that would land outside it.
 //
 // docs/plugin/SPEC.md puts the requirement on the plugin — every file beneath
-// --out, not through "..", not through an absolute path — and avroc enforcing
-// it as well is #117's. Checking here means a generator in this repository
-// cannot break the rule even while avroc is not yet watching.
+// --out, not through "..", not through an absolute path — and avroc enforces it
+// as well, at merge time, rather than trusting it. Checking here too is not
+// redundant: it fails at the write, naming the path and the generator's own call
+// site, where the merge can only report that a file it found should not exist.
 //
 // The path a generator emits is a slash-separated relative path, whatever the
 // host's separator, so it is converted before it is joined.
