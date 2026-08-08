@@ -68,7 +68,12 @@ generator plugin and on the code invoking one, interpreted as described in
      paragraph — no transport, no plugin registry, no lockfile, no resolution
      protocol — and the reproducibility non-guarantee for PATH-supplied plugins:
      a plugin arrives on PATH by whatever means put it there, and the container
-     is the reproducible path. Then a catch-all ### Also out of scope list. -->
+     is the reproducible path. Each goes above this catch-all as it is
+     decided. -->
+
+### Also out of scope
+
+<!-- The list for exclusions too cheap to earn a heading of their own. -->
 
 ## Appendix: Mapping to Stories
 

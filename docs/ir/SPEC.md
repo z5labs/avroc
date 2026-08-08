@@ -60,7 +60,11 @@ in [CONVENTIONS.md](../CONVENTIONS.md). Everything else is descriptive.
 ## Out of Scope
 
 <!-- One ### per non-trivial exclusion, each with an explicit Reason:
-     paragraph, then a catch-all ### Also out of scope list. -->
+     paragraph, added above this catch-all as the exclusion is decided. -->
+
+### Also out of scope
+
+<!-- The list for exclusions too cheap to earn a heading of their own. -->
 
 ## Appendix: Mapping to Stories
 

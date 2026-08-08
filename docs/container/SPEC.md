@@ -68,7 +68,11 @@ published avroc image and on images derived from it, interpreted as described in
 
 <!-- One ### per non-trivial exclusion, each with an explicit Reason:
      paragraph — the build machinery, the registry location, and the plugin CLI
-     conventions — then a catch-all ### Also out of scope list. -->
+     conventions — each above this catch-all as it is decided. -->
+
+### Also out of scope
+
+<!-- The list for exclusions too cheap to earn a heading of their own. -->
 
 ## Appendix: Mapping to Stories
 
