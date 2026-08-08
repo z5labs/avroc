@@ -103,6 +103,45 @@ func TestOutputDir(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses another spelling of a path already written", func(t *testing.T) {
+		// The refusal is about the file, not about the string: every path here
+		// resolves to the same destination, so accepting one of them would
+		// overwrite the first write and put back the order dependence the
+		// refusal exists to remove.
+		out := t.TempDir()
+
+		for _, again := range []string{"pkg/user.go", "./pkg/user.go", "pkg/./user.go", "pkg/other/../user.go", "a/../pkg/user.go"} {
+			d := NewOutputDir(out)
+			if err := d.WriteFile("pkg/user.go", []byte("first\n")); err != nil {
+				t.Fatal(err)
+			}
+			if err := d.WriteFile(again, []byte("second\n")); err == nil {
+				t.Errorf("WriteFile accepted %q after pkg/user.go", again)
+			}
+
+			got, err := os.ReadFile(filepath.Join(out, "pkg", "user.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := "first\n"; string(got) != want {
+				t.Errorf("%q overwrote the file: content = %q, want %q", again, string(got), want)
+			}
+		}
+	})
+
+	t.Run("reports the one spelling that names a file", func(t *testing.T) {
+		// avroc discovers the output by walking the directory, so the record a
+		// generator's path produces has to be the path avroc will find.
+		d := NewOutputDir(t.TempDir())
+
+		if err := d.WriteFile("./pkg/other/../user.go", nil); err != nil {
+			t.Fatal(err)
+		}
+		if got := d.Written(); !slices.Equal(got, []string{"pkg/user.go"}) {
+			t.Errorf("Written() = %v, want [pkg/user.go]", got)
+		}
+	})
+
 	t.Run("reports a directory it cannot create", func(t *testing.T) {
 		out := t.TempDir()
 		if err := os.WriteFile(filepath.Join(out, "a"), nil, 0o644); err != nil {

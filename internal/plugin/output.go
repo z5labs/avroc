@@ -8,6 +8,7 @@ package plugin
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 )
@@ -58,17 +59,31 @@ func NewOutputDir(out string) *OutputDir {
 // when the invocation starts, so the only way a path can arrive twice is a
 // generator that produced the same file twice, and keeping the second silently
 // would make the output depend on the order the generator happened to emit in.
-func (d *OutputDir) WriteFile(path string, content []byte) error {
-	// A linear scan rather than a set: a generator produces a handful of files,
-	// and the slice is needed anyway to report them in emission order.
-	if slices.Contains(d.written, path) {
-		return d.record(fmt.Errorf("generator wrote %q twice", path))
+//
+// "Already written" is a question about the file, not about the string: "b.go",
+// "./b.go" and "a/../b.go" all name one file, so the path is cleaned before it
+// is compared and before it is recorded. Comparing the raw string would let a
+// generator overwrite its own output by spelling the path differently, which is
+// the order-dependent result the refusal exists to prevent.
+func (d *OutputDir) WriteFile(p string, content []byte) error {
+	dst, err := OutputPath(d.out, p)
+	if err != nil {
+		return d.record(fmt.Errorf("refusing to write %q: %w", p, err))
 	}
 
-	dst, err := OutputPath(d.out, path)
-	if err != nil {
-		return d.record(fmt.Errorf("refusing to write %q: %w", path, err))
+	// path.Clean, not filepath.Clean: these are the slash-separated paths the
+	// contract defines and the ones avroc reports and merges on, whatever
+	// separator the host uses. It is the same normalization OutputPath's join
+	// performs to reach dst, so two paths clean alike exactly when they resolve
+	// to one file.
+	name := path.Clean(p)
+
+	// A linear scan rather than a set: a generator produces a handful of files,
+	// and the slice is needed anyway to report them in emission order.
+	if slices.Contains(d.written, name) {
+		return d.record(fmt.Errorf("generator wrote %q twice", name))
 	}
+
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return d.record(fmt.Errorf("failed to create output directory for %q: %w", dst, err))
 	}
@@ -83,12 +98,12 @@ func (d *OutputDir) WriteFile(path string, content []byte) error {
 		return d.record(fmt.Errorf("failed to write %q: %w", dst, err))
 	}
 
-	d.written = append(d.written, path)
+	d.written = append(d.written, name)
 	return nil
 }
 
 // Written names the files this invocation produced, in the order the generator
-// wrote them.
+// wrote them, each cleaned to the one spelling that names it.
 func (d *OutputDir) Written() []string { return d.written }
 
 // Err reports the first failure WriteFile returned.
