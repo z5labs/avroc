@@ -251,29 +251,17 @@ func TestOutputPath(t *testing.T) {
 			}
 		}
 	})
-}
 
-func TestWriteFile(t *testing.T) {
-	out := t.TempDir()
-	inv := &Invocation{Out: out}
-
-	if err := inv.WriteFile("pkg/user.go", []byte("package pkg\n")); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(filepath.Join(out, "pkg", "user.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "package pkg\n"; string(got) != want {
-		t.Errorf("content = %q, want %q", string(got), want)
-	}
-
-	if err := inv.WriteFile("../escape.go", []byte("package pkg\n")); err == nil {
-		t.Error("WriteFile accepted a path outside the output directory")
-	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(out), "escape.go")); !os.IsNotExist(err) {
-		t.Error("a file escaped the output directory")
-	}
+	t.Run("refuses a path that is not a file in the output directory", func(t *testing.T) {
+		// Each of these resolves to the output directory itself. Rejecting them
+		// here is what turns them into an error naming the path, rather than an
+		// "is a directory" from an open several frames away.
+		for _, bad := range []string{"", ".", "./", "a/.."} {
+			if _, err := OutputPath(root, bad); err == nil {
+				t.Errorf("OutputPath accepted %q", bad)
+			}
+		}
+	})
 }
 
 // echoGenerate is a stand-in generator: it emits every schema's full name as a

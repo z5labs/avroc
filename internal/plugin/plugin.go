@@ -21,6 +21,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -177,8 +178,19 @@ func (inv *Invocation) ReadDescriptor(stdin io.Reader) (*avrocpb.GenerateRequest
 // --out, not through "..", not through an absolute path — and avroc enforcing
 // it as well is #117's. Checking here means a generator in this repository
 // cannot break the rule even while avroc is not yet watching.
+//
+// The path a generator emits is a slash-separated relative path, whatever the
+// host's separator, so it is converted before it is joined.
 func OutputPath(out, p string) (string, error) {
-	if filepath.IsAbs(p) {
+	if p == "" {
+		return "", errors.New("path is empty")
+	}
+	if path.IsAbs(p) {
+		return "", fmt.Errorf("path %q is absolute", p)
+	}
+
+	osPath := filepath.FromSlash(p)
+	if filepath.IsAbs(osPath) {
 		return "", fmt.Errorf("path %q is absolute", p)
 	}
 
@@ -187,31 +199,21 @@ func OutputPath(out, p string) (string, error) {
 		return "", err
 	}
 
-	dst := filepath.Join(root, filepath.FromSlash(p))
+	dst := filepath.Join(root, osPath)
 	rel, err := filepath.Rel(root, dst)
 	if err != nil {
 		return "", err
+	}
+	// "." is the output directory itself, which is not a file a generator can
+	// write — "", "." and "./" all reach it, and each would otherwise fail
+	// later as a confusing "is a directory" from the open.
+	if rel == "." {
+		return "", fmt.Errorf("path %q names the output directory, not a file in it", p)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("path %q escapes the output directory", p)
 	}
 	return dst, nil
-}
-
-// WriteFile writes one generated file beneath this invocation's output
-// directory, creating any parent directories it names.
-func (inv *Invocation) WriteFile(path string, content []byte) error {
-	dst, err := OutputPath(inv.Out, path)
-	if err != nil {
-		return fmt.Errorf("refusing to write %q: %w", path, err)
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("failed to create output directory for %q: %w", dst, err)
-	}
-	if err := os.WriteFile(dst, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write %q: %w", dst, err)
-	}
-	return nil
 }
 
 // GenerateFunc is the generation entry point every generator in this
@@ -247,6 +249,10 @@ func Main(ctx context.Context, c cli.Context, name string, generate GenerateFunc
 	}
 
 	sink := &fileStream{ctx: ctx, inv: inv}
+	// A file whose terminating chunk never arrived is discarded however this
+	// returns, so a failed generation leaves no half-written source behind.
+	defer sink.discard()
+
 	if err := generate(req, sink); err != nil {
 		c.Log.ErrorContext(ctx, "failed to generate", slog.String("generator", name), slog.Any("error", err))
 		return 1

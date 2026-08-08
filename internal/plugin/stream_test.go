@@ -127,13 +127,44 @@ func TestFileStream(t *testing.T) {
 		}
 	})
 
-	t.Run("reports a file left unterminated", func(t *testing.T) {
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: t.TempDir()}}
+	t.Run("reports and discards a file left unterminated", func(t *testing.T) {
+		out := t.TempDir()
+		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+
 		if err := s.Send(chunk("user.go", "package pkg\n", false)); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.finish(); err == nil {
 			t.Error("finish accepted a stream that left a file unterminated")
+		}
+
+		// The partial must not survive: a half-written source file in the
+		// output tree is a compile error a user would have to trace back here.
+		if _, err := os.Stat(filepath.Join(out, "user.go")); !os.IsNotExist(err) {
+			t.Errorf("the partial file was not discarded: %v", err)
+		}
+	})
+
+	t.Run("discard removes a partial file and is idempotent", func(t *testing.T) {
+		out := t.TempDir()
+		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+
+		if err := s.Send(chunk("a.go", "package pkg\n", false)); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Send(chunk("b.go", "package pkg\n", true)); err != nil {
+			t.Fatal(err)
+		}
+
+		s.discard()
+		s.discard()
+
+		if _, err := os.Stat(filepath.Join(out, "a.go")); !os.IsNotExist(err) {
+			t.Errorf("the partial file was not discarded: %v", err)
+		}
+		// A file that was terminated is output, and discard must not touch it.
+		if _, err := os.Stat(filepath.Join(out, "b.go")); err != nil {
+			t.Errorf("discard removed a completed file: %v", err)
 		}
 	})
 
