@@ -33,8 +33,15 @@ func avroPrimitives() map[string]struct{} {
 // fails the invocation instead of producing partial or silently wrong output.
 //
 // It rejects a type constructor it does not recognise, a reference whose kind
-// it does not recognise, a reference claiming to be a primitive that names none,
-// and a named type carrying no fully-qualified name.
+// it does not recognise, a sort order it does not recognise, a reference
+// claiming to be a primitive that names none, and a named type carrying no
+// fully-qualified name.
+//
+// Every one of those but the last is the closed-set half of docs/ir/SPEC.md's
+// asymmetry: an unknown *field* is information this consumer did not need and
+// protobuf drops it, while an unknown *member of a closed set* is a fact about
+// the schema this consumer cannot represent at all. Rejecting means failing the
+// invocation, not skipping the type and carrying on.
 func Validate(schema *avrocpb.Schema) error {
 	primitives := avroPrimitives()
 
@@ -60,6 +67,9 @@ func validateType(t *avrocpb.Type, primitives map[string]struct{}) error {
 			return fmt.Errorf("record %q carries no fully-qualified name", v.Record.GetName())
 		}
 		for _, f := range v.Record.GetFields() {
+			if err := validateSortOrder(f.GetSortOrder()); err != nil {
+				return fmt.Errorf("record %q field %q: %w", v.Record.GetFullName(), f.GetName(), err)
+			}
 			if err := validateType(f.GetType(), primitives); err != nil {
 				return fmt.Errorf("record %q field %q: %w", v.Record.GetFullName(), f.GetName(), err)
 			}
@@ -92,6 +102,21 @@ func validateType(t *avrocpb.Type, primitives map[string]struct{}) error {
 		// A type constructor is a closed set. An unrecognised member is a
 		// schema this consumer cannot represent, not one to skip.
 		return fmt.Errorf("unsupported type: %T", t.GetType())
+	}
+}
+
+// validateSortOrder rejects a sort order outside Avro's three. Avro's own set
+// is closed, so a fourth member means a descriptor written against a newer IR
+// than this consumer knows — and a consumer that fell through to ascending
+// would order records by a rule nobody asked for and say nothing about it.
+func validateSortOrder(order avrocpb.SortOrder) error {
+	switch order {
+	case avrocpb.SortOrder_SORT_ORDER_ASC,
+		avrocpb.SortOrder_SORT_ORDER_DESC,
+		avrocpb.SortOrder_SORT_ORDER_IGNORE:
+		return nil
+	default:
+		return fmt.Errorf("unrecognised sort order %v", order)
 	}
 }
 

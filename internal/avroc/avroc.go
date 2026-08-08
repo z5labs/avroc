@@ -20,10 +20,12 @@ import (
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
+	"github.com/z5labs/avroc/internal/ir"
 
 	"github.com/z5labs/avro-go/idl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 )
 
 // Main dispatches to an avroc subcommand. Generators are declared in an
@@ -198,6 +200,10 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	// long. Cancellation flows from the signal-based parent context instead.
 	client := avrocpb.NewGeneratorClient(cc)
 	stream, err := client.Generate(ctx, &avrocpb.GenerateRequest{
+		// Every descriptor avroc emits carries the version of the contract it
+		// was written against, so a generator built against an IR avroc has
+		// since moved past can say so instead of misreading the schemas.
+		Version: proto.Int32(ir.Version),
 		Options: options,
 		Schemas: schemas,
 	})

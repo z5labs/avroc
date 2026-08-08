@@ -10,8 +10,28 @@ option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
 import "schema.proto";
 import "option.proto";
 
-// The request message for the Generate RPC method.
+// The request message for the Generate RPC method. It is the descriptor
+// docs/ir/SPEC.md specifies: the version identifying the contract it was
+// written against, the options for the invocation it belongs to, and the
+// resolved schemas.
 message GenerateRequest {
+    // The IR contract version this descriptor was written against: a single
+    // monotonic integer, never a major and a minor. The only question a
+    // consumer can act on is whether it understands the descriptor in front of
+    // it, and a minor number exists to let it answer "not entirely, but I will
+    // continue anyway".
+    //
+    // A producer MUST set it on every descriptor it emits. A consumer MUST read
+    // it before processing anything else, and MUST refuse a version it does not
+    // know — failing the invocation with a diagnostic naming the version it
+    // found and the version it understands — rather than proceeding on the
+    // parts it recognises.
+    //
+    // Zero is never emitted by a conforming producer. Field number 3 rather
+    // than 1 only because 1 and 2 were already assigned; the number carries no
+    // meaning and says nothing about the order a consumer reads fields in.
+    int32 version = 3;
+
     // Options to customize the code generation process.
     repeated Option options = 1;
 
