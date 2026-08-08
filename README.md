@@ -2,6 +2,21 @@
 
 A modular code generator for messages and services defined in [Avro IDL](https://avro.apache.org/docs/current/idl-language/).
 
+## Specs
+
+Three interfaces are built against from outside this repository, so each is
+specified rather than merely implemented:
+
+- [The resolved IR](docs/ir/SPEC.md) — what every generator plugin consumes, in
+  any language.
+- [The generator plugin CLI contract](docs/plugin/SPEC.md) — what
+  `avroc-gen-<name>` has to implement.
+- [The container base-image contract](docs/container/SPEC.md) — what a
+  Dockerfile building `FROM` the published image may rely on.
+
+[docs/CONVENTIONS.md](docs/CONVENTIONS.md) defines the conformance language all
+three use, and what else they have in common.
+
 ## Features
 
 - **Declarative manifest** — a project's generators and their configuration live in a checked-in `avroc.json` manifest, so generator selection and options are diffable, reviewable, and shared across a team and CI. `avroc init` scaffolds one to get started.
