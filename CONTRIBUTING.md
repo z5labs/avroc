@@ -144,10 +144,9 @@ part of `dagger call ci`. It runs in the repository's local verify list instead.
 
 It comes back to CI the same way everything else does: as another function on the
 root module invoked by another `dagger call`, never as raw Go steps beside it in
-[`.github/workflows/build.yaml`](.github/workflows/build.yaml). Writing it now
-would mean writing it against today's gRPC-socket generator invocation, which the
-plugin-contract work is replacing; it belongs in the change that settles how
-generators are invoked at all.
+[`.github/workflows/build.yaml`](.github/workflows/build.yaml). It belongs with
+the stage that generates twice and byte-compares, because that stage needs the
+same four binaries and the same worked example — one function, not two that drift.
 
 Until then, run it by hand before pushing a change to generation:
 

@@ -61,7 +61,6 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 		genPool.Go(func(ctx context.Context) error {
 			g := generator{
 				log:            cli.Log,
-				env:            cli.Env,
 				name:           task.name,
 				executablePath: task.executablePath,
 			}

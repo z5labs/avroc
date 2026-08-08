@@ -36,16 +36,17 @@ three use, and what else they have in common.
 │  2. Resolve each generator to avroc-gen-<name>       │
 │  3. Parse & validate the declared Avro IDL inputs    │
 │  4. For each generator (concurrently):               │
-│     a. Create a temporary Unix socket                │
-│     b. Launch avroc-gen-<name> subprocess            │
-│     c. Connect via gRPC (Generator service)          │
-│     d. Send GenerateRequest  ──────────────────────► │  avroc-gen-<name>
-│     e. Receive streamed GenerateResponse ◄─────────  │  (gRPC server on
-│     f. avroc writes the streamed files               │   Unix socket)
+│     a. Write the descriptor into a directory         │
+│        created for that invocation alone             │
+│     b. exec avroc-gen-<name>  ─────────────────────► │  avroc-gen-<name>
+│          --descriptor <path>                         │  reads the descriptor,
+│          --out <dir>                                 │  writes files beneath
+│          [--opt k=v ...]                             │  --out, exits
+│     c. Wait for it to exit; non-zero fails the run   │
 └─────────────────────────────────────────────────────┘
 ```
 
-Generators communicate with `avroc` over a gRPC `Generator` service defined in [`proto/`](proto/). This means you can write a generator in **any language** that supports gRPC — just name the executable `avroc-gen-<name>` and put it on your `PATH`.
+A generator is an **executable, not a server**: avroc finds it on `PATH`, runs it with a descriptor and an output directory, and waits. There is no socket, no port and no protobuf runtime required to be reachable — so a generator can be written in any language, including a shell script. [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md) is the contract.
 
 ## Installation
 
@@ -245,9 +246,11 @@ No options required.
 ## Writing a Custom Generator
 
 1. Create an executable named `avroc-gen-<name>` and put it on your `PATH`.
-2. On startup, read the Unix socket path from `os.Args[1]`.
-3. Start a gRPC server on that socket and register your implementation of the `Generator` service (see [`proto/generator.proto`](proto/generator.proto)).
-4. Handle a `GenerateRequest` (options + schemas) by **streaming** the generated files back: each `GenerateResponse` carries a relative `path`, a chunk of `content`, and a `last` flag. avroc reassembles the chunks and writes the files, so the generator never touches the filesystem.
+2. Accept `--descriptor <path> --out <dir> [--opt k=v ...]`, each option followed by its value as the next argument. `--descriptor -` means the descriptor arrives on standard input.
+3. Decode the descriptor at that path: it is a `GenerateRequest` in the protobuf binary wire encoding (see [`proto/`](proto/) and [`docs/ir/SPEC.md`](docs/ir/SPEC.md)). Check its `version` first.
+4. Write every generated file beneath `--out`, report problems on stderr, and exit zero. A non-zero exit fails the run.
+
+The full contract — discovery, the argument vector, the descriptor's lifetime, exit codes and the stderr diagnostic format, and the determinism a plugin must exhibit — is [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md).
 
 The schemas you are handed are **resolved**: every named type carries its fully-qualified name, every `Reference` states whether it names an Avro primitive or a named type, and a named type's definition travels at its first use with every later use carrying only its name. A generator therefore builds no symbol table and re-derives no namespace qualification, primitive classification or first-use ordering — see [`docs/ir/SPEC.md`](docs/ir/SPEC.md).
 
