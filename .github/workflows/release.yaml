@@ -69,3 +69,59 @@ jobs:
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
             "$RUNNER_TEMP/ir.binpb" --clobber
+
+  # The published base image (#126) — the one docs/container/SPEC.md describes
+  # and strangers' Dockerfiles say FROM.
+  #
+  # Only the full version tag is pushed here. docs/container/SPEC.md publishes
+  # four tags and promises that a full version tag never moves while the other
+  # three do; the moving ones, together with signatures, provenance and an SBOM,
+  # are #128's, and they are a change to this job rather than to the module,
+  # because which tags exist is a property of a release and not of an image.
+  image:
+    name: Base image
+    runs-on: ubuntu-latest
+    permissions:
+      # Reading the source, and writing the package. Both grants are here rather
+      # than at the top of the file because this is the only job that pushes
+      # anything, and a grant held in advance is one nothing accounts for.
+      contents: read
+      packages: write
+    steps:
+      # At the release's tag, for the same reason the asset above is built
+      # there: the image is a function of the source, and an image built from a
+      # different commit would be a different program wearing the tag.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install the Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
+              BIN_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The same contract check CI runs on every pull request, run once more
+      # against the tag before anything is pushed. A tag is published once and
+      # never repointed, so this is the last moment at which a broken promise
+      # costs nothing.
+      - name: Check the base image against its contract
+        run: dagger call image-contract
+
+      # One multi-platform index covering linux/amd64 and linux/arm64, so that a
+      # `FROM` line naming the tag resolves to the manifest for whatever
+      # platform the builder is on.
+      #
+      # The address is assembled here rather than in the module: the module
+      # pushes the reference it is given, and a function that derived a tag from
+      # the refs at HEAD would be a second place the tag scheme is written down.
+      - name: Build and publish it
+        env:
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dagger call publish \
+            --address "ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}" \
+            --username "${{ github.actor }}" \
+            --password env://REGISTRY_PASSWORD

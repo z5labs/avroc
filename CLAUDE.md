@@ -183,6 +183,31 @@ it reads `SOURCE_DATE_EPOCH`, returns UTC, and reports a malformed value rather
 than falling back to the clock. Nothing here needs it yet, and a generator that
 grows a timestamp uses it rather than inventing its own.
 
+### The published image
+
+`.dagger/image.go` builds the base image `docs/container/SPEC.md` describes, and
+that document is normative: `/usr/local/bin` on `PATH` holding the CLI and the
+three generators, the CLI as `Entrypoint` with an empty `Cmd`, `/work` as
+`WorkingDir`, UID and GID 65532 owning both directories and running the process,
+the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a `scratch`
+base — no shell, no libc, no package manager, so extension is `COPY`-only. The
+one thing in the filesystem the document does not name is a 1777 `/tmp`, which
+avroc needs because it writes each invocation's descriptor under `os.TempDir`.
+
+It is built here rather than by the devex `GoApp` archetype, whose image half
+produces one scratch image per binary with `/app/<binaryName>` as entrypoint and
+nothing else set; `image.go`'s package comment records why that was the choice
+over extending `GoApp` upstream or accepting a non-scratch base (#126). The
+check stages still route through the Z5Labs standard, so there is still one
+definition of what "checked" means.
+
+`dagger call image-contract` is the compatibility guarantees table executed
+rather than read — the OCI configuration, an *exact* listing of every path in
+the image with its owner and mode, and the image generating `example/` through
+its own entrypoint both as 65532 and as an overridden UID. CI runs it on every
+pull request; `dagger call publish --address <ref>` pushes a multi-platform
+index and is called only from `.github/workflows/release.yaml`.
+
 ### Key Dependencies
 
 - `github.com/z5labs/avro-go` — Avro IDL parser

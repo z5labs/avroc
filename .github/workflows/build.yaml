@@ -93,6 +93,25 @@ jobs:
       - name: Check that regeneration is byte-identical
         run: dagger call regeneration
 
+      # docs/container/SPEC.md's compatibility guarantees table, executed
+      # rather than read (#126). It builds the published base image for each
+      # platform it ships on and checks every promise that document makes about
+      # it: the plugin directory and its place on PATH, the entrypoint, the
+      # empty Cmd, the working directory, the pinned non-root UID, the absence
+      # of a shell — as an exact listing of every path in the image — the
+      # FileDescriptorSet's path, and the image actually generating the worked
+      # example through its own entrypoint, as itself and as an overridden UID.
+      #
+      # It runs on every pull request rather than only at release time because
+      # each of those promises is depended on from a repository this project
+      # cannot see, and breaks without breaking anything here: an image whose
+      # PATH lost /usr/local/bin runs avroc perfectly and fails at the point
+      # where somebody else's generator is not found. Nothing is pushed, so
+      # this job still needs no `packages: write`; release.yaml is what
+      # publishes.
+      - name: Check the base image against its contract
+        run: dagger call image-contract
+
       # The one artifact this repository builds, built on every pull request
       # rather than only at release time. Its contents are asserted by the tests
       # `dagger call ci` just ran — that the set covers proto/, resolves on its
