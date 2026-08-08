@@ -490,8 +490,20 @@ The declaration is a single JSON object on one or more lines, encoded in UTF-8:
   the plugin decides, which is the behaviour
   [Options](#options) already requires of it.
 
+avroc takes that **MAY**: it rejects a manifest option that a plugin declaring a
+vocabulary left out of it (#116). So *present and empty* and *absent* are
+different declarations rather than two spellings of one — the first says the
+plugin accepts no option at all, the second hands the decision back to the
+plugin — and a plugin that wants avroc out of the decision omits the member
+rather than writing `[]`. A plugin whose vocabulary is genuinely empty needs to
+be able to say so, which is the whole reason the two are not collapsed.
+
 avroc **MUST** ignore members it does not recognise, so that a plugin declaring
-more than this version of avroc reads is not thereby broken.
+more than this version of avroc reads is not thereby broken. That is the
+opposite of what avroc does with an unknown field in a project's `avroc.json`,
+and the two differ because their authors do: a manifest is a file a person wrote,
+where an unknown field is a typo, while a declaration is a message a program
+wrote, where an unknown member is a newer plugin.
 
 ### Why JSON, and why it is not optional
 

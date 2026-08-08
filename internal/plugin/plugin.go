@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -134,10 +135,11 @@ func parseOption(s string) (*avrocpb.Option, error) {
 	}, nil
 }
 
-// Usage is the one-line usage every generator in this repository prints, with
-// name the executable's own.
+// Usage is the usage every generator in this repository prints, with name the
+// executable's own. Both vectors the contract defines are listed: a generation,
+// and the capability handshake that precedes one.
 func Usage(name string) string {
-	return fmt.Sprintf("Usage: %s --descriptor <path> --out <dir> [--opt k=v ...]\n", name)
+	return fmt.Sprintf("Usage: %s --descriptor <path> --out <dir> [--opt k=v ...]\n       %s %s\n", name, name, PluginInfoFlag)
 }
 
 // ReadDescriptor reads and decodes the descriptor this invocation names,
@@ -226,15 +228,51 @@ func OutputPath(out, p string) (string, error) {
 // over a socket, and the chunks never leave the process.
 type GenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error
 
-// Main runs one generation from an argument vector and returns the process
-// exit status: parse the vector, read the descriptor, run generate, and write
-// what it produced beneath --out.
+// Main runs one invocation from an argument vector and returns the process exit
+// status.
+//
+// There are two vectors the contract defines. --plugin-info writes info to
+// standard output and exits zero, having read no descriptor and written no
+// file. Anything else is a generation: parse the vector, read the descriptor,
+// run generate, and write what it produced beneath --out.
 //
 // Diagnostics go to the logger, which every generator's main wires to standard
 // error. Standard output carries nothing during a generation invocation, which
-// is what keeps it free for the --plugin-info declaration (#116) and makes an
-// invocation safe to put in a pipeline.
-func Main(ctx context.Context, c cli.Context, name string, generate GenerateFunc) int {
+// is what keeps it free for the declaration and makes an invocation safe to put
+// in a pipeline.
+func Main(ctx context.Context, c cli.Context, info Info, generate GenerateFunc) int {
+	return run(ctx, c, info, generate, os.Stdout)
+}
+
+// run is Main with the declaration's destination passed in, so that a test can
+// read what a generator would have written to standard output without replacing
+// the process's own.
+func run(ctx context.Context, c cli.Context, info Info, generate GenerateFunc, stdout io.Writer) int {
+	name := info.Executable()
+
+	// Checked before the vector is parsed, and by membership rather than by
+	// position: --plugin-info accepts no other argument, so a vector carrying one
+	// is a mistake to report rather than a generation to attempt with a flag
+	// ParseArgs would call unknown.
+	if slices.Contains(c.Args, PluginInfoFlag) {
+		if len(c.Args) != 1 {
+			c.Log.ErrorContext(ctx, "invalid arguments",
+				slog.String("generator", name),
+				slog.Any("error", fmt.Errorf("%s takes no other arguments, got %v", PluginInfoFlag, c.Args)),
+			)
+			_, _ = io.WriteString(os.Stderr, Usage(name))
+			return 1
+		}
+		if err := WriteInfo(stdout, info); err != nil {
+			c.Log.ErrorContext(ctx, "failed to write the capability declaration",
+				slog.String("generator", name),
+				slog.Any("error", err),
+			)
+			return 1
+		}
+		return 0
+	}
+
 	inv, err := ParseArgs(c.Args)
 	if err != nil {
 		c.Log.ErrorContext(ctx, "invalid arguments", slog.String("generator", name), slog.Any("error", err))

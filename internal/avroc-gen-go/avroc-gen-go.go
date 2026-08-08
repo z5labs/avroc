@@ -12,7 +12,7 @@ import (
 	"github.com/z5labs/avroc/internal/plugin"
 )
 
-// Main runs one generation and returns the process exit status.
+// Main runs one invocation and returns the process exit status.
 //
 // avroc-gen-go is an executable, not a server: it is handed a descriptor and an
 // output directory on its command line, writes files, and exits. The Unix
@@ -20,6 +20,22 @@ import (
 // rendezvous that required them (#114); what remains of the service — the
 // streaming emission generatorService still implements internally — is #121's
 // to replace and #124's to delete.
+//
+// The declared option vocabulary is the one Generate reads, and the two are
+// checked against each other by TestDeclaredOptionsAreTheOnesGenerateReads: a
+// key declared here and ignored there would be a manifest line avroc lets
+// through and the generator silently drops.
 func Main(ctx context.Context, c cli.Context) int {
-	return plugin.Main(ctx, c, "avroc-gen-go", (&generatorService{}).Generate)
+	return plugin.Main(ctx, c, plugin.NewInfo("go", declaredOptions()...), (&generatorService{}).Generate)
+}
+
+// declaredOptions is the --opt vocabulary avroc-gen-go declares, in the order
+// the declaration lists it.
+//
+// A function rather than a variable so that nothing can append to it, and named
+// so that the test above has something to range over: a key added here and never
+// wired into Generate is exactly the failure the declaration is supposed to make
+// impossible.
+func declaredOptions() []string {
+	return []string{"encoding", "package_name"}
 }
