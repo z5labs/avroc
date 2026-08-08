@@ -67,7 +67,7 @@ With `encoding=single_object`, the primary record type also includes a `Fingerpr
 ### Go (`stream/`)
 
 `events.avdl` has an array root, so [`stream/event.go`](stream/event.go) contains the
-`Event` type and its methods **and** a streaming reader over them:
+`Event` type and its methods **and** a streaming reader and writer over them:
 
 - `StreamEvents(r io.Reader) iter.Seq2[*Event, error]` — the ordinary way to read one:
 
@@ -84,12 +84,41 @@ With `encoding=single_object`, the primary record type also includes a `Fingerpr
   you own, so one `Event` can be reused for the whole stream, and its `SkipBlock` discards
   a block that declared its encoded size without decoding a single item.
 
-The reader is a wrapper and nothing more: the block framing lives in
+- `WriteEvents(w io.Writer, f func(*EventWriter) error, opts ...avro.ArrayWriterOption) error`
+  — the ordinary way to produce one, and it takes no `[]Event`:
+
+  ```go
+  err := stream.WriteEvents(w, func(s *stream.EventWriter) error {
+      for _, ev := range events {
+          if err := s.Write(ev); err != nil {
+              return err
+          }
+      }
+      return nil
+  })
+  ```
+
+  It terminates the array once `f` returns without error. That close is not a nicety: an
+  Avro array ends in a zero-count block, so a stream that is never closed is a *truncated*
+  array, and reading one back fails with `avro.ErrTruncatedArray` rather than quietly
+  yielding the items that happened to arrive.
+
+- `EventWriter`, which embeds `*avro.ArrayWriter`, for when the writing is not shaped like
+  one function. `NewEventWriter(w, opts...)` returns one and its `Close` terminates the
+  array. Pass `avro.WithSizedBlocks(n)` to either form to batch items into blocks that
+  declare their encoded size — which is what makes `SkipBlock` above able to discard one —
+  at the cost of a buffer bounded by `n`. The default buffers nothing and each item goes
+  straight out; both are conforming Avro, and which you want is a trade the generator does
+  not make for you.
+
+Both are wrappers and nothing more: the block framing lives in
 [avro-go](https://github.com/z5labs/avro-go), because it is the same for every item type
 and a copy of it emitted once per schema would be a copy to keep correct. The array is
-never materialised — [`stream/event_stream_test.go`](stream/event_stream_test.go) streams a
-hundred thousand items through a four-kilobyte pipe and checks that the live heap at the
-last item is what it was at the last item of a thousand.
+never materialised in either direction —
+[`stream/event_stream_test.go`](stream/event_stream_test.go) streams a hundred thousand
+items through a four-kilobyte pipe and checks that the live heap at the last item is what
+it was at the last item of a thousand, and
+[`stream/event_writer_test.go`](stream/event_writer_test.go) does the same writing them.
 
 ### JSON Schema (`test_record.avsc`, `event.avsc`)
 

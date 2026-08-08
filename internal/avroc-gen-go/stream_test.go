@@ -63,7 +63,7 @@ func TestTheStreamingReaderReimplementsNoBlockFraming(t *testing.T) {
 	}
 
 	// Everything the reader does with the stream, it does through these.
-	stream := streamSection(t, string(content))
+	stream := streamSection(t, string(content), "type EventReader struct", "type EventWriter struct")
 	for _, allowed := range []string{
 		"avro.NewArrayReader(avro.NewBinaryReader(r))",
 		"x.ArrayReader.Next(v)",
@@ -81,23 +81,138 @@ func TestTheStreamingReaderReimplementsNoBlockFraming(t *testing.T) {
 	}
 }
 
-// streamSection returns the generated file from the reader type onwards, so an
-// assertion about the reader is not satisfied or defeated by the item type's
-// own marshalling code above it.
-func streamSection(t *testing.T, code string) string {
+// streamSection returns the generated file from marker up to the next
+// top-level declaration that is not part of the same section, so an assertion
+// about the reader or the writer is not satisfied or defeated by code
+// elsewhere in the file.
+func streamSection(t *testing.T, code, marker, end string) string {
 	t.Helper()
 
-	const marker = "type EventReader struct"
 	i := strings.Index(code, marker)
 	if i < 0 {
-		t.Fatalf("generated code has no streaming reader:\n%s", code)
+		t.Fatalf("generated code has no %q:\n%s", marker, code)
 	}
-	return code[i:]
+	section := code[i:]
+	if end != "" {
+		if j := strings.Index(section, end); j >= 0 {
+			section = section[:j]
+		}
+	}
+	return section
 }
 
-// TestOnlyAnArrayRootGeneratesAStreamingReader keeps the reader to the one root
-// shape that means "a stream of T". Every other root is a single value, and a
-// single value is what UnmarshalAvroBinary already is.
+// TestAnArrayRootGeneratesAStreamingWriter is the other half of the story: a
+// stream nothing can produce is a stream, and what this generator used to emit
+// for an array root took a []Event that already existed.
+func TestAnArrayRootGeneratesAStreamingWriter(t *testing.T) {
+	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+	code := string(content)
+	validateGoSyntax(t, code)
+
+	expectations := []string{
+		// The writer, over avro-go's, whose Close is left promoted rather than
+		// wrapped because terminating the array is what it does.
+		"type EventWriter struct {\n\t*avro.ArrayWriter\n}",
+		"func NewEventWriter(w io.Writer, opts ...avro.ArrayWriterOption) *EventWriter",
+		"avro.NewArrayWriter(avro.NewBinaryWriter(w), opts...)",
+
+		// Write is the one promoted method that is shadowed, so that the
+		// stream's item type is the compiler's to enforce.
+		"func (x *EventWriter) Write(v *Event) error",
+		"return x.ArrayWriter.Write(v)",
+
+		// And the package-level entry point, which owns the close.
+		"func WriteEvents(w io.Writer, f func(*EventWriter) error, opts ...avro.ArrayWriterOption) error",
+		"avro.WriteArray(avro.NewBinaryWriter(w)",
+	}
+	for _, exp := range expectations {
+		if !strings.Contains(code, exp) {
+			t.Errorf("expected generated code to contain %q, got:\n%s", exp, code)
+		}
+	}
+}
+
+// TestTheStreamingWriterReimplementsNoBlockFraming is the reader's rule applied
+// to the writer, where there is more to get wrong: the item count, the negated
+// count and byte size a sized block carries, the buffer that a size prefix
+// forces, and the zero-count block that terminates the array are all
+// type-independent, so all of them stay in avro-go.
+func TestTheStreamingWriterReimplementsNoBlockFraming(t *testing.T) {
+	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+
+	writer := streamSection(t, string(content), "type EventWriter struct", "")
+	for _, allowed := range []string{
+		"avro.NewArrayWriter(avro.NewBinaryWriter(w), opts...)",
+		"x.ArrayWriter.Write(v)",
+		"avro.WriteArray(avro.NewBinaryWriter(w)",
+	} {
+		if !strings.Contains(writer, allowed) {
+			t.Errorf("expected the streaming writer to call %q, got:\n%s", allowed, writer)
+		}
+	}
+
+	// The framing, the buffering it would need, and a Close of its own — a
+	// generated Close would be a second place the terminating block is decided.
+	code := codeOnly(writer)
+	for _, forbidden := range []string{
+		"WriteLong", "ReadLong", "WriteFixed", "bytes.Buffer", "func (x *EventWriter) Close",
+	} {
+		if strings.Contains(code, forbidden) {
+			t.Errorf("the streaming writer re-implements block framing: it references %q in:\n%s", forbidden, code)
+		}
+	}
+}
+
+// TestTheStreamingWriterDoesNotChooseTheBlockMode holds the one design decision
+// the story called out: whether blocks carry their size is a trade the caller
+// makes — unsized blocks buffer nothing, sized blocks cost a bounded buffer and
+// make the output skippable — so the generator emits neither choice. It passes
+// avro-go's options through, which is what keeps the default unsized and the
+// buffer bound the caller's to set.
+func TestTheStreamingWriterDoesNotChooseTheBlockMode(t *testing.T) {
+	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+
+	writer := streamSection(t, string(content), "type EventWriter struct", "")
+	if !strings.Contains(writer, "opts ...avro.ArrayWriterOption") {
+		t.Errorf("the streaming writer does not accept avro-go's writer options:\n%s", writer)
+	}
+
+	// Comments are dropped first: the generated documentation names
+	// avro.WithSizedBlocks because that is how a caller opts in, and telling a
+	// reader where the choice is made is the opposite of making it for them.
+	code := codeOnly(writer)
+	for _, forbidden := range []string{"avro.WithSizedBlocks", "avro.DefaultBlockBufferSize"} {
+		if strings.Contains(code, forbidden) {
+			t.Errorf("the streaming writer decides the block mode for the caller: it references %q in:\n%s", forbidden, code)
+		}
+	}
+}
+
+// codeOnly returns s with its comment lines removed, so an assertion about what
+// the generated code does is not answered by what its documentation says.
+func codeOnly(s string) string {
+	var b strings.Builder
+	for line := range strings.Lines(s) {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		b.WriteString(line)
+	}
+	return b.String()
+}
+
+// TestOnlyAnArrayRootGeneratesAStreamingReader keeps the reader and the writer
+// to the one root shape that means "a stream of T". Every other root is a
+// single value, and a single value is what the marshalling methods already are.
 func TestOnlyAnArrayRootGeneratesAStreamingReader(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -188,7 +303,7 @@ func TestOnlyAnArrayRootGeneratesAStreamingReader(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := streamReaderFor(tc.schema) != nil
+			got := arrayStreamFor(tc.schema) != nil
 			if got != tc.want {
 				t.Errorf("streamReaderFor produced a reader: %t, want %t", got, tc.want)
 			}
@@ -202,7 +317,7 @@ func TestOnlyAnArrayRootGeneratesAStreamingReader(t *testing.T) {
 
 			// The emission and the decision agree, and the imports follow the
 			// emission: an unused "io" is a file that does not compile.
-			for _, marker := range []string{"iter.Seq2", "\"io\"", "\"iter\""} {
+			for _, marker := range []string{"iter.Seq2", "avro.ArrayReader", "avro.ArrayWriter", "\"io\"", "\"iter\""} {
 				if strings.Contains(code, marker) != tc.want {
 					t.Errorf("generated code contains %q: %t, want %t\n%s", marker, strings.Contains(code, marker), tc.want, code)
 				}
