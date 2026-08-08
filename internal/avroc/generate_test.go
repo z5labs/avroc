@@ -111,23 +111,7 @@ func TestPlanGenerators(t *testing.T) {
 		}
 	})
 
-	t.Run("errors when an OCI-only generator is not on PATH", func(t *testing.T) {
-		m := &Manifest{
-			Generators: []GeneratorConfig{
-				{Name: "rust", Source: "ghcr.io/z5labs/avroc-gen-rust", Out: "gen", Inputs: []string{"x.avdl"}},
-			},
-		}
-
-		_, err := planGenerators(m, map[string]string{}, t.TempDir())
-		if err == nil {
-			t.Fatal("expected an error, got nil")
-		}
-		if !strings.Contains(err.Error(), "#70") {
-			t.Errorf("error should mention #70, got: %v", err)
-		}
-	})
-
-	t.Run("errors when a generator is not on PATH and has no source", func(t *testing.T) {
+	t.Run("errors when a generator is not on PATH", func(t *testing.T) {
 		m := &Manifest{
 			Generators: []GeneratorConfig{
 				{Name: "go", Out: "gen", Inputs: []string{"x.avdl"}},

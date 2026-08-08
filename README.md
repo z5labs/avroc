@@ -21,7 +21,7 @@ three use, and what else they have in common.
 
 - **Declarative manifest** — a project's generators and their configuration live in a checked-in `avroc.json` manifest, so generator selection and options are diffable, reviewable, and shared across a team and CI. `avroc init` scaffolds one to get started.
 - **Dynamic generator discovery** — avroc discovers generator plugins on your `PATH` using the naming convention `avroc-gen-<name>`; a manifest entry's `name` resolves to the matching `avroc-gen-<name>` executable.
-- **Reproducible generator acquisition** — `avroc get` resolves each generator's OCI image tag to an immutable digest, pulls it into a local cache without a Docker daemon, and pins it in a committed `avroc.lock`, so every developer and CI run uses the exact same toolchain.
+- **No acquisition machinery** — avroc never fetches, pins or verifies a generator: there is no registry, no lockfile and no cache. A generator arrives on `PATH` by whatever means put it there, and reproducibility comes from a [container image](docs/container/SPEC.md) pinned by digest rather than from a file avroc writes.
 - **Type validation** — avroc resolves all type references in your Avro IDL schemas and reports errors for any undefined types before invoking generators.
 - **Value validation** — avroc validates field defaults and enum defaults against their declared types, catching mistakes (e.g. a `null` default on an `int` field) at generation time.
 - **Parallel generation** — all generators run concurrently, so code generation scales with the number of plugins you use.
@@ -73,7 +73,6 @@ avroc is driven by a project manifest (`avroc.json`) and exposes these commands:
 
 ```
 avroc init        # scaffold a starter avroc.json (never clobbers an existing one)
-avroc get         # resolve & pull generator images, pinning them in avroc.lock
 avroc generate    # run the generators declared in avroc.json
 avroc inspect     # render a descriptor file as JSON (use - for stdin)
 ```
@@ -88,8 +87,6 @@ The manifest declares the input IDL files and the generators to run:
   "generators": [
     {
       "name": "go",
-      "source": "ghcr.io/z5labs/avroc-gen-go",
-      "version": "v0.1.0",
       "out": "gen",
       "options": { "package_name": "mypackage", "encoding": "single_object" }
     },
@@ -103,46 +100,34 @@ The manifest declares the input IDL files and the generators to run:
 |---|---|---|
 | `inputs` | top-level | IDL files shared by every generator. |
 | `name` | generator | Logical name; resolves to the `avroc-gen-<name>` executable on `PATH`. |
-| `source` | generator | OCI image reference. Recorded for the containerized-generator workflow; today generators are run from `PATH`. |
-| `version` | generator | OCI image tag. Recorded alongside `source`. |
 | `out` | generator | Output directory (relative to the manifest). |
 | `options` | generator | `key`/`value` generator options. |
 | `inputs` | generator | IDL files specific to this generator, merged with the top-level `inputs`. |
 
-> A generator whose `name` is not found on `PATH` is reported as an error. If such an entry
-> also names an OCI `source`, avroc explains that containerized execution is not yet
-> supported — that lands in a follow-on release.
+> A generator whose `name` is not found on `PATH` is reported as an error. A `name` is the whole
+> of how a generator is identified — there is no `source` and no `version`, and a manifest still
+> carrying either is rejected by name with what to do instead.
 
-### Acquiring generators (`avroc get` and `avroc.lock`)
+### Where generators come from, and reproducibility
 
-`avroc get` reads the manifest and, for every generator that declares an OCI `source`, resolves
-its floating `version` tag to an immutable `sha256:` digest, pulls the image into a local cache
-(no Docker daemon required), and records the resolved digest in a committed **`avroc.lock`**
-lockfile — the reproducibility record, analogous to `.terraform.lock.hcl`:
+avroc does not fetch a generator, does not pin one, does not verify one and does not know where
+one came from. There is no plugin registry, no `avroc get`, no `avroc.lock` and no image cache:
+a generator arrives on `PATH` by whatever means put it there — a `go install`, a package
+manager, a `COPY` in a Dockerfile — and avroc runs the first match it finds.
 
-```bash
-avroc get             # resolve, pull, and pin every OCI generator
-avroc get -upgrade    # re-resolve floating tags to fresh digests and rewrite the lock
-```
+That carries a trade, stated in full under
+[Plugin distribution, and reproducibility](docs/plugin/SPEC.md#plugin-distribution-and-reproducibility):
 
-- **Reproducible by default.** When a lockfile already pins a generator's `name` + `source` +
-  `version`, that digest is reused on rerun rather than re-resolving the tag, so an unchanged
-  manifest + lockfile always acquires the same images. Use `-upgrade` to move to newer digests.
-  The pinned digest is the platform-independent manifest the tag points at (the multi-arch index
-  for multi-arch images), so a committed `avroc.lock` is identical across developer machines and
-  CI regardless of OS/arch.
-- **Verified.** Pulled content is fetched by digest and verified against it; a populated cache
-  lets later runs proceed offline.
-- **Cache location.** Images are cached under your user cache directory (`os.UserCacheDir()` /
-  `avroc`, e.g. `~/.cache/avroc` on Linux). Override the location with the `AVROC_CACHE`
-  environment variable.
-- **Registry auth.** Authentication is resolved through the standard Docker keychain
-  (`~/.docker/config.json` and platform keychains), so a prior `docker login ghcr.io` enables
-  authenticated and private `ghcr.io` pulls with no extra configuration.
+> **avroc makes no reproducibility guarantee about the host-execution path.** The same manifest
+> and the same schemas, on two hosts, can produce different generated code if the two hosts have
+> different builds of a generator on their `PATH` — and avroc cannot detect it.
+>
+> **The container is the reproducible path.** An image pinned by digest fixes every generator in
+> it, and that is the configuration this project supports when reproducibility is a requirement.
+> `go install` and a `PATH` are a convenience for a developer's laptop.
 
-> Generators without an OCI `source` (PATH-based) are skipped by `avroc get`. Running the pinned
-> images is handled by a follow-on release; today `avroc generate` resolves generators from
-> `PATH`.
+The [container base-image contract](docs/container/SPEC.md) is what a Dockerfile building `FROM`
+the published image may rely on.
 
 ### Example
 

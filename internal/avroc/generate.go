@@ -202,9 +202,6 @@ func planGenerators(m *Manifest, generators map[string]string, workingDir string
 		execName := "avroc-gen-" + g.Name
 		executablePath, ok := generators[execName]
 		if !ok {
-			if g.Source != "" {
-				return nil, fmt.Errorf("generator %q references OCI image %q but OCI execution is not yet supported (see #70); install %s on PATH to use it now", g.Name, g.Source, execName)
-			}
 			return nil, fmt.Errorf("no generator %q found on PATH", execName)
 		}
 

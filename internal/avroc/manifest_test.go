@@ -9,6 +9,8 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -31,8 +33,6 @@ func TestLoadManifest(t *testing.T) {
 				"generators": [
 					{
 						"name": "go",
-						"source": "ghcr.io/z5labs/avroc-gen-go",
-						"version": "v0.1.0",
 						"out": "gen/go",
 						"options": {"package_name": "models"},
 						"inputs": ["schemas/extra.avdl"]
@@ -56,9 +56,6 @@ func TestLoadManifest(t *testing.T) {
 		if g.Name != "go" || g.Out != "gen/go" {
 			t.Errorf("generator = %+v, want name=go out=gen/go", g)
 		}
-		if g.Source != "ghcr.io/z5labs/avroc-gen-go" || g.Version != "v0.1.0" {
-			t.Errorf("source/version = %q/%q", g.Source, g.Version)
-		}
 		if g.Options["package_name"] != "models" {
 			t.Errorf("options = %v", g.Options)
 		}
@@ -75,6 +72,60 @@ func TestLoadManifest(t *testing.T) {
 		}
 		if _, err := loadManifest(manifestContext(fsys), "."); err == nil {
 			t.Fatal("expected error for unknown field, got nil")
+		}
+	})
+
+	// The removed OCI fields (#125). DisallowUnknownFields already rejects them,
+	// so what is under test is the message: a manifest written against the
+	// previous avroc must be told the field was removed and what replaced it,
+	// not merely that avroc does not recognise it — the second reads as a typo
+	// and sends an adopter looking for the spelling that works.
+	for _, tc := range []struct {
+		field string
+		body  string
+	}{
+		{
+			field: "source",
+			body:  `{"generators": [{"name": "go", "source": "ghcr.io/z5labs/avroc-gen-go", "out": "gen"}]}`,
+		},
+		{
+			field: "version",
+			body:  `{"generators": [{"name": "go", "version": "v0.1.0", "out": "gen"}]}`,
+		},
+	} {
+		t.Run("rejects the removed "+tc.field+" field by name", func(t *testing.T) {
+			fsys := fstest.MapFS{
+				manifestFilename: &fstest.MapFile{Data: []byte(tc.body)},
+			}
+
+			_, err := loadManifest(manifestContext(fsys), ".")
+			if err == nil {
+				t.Fatalf("expected error for removed field %q, got nil", tc.field)
+			}
+
+			msg := err.Error()
+			if !strings.Contains(msg, strconv.Quote(tc.field)) {
+				t.Errorf("error should name the removed field %q, got: %v", tc.field, err)
+			}
+			// The guidance, not just the rejection: where a generator comes from
+			// now that avroc does not fetch one.
+			if !strings.Contains(msg, "PATH") && !strings.Contains(msg, "image") {
+				t.Errorf("error should say what to do instead, got: %v", err)
+			}
+		})
+	}
+
+	t.Run("an ordinary unknown field keeps the plain parse error", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			manifestFilename: &fstest.MapFile{Data: []byte(`{"generators": [{"name": "go", "out": "gen", "typo": true}]}`)},
+		}
+
+		_, err := loadManifest(manifestContext(fsys), ".")
+		if err == nil {
+			t.Fatal("expected error for unknown field, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to parse "+manifestFilename) {
+			t.Errorf("error should be the plain parse failure, got: %v", err)
 		}
 	})
 
