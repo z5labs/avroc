@@ -287,10 +287,31 @@ The image ships the IR's protobuf `FileDescriptorSet` at
 It is there for a plugin author whose language has no protobuf code generation
 available in the build: a `FileDescriptorSet` is enough to decode a descriptor
 dynamically, so the file turns "my language has no avroc bindings" into a
-runtime lookup rather than a blocker. What it contains, and which IR version it
-describes, is [`ir/SPEC.md`](../ir/SPEC.md)'s (#113); that it is at a fixed path
-inside the image is this document's, because a path is the only part of it a
-`COPY --from` can name.
+runtime lookup rather than a blocker. What it contains, which IR version it
+describes, and the four calls that read a descriptor with it are
+[`ir/SPEC.md`](../ir/SPEC.md)'s ([A descriptor is readable by a program with no
+bindings](../ir/SPEC.md#a-descriptor-is-readable-by-a-program-with-no-bindings),
+#113); that it is at a fixed path inside the image is this document's, because a
+path is the only part of it a `COPY --from` can name.
+
+The file **MUST** be readable by the [image's user](#the-user) and by any user a
+caller overrides it with, since a generator running as `--user $(id -u)` reads
+the same file. It is a regular file and not a symlink, so a `COPY --from`
+naming it copies bytes.
+
+**Size.** It is small — on the order of **two kilobytes**, because the set
+carries the IR's six `.proto` files stripped of comments and source positions,
+and nothing else. That number is descriptive, not covered: it moves whenever the
+IR grows a field, and no derived image should be sized against it. It is stated
+because "ships a protobuf descriptor set" is otherwise a phrase that could mean
+anything from this to a hundred megabytes of transitively imported schemas, and
+somebody deciding whether to `COPY --from` it into a distroless image is
+entitled to know which.
+
+It is the same file, byte for byte, as the `ir.binpb` asset attached to the
+corresponding release. The image and the release asset are two ways of getting
+one artifact, not two artifacts, and a build that has already fetched one has no
+reason to fetch the other.
 
 A derived image **MAY** copy it out into its own stage and **MUST NOT** modify
 it in place.

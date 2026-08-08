@@ -82,6 +82,24 @@ regardless of the descriptor's IR version and without validating the closed sets
 looking is not consuming, and the descriptor worth reading is usually the one a
 generator refused.
 
+### The published `FileDescriptorSet`
+
+`avrocpb.FileDescriptorSet` is the IR's self-description: `GenerateRequest`'s
+file plus the transitive closure of its imports, in dependency order, computed
+from the descriptors compiled into `avrocpb` rather than from a committed
+`.binpb`. There is no second copy of the IR to keep in step, which is the whole
+point — a hand-produced set goes stale invisibly.
+
+The service files (`generator.proto`, `generate_response.proto`) are
+deliberately absent: `docs/ir/SPEC.md` says the IR defines no service, and #124
+removes both.
+
+`internal/tools/ir-descriptor-set` writes it out, `dagger call ir-descriptor-set`
+is how the pipeline builds `ir.binpb`, `.github/workflows/release.yaml` attaches
+it to each release, and `docs/container/SPEC.md` fixes the path it ships at
+inside the image. `avrocpb/descriptor_set_test.go` is the staleness gate: a new
+`.proto` that nothing in the descriptor's import graph reaches fails there.
+
 ### Plugin Discovery
 
 The CLI scans all directories in `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a corresponding `-<name>_out` CLI flag for specifying its output directory.
