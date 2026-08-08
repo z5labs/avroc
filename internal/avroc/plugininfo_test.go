@@ -126,6 +126,26 @@ func TestParsePluginInfo(t *testing.T) {
 				stdout: `{"name":"go","version":"1","ir_version":1}` + "\ngenerating...\n",
 				names:  "trailing data",
 			},
+			{
+				// The dangerous one, and the reason options is decoded from raw
+				// bytes rather than straight into a pointer: read as an absent
+				// member, a null vocabulary lets every option in the manifest past
+				// a check the plugin looked like it had asked for. A Go plugin with
+				// a nil slice and no encoder set up to omit it emits exactly this.
+				name:   "an options member written as null",
+				stdout: `{"name":"go","version":"1","ir_version":1,"options":null}`,
+				names:  "null",
+			},
+			{
+				name:   "an options member that is not an array",
+				stdout: `{"name":"go","version":"1","ir_version":1,"options":"package_name"}`,
+				names:  "not an array of strings",
+			},
+			{
+				name:   "an options array of something other than strings",
+				stdout: `{"name":"go","version":"1","ir_version":1,"options":[1,2]}`,
+				names:  "not an array of strings",
+			},
 		}
 
 		for _, tc := range testCases {

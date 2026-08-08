@@ -47,11 +47,32 @@ const pluginInfoFlag = "--plugin-info"
 // avroc should pass whatever the manifest declared through and let the plugin
 // decide. Those are opposite instructions, and a plain []string cannot tell them
 // apart.
+//
+// This is the declaration after parsePluginInfo has validated it, not as it
+// arrived — see pluginInfoJSON.
 type pluginInfo struct {
-	Name      *string   `json:"name"`
-	Version   *string   `json:"version"`
-	IRVersion *int32    `json:"ir_version"`
-	Options   *[]string `json:"options"`
+	Name      *string
+	Version   *string
+	IRVersion *int32
+	Options   *[]string
+}
+
+// pluginInfoJSON is the declaration exactly as a plugin wrote it, before any of
+// it has been judged.
+//
+// options is held as raw bytes rather than decoded in place because the two
+// steps answer different questions and JSON's null collapses them. Unmarshalled
+// straight into a *[]string, a member written as null is indistinguishable from
+// one that was never written — and those mean opposite things here, so a plugin
+// with a nil slice and no encoder set up to omit it would silently be read as
+// declining to declare a vocabulary at all, and every option in the manifest
+// would sail past the check. Keeping the bytes is what lets "absent", "null" and
+// "an array" stay three separate answers.
+type pluginInfoJSON struct {
+	Name      *string         `json:"name"`
+	Version   *string         `json:"version"`
+	IRVersion *int32          `json:"ir_version"`
+	Options   json.RawMessage `json:"options"`
 }
 
 // checkGenerators runs docs/plugin/SPEC.md's capability handshake against every
@@ -137,8 +158,8 @@ func queryPluginInfo(ctx context.Context, name, executablePath string) (*pluginI
 func parsePluginInfo(stdout []byte) (*pluginInfo, error) {
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 
-	var info pluginInfo
-	if err := dec.Decode(&info); err != nil {
+	var wire pluginInfoJSON
+	if err := dec.Decode(&wire); err != nil {
 		return nil, fmt.Errorf("it is not a JSON object: %w", err)
 	}
 	// Decode stops after the first JSON value. Standard output carries the
@@ -150,23 +171,63 @@ func parsePluginInfo(stdout []byte) (*pluginInfo, error) {
 	}
 
 	var missing []string
-	if info.Name == nil {
+	if wire.Name == nil {
 		missing = append(missing, "name")
 	}
-	if info.Version == nil {
+	if wire.Version == nil {
 		missing = append(missing, "version")
 	}
-	if info.IRVersion == nil {
+	if wire.IRVersion == nil {
 		missing = append(missing, "ir_version")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("it is missing the required member(s) %s", strings.Join(missing, ", "))
 	}
 
-	if *info.Name == "" {
+	if *wire.Name == "" {
 		return nil, errors.New(`its "name" is empty, and a generator name never is`)
 	}
-	return &info, nil
+
+	options, err := parseDeclaredOptions(wire.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pluginInfo{
+		Name:      wire.Name,
+		Version:   wire.Version,
+		IRVersion: wire.IRVersion,
+		Options:   options,
+	}, nil
+}
+
+// parseDeclaredOptions decodes the options member, returning nil for one the
+// plugin did not write.
+//
+// null is rejected rather than read as either of the two things the member can
+// say. docs/plugin/SPEC.md makes it absent or an array of strings, and null is
+// neither; a plugin that emits it has a bug, and the useful response is to name
+// that bug rather than to guess which meaning was intended. Guessing "absent" is
+// the dangerous guess in particular — it is the reading that lets every option
+// in the manifest past a check the plugin looked like it had asked for.
+func parseDeclaredOptions(raw json.RawMessage) (*[]string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if string(bytes.TrimSpace(raw)) == "null" {
+		return nil, errors.New(`its "options" is null, which is neither an array nor an absent member: declare an array, or omit the member to leave the decision to the plugin`)
+	}
+
+	var options []string
+	if err := json.Unmarshal(raw, &options); err != nil {
+		return nil, fmt.Errorf(`its "options" is not an array of strings: %w`, err)
+	}
+	// Non-nil for an empty array, so that "I accept none" survives the decode as
+	// something other than "I did not say".
+	if options == nil {
+		options = []string{}
+	}
+	return &options, nil
 }
 
 // checkPluginInfo holds a declaration against the generator avroc resolved, the

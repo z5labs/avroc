@@ -498,6 +498,14 @@ plugin — and a plugin that wants avroc out of the decision omits the member
 rather than writing `[]`. A plugin whose vocabulary is genuinely empty needs to
 be able to say so, which is the whole reason the two are not collapsed.
 
+Because they are opposite instructions, a third spelling is a bug rather than a
+third meaning: `"options": null` is neither an array nor an absent member, and
+avroc **MUST** reject it rather than choose one of them (#116). Reading it as
+absent is the reading that does damage — every option in the manifest then goes
+through unchecked, past a check the plugin appeared to have asked for — and a
+plugin holding an empty list in a language that renders one as `null` emits it by
+accident, which is exactly the case a guess would get wrong silently.
+
 avroc **MUST** ignore members it does not recognise, so that a plugin declaring
 more than this version of avroc reads is not thereby broken. That is the
 opposite of what avroc does with an unknown field in a project's `avroc.json`,
