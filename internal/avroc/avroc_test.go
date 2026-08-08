@@ -364,6 +364,20 @@ func testGenerator(t *testing.T, executablePath string) generator {
 	}
 }
 
+// generateOne puts a single generator through the whole of generation — the
+// invocation, the plan, the collision check and the merge — which is the path a
+// run of any size takes. A run of one is where a generator's own behaviour is
+// observable without another generator's timing in the way.
+func generateOne(ctx context.Context, g generator, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) error {
+	return generateAll(ctx, g.log, []genTask{{
+		name:           g.name,
+		executablePath: g.executablePath,
+		output:         output,
+		options:        options,
+		schemas:        schemas,
+	}})
+}
+
 // TestGeneratorGenerate is docs/plugin/SPEC.md's Invocation on the real
 // fork/exec path: the argument vector, the absolute paths in it, the descriptor
 // those paths name, and the files the generator wrote for itself.
@@ -392,7 +406,7 @@ func TestGeneratorGenerate(t *testing.T) {
 	// A directory avroc has to create: a plugin may assume --out exists.
 	outputDir := filepath.Join(t.TempDir(), "gen")
 
-	if err := g.generate(ctx, outputDir, options, schema); err != nil {
+	if err := generateOne(ctx, g, outputDir, options, schema); err != nil {
 		t.Fatal(err)
 	}
 
@@ -503,7 +517,7 @@ exit 3
 	before := descriptorDirs(t)
 
 	outputDir := t.TempDir()
-	err := g.generate(ctx, outputDir, nil, testSchema("User"))
+	err := generateOne(ctx, g, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate accepted a generator that exited non-zero")
 	}
@@ -592,7 +606,7 @@ ln -s '%s' "$out/escape"
 `, elsewhere)))
 
 	outputDir := t.TempDir()
-	err := g.generate(ctx, outputDir, nil, testSchema("User"))
+	err := generateOne(ctx, g, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate merged the output of a generator that escaped its scratch directory")
 	}
@@ -608,6 +622,163 @@ ln -s '%s' "$out/escape"
 	}
 	if len(entries) != 0 {
 		t.Errorf("a refused merge left %v in the output directory", entries)
+	}
+}
+
+// TestGenerateAllRefusesACollision is #118 on the real fork/exec path: two
+// generators that both produce one file fail the run, the report names both of
+// them and the path, and nothing either of them produced is merged.
+//
+// It runs the pair twice, in both manifest orders. Which of two concurrent
+// generators finishes first is not something a test can fix, so what is pinned
+// here is that it cannot matter: the two runs produce the identical report, and
+// each of them leaves the tree it started with.
+func TestGenerateAllRefusesACollision(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	output := t.TempDir()
+
+	// The collision the example manifest is a single edit away from: two
+	// generators emitting .avsc into one directory, each with a file of its own
+	// as well as the one they both claim.
+	json := collidingTask(t, "json", output, "user.avsc", "only-json.avsc")
+	pcf := collidingTask(t, "pcf", output, "user.avsc", "only-pcf.avsc")
+
+	var reports []string
+	for _, tasks := range [][]genTask{{json, pcf}, {pcf, json}} {
+		err := generateAll(ctx, log, tasks)
+		if err == nil {
+			t.Fatalf("generation accepted %q and %q both producing user.avsc", tasks[0].name, tasks[1].name)
+		}
+		for _, want := range []string{"avroc-gen-json", "avroc-gen-pcf", filepath.Join(output, "user.avsc")} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not name %q", err, want)
+			}
+		}
+		reports = append(reports, err.Error())
+
+		// Nothing merged, and no scratch directory left behind either — so the
+		// second run starts from the tree the first one did.
+		entries, readErr := os.ReadDir(output)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("a collision left %v in the output directory", entries)
+		}
+	}
+
+	if reports[0] != reports[1] {
+		t.Errorf("the report depends on the order the generators ran:\n%s\n%s", reports[0], reports[1])
+	}
+}
+
+// TestGenerateAllMergesEveryGenerator is the case a collision is the exception
+// to: two generators writing into one output directory, neither claiming a path
+// the other does, both merged.
+func TestGenerateAllMergesEveryGenerator(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	output := t.TempDir()
+
+	tasks := []genTask{
+		collidingTask(t, "json", output, "user.avsc"),
+		collidingTask(t, "pcf", output, "pcf/user.avsc"),
+	}
+	if err := generateAll(ctx, log, tasks); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"user.avsc", "pcf/user.avsc"} {
+		b, err := os.ReadFile(filepath.Join(output, filepath.FromSlash(name)))
+		if err != nil {
+			t.Errorf("%q did not reach the output tree: %v", name, err)
+			continue
+		}
+		if got := strings.TrimSpace(string(b)); got == "" {
+			t.Errorf("%q is empty", name)
+		}
+	}
+
+	// Both scratch directories are gone, so a tree a person is about to commit
+	// holds only the generated files.
+	entries, err := os.ReadDir(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("the output directory holds %v, want just the two merged paths", entries)
+	}
+}
+
+// TestGenerateAllDiscardsEveryGeneratorWhenOneFails is the other consequence of
+// merging only once every generator has finished: a run is all or nothing, so a
+// generator that exited zero has its output discarded along with the failing
+// one's rather than left in the tree.
+func TestGenerateAllDiscardsEveryGeneratorWhenOneFails(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	output := t.TempDir()
+
+	failing := genTask{
+		name: "avroc-gen-pcf",
+		executablePath: writeNamedShellGenerator(t, "pcf", `echo 'error: com.example.User: nope' >&2
+exit 1
+`),
+		output:  output,
+		schemas: []*avrocpb.Schema{testSchema("User")},
+	}
+
+	err := generateAll(ctx, log, []genTask{collidingTask(t, "json", output, "user.avsc"), failing})
+	if err == nil {
+		t.Fatal("generation succeeded with a generator that exited non-zero")
+	}
+
+	// A half-generated tree is worse than an ungenerated one, so the generator
+	// that succeeded contributes nothing to a run that failed.
+	entries, readErr := os.ReadDir(output)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed run left %v in the output directory", entries)
+	}
+}
+
+// collidingTask is a generator named avroc-gen-<name> that writes one line into
+// each of files and exits zero: the smallest generator that can be made to claim
+// a path another one claims too.
+//
+// Each is its own executable under its own name, because a report naming one of
+// two generators only means anything if the other could have been named instead.
+func collidingTask(t *testing.T, name, output string, files ...string) genTask {
+	t.Helper()
+
+	var writes strings.Builder
+	for _, f := range files {
+		fmt.Fprintf(&writes, "mkdir -p \"$(dirname \"$out/%s\")\"\nprintf '%%s\\n' 'produced by avroc-gen-%s' > \"$out/%s\"\n", f, name, f)
+	}
+
+	body := fmt.Sprintf(`set -e
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) out=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+%s`, writes.String())
+
+	return genTask{
+		name:           "avroc-gen-" + name,
+		executablePath: writeNamedShellGenerator(t, name, body),
+		output:         output,
+		schemas:        []*avrocpb.Schema{testSchema("User")},
 	}
 }
 
@@ -629,7 +800,7 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 	outputDir := t.TempDir()
 	done := make(chan error, 1)
 	go func() {
-		done <- g.generate(ctx, outputDir, nil, testSchema("User"))
+		done <- generateOne(ctx, g, outputDir, nil, testSchema("User"))
 	}()
 
 	// Cancel only once the child is definitely running, so the test is about

@@ -180,7 +180,7 @@ type generator struct {
 // process avroc never started.
 const generatorWaitDelay = 5 * time.Second
 
-// generate runs one generator over one descriptor, as docs/plugin/SPEC.md's
+// run runs one generator over one descriptor, as docs/plugin/SPEC.md's
 // Invocation specifies: fork and exec avroc-gen-<name> with the descriptor and
 // an output directory as absolute paths, and wait for it to exit.
 //
@@ -194,7 +194,15 @@ const generatorWaitDelay = 5 * time.Second
 // scratch directory is discarded, so nothing a failing generator left behind is
 // adopted as output — which is what makes a partially written failure the
 // contract explicitly permits harmless.
-func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
+//
+// What it returns is a plan and not a merge: on a zero exit every file the
+// generator produced is resolved to where it is going, and all of it is still in
+// the scratch directory, which is then the caller's to merge and to remove. The
+// merge waits for every generator because two of them producing the same path is
+// avroc's to detect and has to be detected before either file reaches the
+// project tree (#118). On any failure the directory is removed here, with
+// whatever the generator left in it, and no plan is returned.
+func (g generator) run(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (out *generatorOutput, err error) {
 	desc := newDescriptor(options, schemas)
 
 	// One descriptor file per generator invocation, in a directory created for
@@ -205,7 +213,7 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	descriptorDir, err := os.MkdirTemp("", g.name+"-descriptor-*")
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create descriptor directory", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
 	defer func() {
 		err = errors.Join(err, os.RemoveAll(descriptorDir))
@@ -214,7 +222,7 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	descriptorPath, err := writeDescriptor(descriptorDir, desc)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to write descriptor", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
 
 	// Both paths go across as absolute ones, so that two runs of the same
@@ -222,12 +230,12 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	descriptorPath, err = filepath.Abs(descriptorPath)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to resolve descriptor path", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
 	outputDir, err := filepath.Abs(output)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to resolve output directory", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
 
 	// The project's own output tree, which avroc owns and creates: a generator
@@ -235,7 +243,7 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	// can be made inside it.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		g.log.ErrorContext(ctx, "failed to create output directory", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
 
 	// The directory --out names: private to this invocation, empty, and the only
@@ -243,14 +251,19 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	scratchDir, err := newScratchDir(outputDir, g.name)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create scratch directory", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+		return nil, err
 	}
-	// Removed however this returns — after a successful merge has emptied it, on
-	// a failure with the partial output the contract lets a generator leave
-	// behind still in it, and on cancellation. Registered after the descriptor's
-	// removal so that it unwinds before it, and both after the process has been
-	// waited on rather than while it may still be writing.
+	// Removed here whenever this invocation produces nothing to merge: on a
+	// failure with the partial output the contract lets a generator leave behind
+	// still in it, and on cancellation. A plan returned hands the directory to the
+	// caller instead, because the files stay in it until every generator's output
+	// has been resolved. Registered after the descriptor's removal so that it
+	// unwinds before it, and both after the process has been waited on rather
+	// than while it may still be writing.
 	defer func() {
+		if out != nil {
+			return
+		}
 		err = errors.Join(err, os.RemoveAll(scratchDir))
 	}()
 
@@ -286,27 +299,27 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	// rather than being the one thing avroc swallows.
 	stderr.flush()
 	if runErr != nil {
-		return g.reportFailure(ctx, runErr)
+		return nil, g.reportFailure(ctx, runErr)
 	}
 
 	// Only now, and only because the exit was zero: everything the generator left
-	// in its scratch directory is the output of the run, and this is the one step
-	// that puts it in the project.
-	merged, err := mergeOutput(scratchDir, outputDir)
+	// in its scratch directory is the output of the run. Resolving it is as far as
+	// this goes — nothing of it moves until every generator has got here.
+	files, err := planMerge(scratchDir, outputDir)
 	if err != nil {
-		g.log.ErrorContext(ctx, "failed to merge generated output",
+		g.log.ErrorContext(ctx, "failed to resolve generated output",
 			slog.String("generator", g.name),
 			slog.Any("error", err),
 		)
-		return fmt.Errorf("generator %q: %w", g.name, err)
+		return nil, fmt.Errorf("generator %q: %w", g.name, err)
 	}
 
-	g.log.InfoContext(ctx, "generated output",
-		slog.String("generator", g.name),
-		slog.String("out", outputDir),
-		slog.Any("output_files", merged),
-	)
-	return nil
+	return &generatorOutput{
+		generator: g.name,
+		output:    outputDir,
+		scratch:   scratchDir,
+		files:     files,
+	}, nil
 }
 
 // reportFailure logs and describes an invocation that did not succeed, telling
