@@ -801,9 +801,11 @@ found there and what happens to it.
 
 ### Also out of scope
 
-- **The Dagger module** (#130) that runs avroc for a caller. It is a
-  convenience over this contract rather than a contract of its own; what it
-  needs to say, it says in its module comment and `dagger call --help`.
+- **The Dagger module** (#130) that runs avroc for a caller —
+  [`daggerverse/avroc/`](../../daggerverse/avroc/), published from this
+  repository. It is a convenience over this contract rather than a contract of
+  its own; what it needs to say, it says in its module comment and
+  `dagger call --help`.
 - **What a generator emits.** The files a plugin writes, in what language and
   with what API, are the plugin author's. An image is a delivery mechanism and
   has no opinion about its payload.

@@ -6,6 +6,10 @@
   },
   "dependencies": [
     {
+      "name": "companion",
+      "source": "daggerverse/avroc"
+    },
+    {
       "name": "go",
       "source": "github.com/z5labs/devex/daggerverse/go@47e25f065653c481a6d1567537307f2565bfa316",
       "pin": "47e25f065653c481a6d1567537307f2565bfa316"

@@ -247,6 +247,43 @@ requirements over a copy of the document broken in exactly that way — the same
 shape as `tag-scheme`, and for the same reason: a check whose failure path has
 never run is a check nobody knows the state of.
 
+### The companion Dagger module
+
+`daggerverse/avroc/` is a **second Dagger module**, separate from the root one at
+`.dagger/` and published from this repository for other people's pipelines
+(#130). A caller hands `Generate` a project directory and gets the tree avroc
+left behind back as a `Directory`, having installed nothing and built no image:
+`New` pulls the published base image, `WithGenerator` copies a generator's
+executable out of the image that publishes it — `COPY --from`, without a
+Dockerfile — and `WithGeneratorExecutable` does the same from a `File`, for a
+generator that has no image yet. `Image` exposes what those composed.
+
+It is a **convenience over `docs/container/SPEC.md`, not a contract**, so it gets
+no `SPEC.md` (`docs/CONVENTIONS.md`, "What belongs here"): everything it does can
+be written as `docker run --rm -v "$PWD:/work"`, and a spec for it would imply
+the contract were a property of the module. What it needs to say it says in its
+module comment and in `dagger call --help`. It is a separate module rather than
+more functions on the root one because a caller who installs it should get the
+one function they came for and not this repository's `ci`, `release` and
+`publish`.
+
+The two modules meet at exactly one place, `.dagger/companion_module.go`:
+`dagger call companion-module` composes the three generators into the base image
+the pipeline just built — both ways, from the generator images and from the built
+executables — generates `example/` through the module, and requires the committed
+tree back byte for byte. The images are injected through the module's `--image`
+argument because its defaults name a *released* image, and a check on the last
+release would keep passing through a pull request that broke this one; that is
+the only reason that argument exists, and CI is what uses it. Both compositions
+are checked against the same expected tree, which is what makes them
+interchangeable rather than merely both present.
+
+Its generated code is committed for the same reason the root module's is, and
+`dagger develop -m ./daggerverse/avroc` regenerates it. Note that `dagger
+develop` rewrites `go.mod` from the SDK's template and will lower dependency
+versions Renovate has raised for a security advisory; both modules pin the same
+set, and `git diff -- '*/go.mod'` after a regeneration is what catches it.
+
 ### Releasing the images
 
 `.dagger/release.go` is the whole of a release, and `dagger call release` is the

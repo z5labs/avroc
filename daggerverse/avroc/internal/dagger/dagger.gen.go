@@ -173,9 +173,6 @@ type ClientFilesyncMirrorID string
 type CloudID string
 
 // A unique identifier for an object.
-type CompanionID string
-
-// A unique identifier for an object.
 type ContainerID string
 
 // A unique identifier for an object.
@@ -243,12 +240,6 @@ type GitRefID string
 
 // A unique identifier for an object.
 type GitRepositoryID string
-
-// A unique identifier for an object.
-type GoCiID string
-
-// A unique identifier for an object.
-type GoID string
 
 // A unique identifier for an object.
 type HTTPStateID string
@@ -355,18 +346,6 @@ type Void string
 
 // A unique identifier for an object.
 type WorkspaceID string
-
-// A unique identifier for an object.
-type Z5LabsBuilderID string
-
-// A unique identifier for an object.
-type Z5LabsGoAppID string
-
-// A unique identifier for an object.
-type Z5LabsGoLibID string
-
-// A unique identifier for an object.
-type Z5LabsID string
 
 // Key value object that represents a build argument.
 type BuildArg struct {
@@ -12881,16 +12860,6 @@ func (r *Query) LoadCloudFromID(id CloudID) *Cloud {
 	}
 }
 
-// Load a Companion from its ID.
-func (r *Query) LoadCompanionFromID(id CompanionID) *Companion {
-	q := r.query.Select("loadCompanionFromID")
-	q = q.Arg("id", id)
-
-	return &Companion{
-		query: q,
-	}
-}
-
 // Load a Container from its ID.
 func (r *Query) LoadContainerFromID(id ContainerID) *Container {
 	q := r.query.Select("loadContainerFromID")
@@ -13116,26 +13085,6 @@ func (r *Query) LoadGitRepositoryFromID(id GitRepositoryID) *GitRepository {
 	q = q.Arg("id", id)
 
 	return &GitRepository{
-		query: q,
-	}
-}
-
-// Load a GoCi from its ID.
-func (r *Query) LoadGoCiFromID(id GoCiID) *GoCi {
-	q := r.query.Select("loadGoCiFromID")
-	q = q.Arg("id", id)
-
-	return &GoCi{
-		query: q,
-	}
-}
-
-// Load a Go from its ID.
-func (r *Query) LoadGoFromID(id GoID) *Go {
-	q := r.query.Select("loadGoFromID")
-	q = q.Arg("id", id)
-
-	return &Go{
 		query: q,
 	}
 }
@@ -13435,46 +13384,6 @@ func (r *Query) LoadWorkspaceFromID(id WorkspaceID) *Workspace {
 	q = q.Arg("id", id)
 
 	return &Workspace{
-		query: q,
-	}
-}
-
-// Load a Z5LabsBuilder from its ID.
-func (r *Query) LoadZ5LabsBuilderFromID(id Z5LabsBuilderID) *Z5LabsBuilder {
-	q := r.query.Select("loadZ5LabsBuilderFromID")
-	q = q.Arg("id", id)
-
-	return &Z5LabsBuilder{
-		query: q,
-	}
-}
-
-// Load a Z5Labs from its ID.
-func (r *Query) LoadZ5LabsFromID(id Z5LabsID) *Z5Labs {
-	q := r.query.Select("loadZ5LabsFromID")
-	q = q.Arg("id", id)
-
-	return &Z5Labs{
-		query: q,
-	}
-}
-
-// Load a Z5LabsGoApp from its ID.
-func (r *Query) LoadZ5LabsGoAppFromID(id Z5LabsGoAppID) *Z5LabsGoApp {
-	q := r.query.Select("loadZ5LabsGoAppFromID")
-	q = q.Arg("id", id)
-
-	return &Z5LabsGoApp{
-		query: q,
-	}
-}
-
-// Load a Z5LabsGoLib from its ID.
-func (r *Query) LoadZ5LabsGoLibFromID(id Z5LabsGoLibID) *Z5LabsGoLib {
-	q := r.query.Select("loadZ5LabsGoLibFromID")
-	q = q.Arg("id", id)
-
-	return &Z5LabsGoLib{
 		query: q,
 	}
 }

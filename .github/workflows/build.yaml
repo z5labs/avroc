@@ -146,6 +146,26 @@ jobs:
       - name: Build and run the worked example
         run: dagger call worked-example
 
+      # The companion Dagger module, driven over the example project (#130). It
+      # composes avroc's three generators into the base image this pipeline just
+      # built — both ways the module offers, out of the generator images and out
+      # of the built executables — generates example/ through it, and requires
+      # the committed tree back byte for byte.
+      #
+      # The images are passed in rather than pulled because the module's
+      # defaults name a *released* image: a check on the last release would keep
+      # passing through a pull request that broke this one. That is the whole
+      # reason the module takes an --image argument, and this step is what uses
+      # it.
+      #
+      # It is a step of its own because the module is the one path an adopter
+      # takes without learning the container contract underneath, so a
+      # convenience that has quietly stopped composing fails for somebody with
+      # no reason to know where to look. Nothing else here reads it: the image
+      # checks above drive the images directly and would not notice.
+      - name: Check the companion Dagger module
+        run: dagger call companion-module
+
       # docs/container/SPEC.md's tag table, executed (#128). It runs the same
       # derivation a release runs — refs at HEAD in, published tags out — over
       # the cases that matter: a release, a patch release, a prerelease that

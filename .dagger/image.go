@@ -701,30 +701,43 @@ func generateInImage(image *dagger.Container, example *dagger.Directory, user st
 
 // diffAgainstCommitted requires the generated tree to be byte-identical to the
 // committed worked example.
-//
-// diff rather than a directory digest, for the reason the regeneration stage
-// gives: a digest reports only that something differs, and covers metadata two
-// runs are entitled to disagree about.
 func (m *Avroc) diffAgainstCommitted(
 	ctx context.Context,
 	committed, generated *dagger.Directory,
 	user string,
 ) error {
-	const (
-		committedAt = "/image-contract/committed"
-		generatedAt = "/image-contract/generated"
-	)
-
-	_, err := dag.Go().
-		Container(m.Source).
-		WithMountedDirectory(committedAt, committed).
-		WithMountedDirectory(generatedAt, generated).
-		WithExec([]string{"diff", "--recursive", "--unified", "--text", committedAt, generatedAt}).
-		Sync(ctx)
-	if err != nil {
+	if err := m.diffTrees(ctx, committed, generated, "/image-contract"); err != nil {
 		return fmt.Errorf("as user %s, the image did not reproduce the committed example: %w", user, err)
 	}
 	return nil
+}
+
+// diffTrees requires two directories to be byte-identical, mounting them beneath
+// at so that the paths in the report say which run produced which side.
+//
+// diff rather than a directory digest, for the reason the regeneration stage
+// gives: a digest reports only that something differs, and covers metadata two
+// runs are entitled to disagree about.
+//
+// It is shared by every check in this module that compares a generated tree
+// against a committed one — the image contract's and the companion module's —
+// because what "identical" means here is a property of the trees rather than of
+// which check is asking, and a second copy would be a second chance to compare
+// them less strictly.
+func (m *Avroc) diffTrees(ctx context.Context, want, got *dagger.Directory, at string) error {
+	wantAt := at + "/want"
+	gotAt := at + "/got"
+
+	// --text because every file either generator writes is text, and a diff that
+	// said only "binary files differ" would report the failure without reporting
+	// what it was.
+	_, err := dag.Go().
+		Container(m.Source).
+		WithMountedDirectory(wantAt, want).
+		WithMountedDirectory(gotAt, got).
+		WithExec([]string{"diff", "--recursive", "--unified", "--text", wantAt, gotAt}).
+		Sync(ctx)
+	return err
 }
 
 // checkOutputOwnership requires every file the run produced to be owned by the
