@@ -50,6 +50,29 @@ Every descriptor carries `GenerateRequest.version`, the single monotonic integer
 
 Bumping `ir.Version` is the last step of a breaking change to the IR schema, never a routine one — it strands every generator built against the previous version. `ir.Validate` enforces the other half of the spec's asymmetry: unknown *fields* are ignored (protobuf drops them), unknown *members of a closed set* — type constructor, `TypeRefKind`, `SortOrder` — are rejected.
 
+### The descriptor file
+
+Every generator invocation gets one descriptor file: the `GenerateRequest` — IR
+version, that generator's options, its resolved schemas — encoded by
+`ir.MarshalDescriptor` and written by `internal/avroc.writeDescriptor` into a
+directory created for that invocation alone, read-only, complete before the
+generator starts and removed once it has exited. `docs/plugin/SPEC.md`'s
+"Location and lifetime" is normative; nothing may derive meaning from the path.
+
+The descriptor value is built once and then both written and sent, so the file is
+the value the generator received rather than a second encoding that could drift
+from it. Passing it as `--descriptor` is #114's; until then the same value still
+travels over the gRPC service #124 removes.
+
+**The bytes are deterministic**: two runs over unchanged inputs produce
+byte-identical descriptors, because generated output is a thing a project commits
+and a descriptor that varied would make every regeneration a diff. Every repeated
+field is ordered by the producer before it reaches the encoding — manifest
+options sort by key, schemas follow the manifest's input order — and
+`ir.MarshalDescriptor` marshals deterministically. An unordered collection
+reaching the encoder in Go's map iteration order is the way this gets broken, and
+it breaks intermittently.
+
 ### Plugin Discovery
 
 The CLI scans all directories in `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a corresponding `-<name>_out` CLI flag for specifying its output directory.

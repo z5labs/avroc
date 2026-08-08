@@ -119,6 +119,16 @@ both strings, in an order a producer **MUST** make deterministic so that
 identical inputs produce identical bytes. What any particular name means is the
 generator's, and is [out of scope](#generator-option-meanings).
 
+The whole descriptor carries that requirement, not only its options: two runs
+over unchanged inputs **MUST** produce byte-identical descriptors (#111). It is
+the same promise [`plugin/SPEC.md`](../plugin/SPEC.md)'s determinism section
+makes of a generator's output, one step earlier in the pipeline, and it is needed
+one step earlier because a plugin cannot be deterministic about an input that is
+not — a descriptor that varied would make every regeneration a diff whatever the
+plugins did with it. Every repeated field therefore carries a producer-chosen
+order, and a producer **MUST NOT** let an unordered collection reach the encoding
+in the order it happened to iterate.
+
 A schema is a tree of types, and every type is exactly one member of a closed
 set: the type constructors Avro declares — record, enum, fixed, array, map and
 union — plus a reference, which names either an Avro primitive or a named type

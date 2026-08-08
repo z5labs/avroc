@@ -20,12 +20,10 @@ import (
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
-	"github.com/z5labs/avroc/internal/ir"
 
 	"github.com/z5labs/avro-go/idl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/proto"
 )
 
 // Main dispatches to an avroc subcommand. Generators are declared in an
@@ -149,6 +147,33 @@ type generator struct {
 }
 
 func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
+	desc := newDescriptor(options, schemas)
+
+	// One descriptor file per generator invocation, in a directory created for
+	// that invocation and nothing else, removed once the generator has exited.
+	// docs/plugin/SPEC.md's "Location and lifetime" is normative for all three,
+	// and this defer is registered first so that it unwinds last — after the
+	// generator process has been waited on, never while it may still be reading.
+	descriptorDir, err := os.MkdirTemp("", g.name+"-descriptor-*")
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to create descriptor directory", slog.String("generator", g.name), slog.Any("error", err))
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, os.RemoveAll(descriptorDir))
+	}()
+
+	descriptorPath, err := writeDescriptor(descriptorDir, desc)
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to write descriptor", slog.String("generator", g.name), slog.Any("error", err))
+		return err
+	}
+	// The path is logged and not yet passed: the argument vector that hands it
+	// to the generator is #114's, and until then the same descriptor value
+	// travels over the gRPC service #124 removes. Logging it is what makes the
+	// file findable while it exists.
+	g.log.DebugContext(ctx, "wrote descriptor", slog.String("generator", g.name), slog.String("descriptor", descriptorPath))
+
 	socketFile, err := os.CreateTemp("", g.name+"-*.sock")
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create temporary socket file", slog.String("generator", g.name), slog.Any("error", err))
@@ -199,14 +224,7 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	// No overall RPC timeout: a large streamed generation can legitimately run
 	// long. Cancellation flows from the signal-based parent context instead.
 	client := avrocpb.NewGeneratorClient(cc)
-	stream, err := client.Generate(ctx, &avrocpb.GenerateRequest{
-		// Every descriptor avroc emits carries the version of the contract it
-		// was written against, so a generator built against an IR avroc has
-		// since moved past can say so instead of misreading the schemas.
-		Version: proto.Int32(ir.Version),
-		Options: options,
-		Schemas: schemas,
-	})
+	stream, err := client.Generate(ctx, desc)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to generate code", slog.String("generator", g.name), slog.Any("error", err))
 		return err
