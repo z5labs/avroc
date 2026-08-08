@@ -44,6 +44,12 @@ go test -v ./...
 
 Generators are handed **resolved** schemas (`docs/ir/SPEC.md`). `internal/avroc/resolve.go` is the only place that qualifies a namespace, knows Avro's primitive list, or decides where a named type is written out in full versus referred to by name. Every named type carries `full_name`; every type reference is a `Reference` stating its `kind`. A generator that re-derives any of this is a bug.
 
+### The IR version
+
+Every descriptor carries `GenerateRequest.version`, the single monotonic integer `docs/ir/SPEC.md` specifies. `internal/ir.Version` is the constant avroc stamps on and every generator here understands; `ir.CheckVersion` is the **first** thing a generator's `Generate` does, before options and before any schema, so a descriptor from a contract the generator does not know fails the invocation instead of being read for the parts that look familiar.
+
+Bumping `ir.Version` is the last step of a breaking change to the IR schema, never a routine one — it strands every generator built against the previous version. `ir.Validate` enforces the other half of the spec's asymmetry: unknown *fields* are ignored (protobuf drops them), unknown *members of a closed set* — type constructor, `TypeRefKind`, `SortOrder` — are rejected.
+
 ### Plugin Discovery
 
 The CLI scans all directories in `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a corresponding `-<name>_out` CLI flag for specifying its output directory.

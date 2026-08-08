@@ -20,6 +20,13 @@ type generatorService struct {
 // Generate implements the Generator gRPC service method, streaming each
 // generated file back to avroc, which performs the filesystem writes.
 func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
+	// The version comes first, before a single schema is looked at. A descriptor
+	// written against a contract this generator does not know is not one to read
+	// the recognisable parts of.
+	if err := ir.CheckVersion(req.GetVersion()); err != nil {
+		return err
+	}
+
 	for _, schema := range req.Schemas {
 		filename, content, err := buildSchemaFile(schema)
 		if err != nil {
@@ -203,6 +210,10 @@ func recordToJSON(r *avrocpb.Record) (avroRecord, error) {
 }
 
 func fieldToJSON(f *avrocpb.Field) (avroField, error) {
+	// Ascending is Avro's default and is written by omitting the attribute, so
+	// it shares the zero value of order here. Validate has already established
+	// that the sort order is one of the three, so falling through to ascending
+	// cannot silently swallow a member this generator does not know.
 	var order string
 	switch f.GetSortOrder() {
 	case avrocpb.SortOrder_SORT_ORDER_DESC:

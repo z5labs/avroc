@@ -26,9 +26,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// The request message for the Generate RPC method.
+// The request message for the Generate RPC method. It is the descriptor
+// docs/ir/SPEC.md specifies: the version identifying the contract it was
+// written against, the options for the invocation it belongs to, and the
+// resolved schemas.
 type GenerateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// The IR contract version this descriptor was written against: a single
+	// monotonic integer, never a major and a minor. The only question a
+	// consumer can act on is whether it understands the descriptor in front of
+	// it, and a minor number exists to let it answer "not entirely, but I will
+	// continue anyway".
+	//
+	// A producer MUST set it on every descriptor it emits. A consumer MUST read
+	// it before processing anything else, and MUST refuse a version it does not
+	// know — failing the invocation with a diagnostic naming the version it
+	// found and the version it understands — rather than proceeding on the
+	// parts it recognises.
+	//
+	// Zero is never emitted by a conforming producer. Field number 3 rather
+	// than 1 only because 1 and 2 were already assigned; the number carries no
+	// meaning and says nothing about the order a consumer reads fields in.
+	Version *int32 `protobuf:"varint,3,opt,name=version" json:"version,omitempty"`
 	// Options to customize the code generation process.
 	Options []*Option `protobuf:"bytes,1,rep,name=options" json:"options,omitempty"`
 	// The Avro schemas to be generate code for.
@@ -67,6 +86,13 @@ func (*GenerateRequest) Descriptor() ([]byte, []int) {
 	return file_generate_request_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *GenerateRequest) GetVersion() int32 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
 func (x *GenerateRequest) GetOptions() []*Option {
 	if x != nil {
 		return x.Options
@@ -85,8 +111,9 @@ var File_generate_request_proto protoreflect.FileDescriptor
 
 const file_generate_request_proto_rawDesc = "" +
 	"\n" +
-	"\x16generate_request.proto\x1a\fschema.proto\x1a\foption.proto\"W\n" +
-	"\x0fGenerateRequest\x12!\n" +
+	"\x16generate_request.proto\x1a\fschema.proto\x1a\foption.proto\"q\n" +
+	"\x0fGenerateRequest\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\x12!\n" +
 	"\aoptions\x18\x01 \x03(\v2\a.OptionR\aoptions\x12!\n" +
 	"\aschemas\x18\x02 \x03(\v2\a.SchemaR\aschemasB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
 

@@ -20,6 +20,14 @@ type generatorService struct {
 // Generate implements the Generator gRPC service method, streaming each
 // generated file back to avroc, which performs the filesystem writes.
 func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
+	// The version comes first, before the options and before a single schema is
+	// looked at. A descriptor written against a contract this generator does not
+	// know is not one to read the recognisable parts of, and complaining about a
+	// type is no use to a user whose real problem is a generator that is too old.
+	if err := ir.CheckVersion(req.GetVersion()); err != nil {
+		return err
+	}
+
 	var packageName string
 	var encoding string
 	for _, opt := range req.GetOptions() {

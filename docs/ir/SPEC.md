@@ -158,6 +158,41 @@ document it was never entitled to read, so what a user sees is a complaint
 about a type they cannot fix instead of a plugin that is too old for the avroc
 in front of it.
 
+### The version this document specifies, and when it advances
+
+The version is **1**. A producer **MUST** write 1, and a consumer built against
+this document **MUST** accept 1 and refuse every other value.
+
+Zero is not a version and a producer **MUST NOT** write it. An absent integer
+field decodes as zero, so reserving it is what makes a descriptor that carries
+no version at all — one written by a producer predating this section, or one
+whose version was lost in transit — refuse in exactly the same way as one from
+a contract too new to read. A consumer **SHOULD** say which of the two it
+found, because "carries no version" and "is version 9" send a user to
+different places.
+
+The version advances by **exactly one**, to the next integer, when a change is
+breaking in the sense [Compatibility](#compatibility) defines, and at no other
+time. Concretely, it advances when the IR schema removes a field or reuses its
+number, changes what an existing field means, narrows or widens the values a
+field may hold, or adds a member to a closed set — a type constructor, a
+reference kind, a sort order. It does not advance for a field a consumer can
+ignore and still handle the descriptor correctly, which is the whole of what
+makes an additive change free.
+
+One bump covers every breaking change since the last released version, because
+the integer identifies a contract rather than an edit. A version already
+advanced and not yet released absorbs the next breaking change without
+advancing again; advancing per edit would number contracts nobody ever built
+against, and a consumer's refusal would then name a version that never
+existed.
+
+The bump is the last step of a breaking change and not a routine one. A
+producer and a consumer disagreeing about this integer is the *designed*
+outcome — it is how a plugin too old for the avroc in front of it says so —
+so raising it strands every generator built against the version before it
+until each is rebuilt.
+
 ### What this version is not
 
 It is not avroc's release version, and it is not the Go module tag of the

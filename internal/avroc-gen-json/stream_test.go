@@ -12,8 +12,10 @@ import (
 	"testing"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/internal/ir"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // captureStream is a server stream that records the GenerateResponse chunks a
@@ -42,6 +44,16 @@ type genResult struct {
 // would, returning their full paths in emission order.
 func generateToDir(t *testing.T, svc *generatorService, dir string, req *avrocpb.GenerateRequest) (*genResult, error) {
 	t.Helper()
+
+	// avroc stamps every descriptor it emits with the IR version, so a request
+	// built in a test without one is a test artefact rather than the case under
+	// test. Defaulting it here keeps the version rule tested where it is the
+	// subject — see TestGenerateRejectsUnknownIRVersion — instead of restated at
+	// every call site. A test that sets a version of its own keeps it.
+	if req.GetVersion() == 0 {
+		req = proto.CloneOf(req)
+		req.Version = proto.Int32(ir.Version)
+	}
 
 	cs := &captureStream{ctx: context.Background()}
 	if err := svc.Generate(req, cs); err != nil {

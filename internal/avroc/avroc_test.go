@@ -8,6 +8,7 @@ package avroc
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/z5labs/avroc/internal/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
+	"github.com/z5labs/avroc/internal/ir"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -272,7 +274,16 @@ type testGeneratorServer struct {
 	path string
 }
 
-func (s *testGeneratorServer) Generate(_ *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
+func (s *testGeneratorServer) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
+	// This stand-in generator holds avroc to the producer half of
+	// docs/ir/SPEC.md's version rule, on the real client path rather than on a
+	// request a test constructed: if avroc stops stamping every descriptor it
+	// emits, TestGeneratorGenerate fails here with the reason rather than
+	// somewhere downstream with a missing file.
+	if err := ir.CheckVersion(req.GetVersion()); err != nil {
+		return fmt.Errorf("avroc emitted a descriptor this generator will not read: %w", err)
+	}
+
 	path := s.path
 	if path == "" {
 		path = "output.go"
