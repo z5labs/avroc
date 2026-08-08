@@ -370,6 +370,13 @@ diagnostic that needs more than one line **MUST** be written as one `error:` or
 fully-qualified name of the schema or field it is about, because that is the
 only location a plugin has: it never sees the `.avdl` a user wrote.
 
+The severity **MUST** open the line, the separator **MUST** be a colon and a
+single space, and the message **MUST NOT** be empty. Each of those is what tells
+a diagnostic from the ordinary output of a program that also writes to standard
+error: a line indented under a stack trace, an `error:something` with no space,
+and a bare `error: ` say nothing a level could be attached to, and avroc treats
+all three as text rather than guessing (#115).
+
 ```
 error: com.example.User.created_at: logical type "duration" is not supported
 note: com.example.User.created_at: declared as fixed(12)
@@ -382,6 +389,13 @@ discarded and never held back until the process exits: an unrecognised line is
 usually a panic, a stack trace or a library writing to stderr on its own
 account, and those are exactly what a user needs to see when a generator fails
 in a way its author did not anticipate.
+
+The levels are `error:` to error, `warning:` to warning and `note:` to info. A
+line that is not a diagnostic is recorded at **warning**, one level above the
+`note:` a plugin writes deliberately — info is where a log is ordinarily
+threshold-ed, so a handler configured a notch above it would drop exactly the
+panic this rule exists to surface, and a line avroc could not classify is not one
+to file under the mildest severity it has.
 
 A plugin that writes an `error:` diagnostic **MUST** exit non-zero, and a plugin
 that exits non-zero **SHOULD** write at least one `error:` diagnostic saying

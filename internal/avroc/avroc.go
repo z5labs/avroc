@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -186,6 +187,11 @@ const generatorWaitDelay = 5 * time.Second
 // There is no socket, no client and no stream. The generator writes its own
 // files beneath output and says what went wrong on stderr; a zero exit is the
 // whole of the success signal.
+//
+// Anything else fails the run, and nothing the generator left behind is adopted
+// as output. Discarding a private scratch directory rather than merging it is
+// that same rule once #117 gives a generator one; today --out is the project's
+// own directory and there is no merge step to withhold.
 func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
 	desc := newDescriptor(options, schemas)
 
@@ -246,16 +252,68 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 	// never through the "-" form the contract also allows.
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Standard error is the diagnostic channel, so it is read rather than
+	// inherited: every line lands in avroc's structured log, attributed to the
+	// generator that wrote it. An io.Writer rather than a StderrPipe on purpose
+	// — exec copies into it from a goroutine that WaitDelay bounds, where a pipe
+	// read of avroc's own would hang on a grandchild holding the descriptor open
+	// and never reach the Wait that gives up on it.
+	stderr := newStderrDiagnostics(ctx, g.log, g.name)
+	cmd.Stderr = stderr
 	cmd.WaitDelay = generatorWaitDelay
 
-	if err := cmd.Run(); err != nil {
-		g.log.ErrorContext(ctx, "generator failed", slog.String("generator", g.name), slog.Any("error", err))
-		return fmt.Errorf("generator %q failed: %w", g.name, err)
+	runErr := cmd.Run()
+	// After the wait, so that the copy is finished and the last line — which a
+	// generator killed mid-write may have left without its newline — is recorded
+	// rather than being the one thing avroc swallows.
+	stderr.flush()
+	if runErr != nil {
+		return g.reportFailure(ctx, runErr)
 	}
 
 	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.String("out", outputDir))
 	return nil
+}
+
+// reportFailure logs and describes an invocation that did not succeed, telling
+// docs/plugin/SPEC.md's three cases apart.
+//
+// A generator terminated by a signal is named as terminated by that signal, and
+// distinguishably from one that exited non-zero, because the two need different
+// responses: a non-zero exit is a bug in the generator, while a signal is
+// usually the run being cancelled or the machine running out of memory. A report
+// that flattened them would send the user looking in the wrong place. The third
+// case is a generator that never ran at all — a file that lost its execute bit
+// between discovery and invocation — which is neither.
+//
+// No meaning is attached to a particular non-zero value beyond failure. The
+// small integers are already spoken for by parties this contract does not
+// control, so the code is reported and nothing is concluded from it.
+func (g generator) reportFailure(ctx context.Context, runErr error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(runErr, &exitErr) {
+		g.log.ErrorContext(ctx, "failed to run generator",
+			slog.String("generator", g.name),
+			slog.Any("error", runErr),
+		)
+		return fmt.Errorf("generator %q failed to run: %w", g.name, runErr)
+	}
+
+	if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		signal := status.Signal()
+		g.log.ErrorContext(ctx, "generator terminated by signal",
+			slog.String("generator", g.name),
+			slog.String("signal", signal.String()),
+			slog.Int("signal_number", int(signal)),
+		)
+		return fmt.Errorf("generator %q was terminated by signal %s (%d): %w", g.name, signal, int(signal), runErr)
+	}
+
+	g.log.ErrorContext(ctx, "generator exited non-zero",
+		slog.String("generator", g.name),
+		slog.Int("exit_code", exitErr.ExitCode()),
+	)
+	return fmt.Errorf("generator %q exited with status %d: %w", g.name, exitErr.ExitCode(), runErr)
 }
 
 // generatorArgs builds the argument vector docs/plugin/SPEC.md specifies:
