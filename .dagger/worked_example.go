@@ -701,10 +701,18 @@ func parseCopy(args string) (dockerfileCopy, error) {
 // entry is the owner and mode the copied file lands with, as the filesystem
 // check expects to find it.
 //
-// Both have to be stated by the document for this to be answerable at all: a
-// COPY with no --chmod lands the source's mode, which is a property of the
-// build stage rather than of anything committed, and a check that guessed it
-// would pass on an image whose plugin is not executable.
+// The two are not symmetric, because only one of them can be inferred. A COPY
+// with no --chown lands the file root-owned, which is a fact about COPY and is
+// what this returns — docs/container/SPEC.md permits a world-executable
+// root-owned plugin as well as the chowned one the example writes, so an
+// example that dropped the flag is still an example this check can judge. A
+// COPY with no --chmod lands the *source's* mode, which is a property of the
+// build stage rather than of anything the document states, so there is nothing
+// to infer: it is an error, since a check that guessed would pass on an image
+// whose plugin is not executable.
+//
+// A --chown that is stated has to be numeric, for the image's own reason: there
+// is no passwd file in it for a name to resolve against.
 func (c dockerfileCopy) entry() (imageEntry, error) {
 	entry := imageEntry{mode: c.chmod}
 	if c.chmod == 0 {
