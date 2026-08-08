@@ -254,7 +254,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg image", err))
 				}
 			}
-			return (*Avroc).WithGenerator(&parent, name, image), nil
+			return (*Avroc).WithGenerator(&parent, name, image)
 		case "WithGeneratorExecutable":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -275,7 +275,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg executable", err))
 				}
 			}
-			return (*Avroc).WithGeneratorExecutable(&parent, name, executable), nil
+			return (*Avroc).WithGeneratorExecutable(&parent, name, executable)
 		case "":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)

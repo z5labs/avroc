@@ -10,7 +10,7 @@ import (
 )
 
 // Retrieve the binding value, as type Companion
-func (r *Binding) AsCompanion() *Companion { // companion (../../../daggerverse/avroc/main.go:103:6)
+func (r *Binding) AsCompanion() *Companion { // companion (../../../daggerverse/avroc/main.go:104:6)
 	q := r.query.Select("asCompanion")
 
 	return &Companion{
@@ -24,7 +24,7 @@ func (r *Binding) AsCompanion() *Companion { // companion (../../../daggerverse/
 // Every function on it is either a builder returning a new Avroc or a terminal
 // that runs something, so a call chain reads as the image being assembled and
 // then used; nothing here mutates.
-type Companion struct { // companion (../../../daggerverse/avroc/main.go:103:6)
+type Companion struct { // companion (../../../daggerverse/avroc/main.go:104:6)
 	query *querybuilder.Selection
 
 	id *ID
@@ -52,7 +52,7 @@ type CompanionGenerateOpts struct {
 	// back is exported by the engine as whoever runs the export. Set it when the
 	// output has to arrive owned by a particular UID.
 	//
-	User string // companion (../../../daggerverse/avroc/main.go:258:2)
+	User string // companion (../../../daggerverse/avroc/main.go:266:2)
 }
 
 // Generate runs `avroc generate` over a project and returns the tree it left
@@ -70,7 +70,7 @@ type CompanionGenerateOpts struct {
 // Nothing is passed to avroc but the subcommand. The manifest is the sole source
 // of inputs, generators and their options, and a flag here that could override
 // any of it would be a second place a project's generation is configured.
-func (r *Companion) Generate(source *Directory, opts ...CompanionGenerateOpts) *Directory { // companion (../../../daggerverse/avroc/main.go:248:1)
+func (r *Companion) Generate(source *Directory, opts ...CompanionGenerateOpts) *Directory { // companion (../../../daggerverse/avroc/main.go:256:1)
 	assertNotNil("source", source)
 	q := r.query.Select("generate")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -142,7 +142,7 @@ func (r *Companion) UnmarshalJSON(bs []byte) error {
 // Publishing one is a reasonable thing to do — it is the same image a Dockerfile
 // would have produced — but it is not a release of avroc and carries none of the
 // signatures or attestations one does.
-func (r *Companion) Image() *Container { // companion (../../../daggerverse/avroc/main.go:229:1)
+func (r *Companion) Image() *Container { // companion (../../../daggerverse/avroc/main.go:237:1)
 	q := r.query.Select("image")
 
 	return &Container{
@@ -157,7 +157,7 @@ type CompanionWithGeneratorOpts struct {
 	// generator image for name. Any image carrying the generator in the plugin
 	// directory will do, including one that is not published.
 	//
-	Image *Container // companion (../../../daggerverse/avroc/main.go:183:2)
+	Image *Container // companion (../../../daggerverse/avroc/main.go:184:2)
 }
 
 // WithGenerator adds one generator to the image by copying its executable out of
@@ -170,7 +170,7 @@ type CompanionWithGeneratorOpts struct {
 //
 // Repeated calls compose, so a project whose manifest names three generators is
 // three calls and one image.
-func (r *Companion) WithGenerator(name string, opts ...CompanionWithGeneratorOpts) *Companion { // companion (../../../daggerverse/avroc/main.go:174:1)
+func (r *Companion) WithGenerator(name string, opts ...CompanionWithGeneratorOpts) *Companion { // companion (../../../daggerverse/avroc/main.go:175:1)
 	q := r.query.Select("withGenerator")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `image` optional argument
@@ -195,7 +195,7 @@ func (r *Companion) WithGenerator(name string, opts ...CompanionWithGeneratorOpt
 // example states as `CGO_ENABLED=0`, and it is the caller's to meet: nothing here
 // can check it, and a dynamically linked generator fails at exec time with the
 // kernel's message rather than avroc's.
-func (r *Companion) WithGeneratorExecutable(name string, executable *File) *Companion { // companion (../../../daggerverse/avroc/main.go:201:1)
+func (r *Companion) WithGeneratorExecutable(name string, executable *File) *Companion { // companion (../../../daggerverse/avroc/main.go:205:1)
 	assertNotNil("executable", executable)
 	q := r.query.Select("withGeneratorExecutable")
 	q = q.Arg("name", name)
@@ -215,7 +215,7 @@ func (r *Companion) AsNode() Node {
 }
 
 // Create or update a binding of type Companion in the environment
-func (r *Env) WithCompanionInput(name string, value *Companion, description string) *Env { // companion (../../../daggerverse/avroc/main.go:103:6)
+func (r *Env) WithCompanionInput(name string, value *Companion, description string) *Env { // companion (../../../daggerverse/avroc/main.go:104:6)
 	assertNotNil("value", value)
 	q := r.query.Select("withCompanionInput")
 	q = q.Arg("name", name)
@@ -228,7 +228,7 @@ func (r *Env) WithCompanionInput(name string, value *Companion, description stri
 }
 
 // Declare a desired Companion output to be assigned in the environment
-func (r *Env) WithCompanionOutput(name string, description string) *Env { // companion (../../../daggerverse/avroc/main.go:103:6)
+func (r *Env) WithCompanionOutput(name string, description string) *Env { // companion (../../../daggerverse/avroc/main.go:104:6)
 	q := r.query.Select("withCompanionOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -248,7 +248,7 @@ type CompanionOpts struct {
 	//
 	//
 	// Default: "v0"
-	Version string // companion (../../../daggerverse/avroc/main.go:135:2)
+	Version string // companion (../../../daggerverse/avroc/main.go:136:2)
 	//
 	// The registry repository the images are pulled from, as `<host>/<path>` with
 	// no tag. The generator images derive from it by the rule this project
@@ -262,7 +262,7 @@ type CompanionOpts struct {
 	//
 	//
 	// Default: "ghcr.io/z5labs/avroc"
-	Repository string // companion (../../../daggerverse/avroc/main.go:147:2)
+	Repository string // companion (../../../daggerverse/avroc/main.go:148:2)
 	//
 	// Run in this image instead of pulling one. It has to keep the promises
 	// docs/container/SPEC.md makes — avroc as the entrypoint, the plugin directory
@@ -272,7 +272,7 @@ type CompanionOpts struct {
 	// just built rather than against the last release, and how a caller tries a
 	// change to avroc before it ships.
 	//
-	Image *Container // companion (../../../daggerverse/avroc/main.go:156:2)
+	Image *Container // companion (../../../daggerverse/avroc/main.go:157:2)
 }
 
 // New selects the avroc release to run.
@@ -283,7 +283,7 @@ type CompanionOpts struct {
 // one WithGenerator call. That is one call more than a bundle image would cost
 // and it is deliberate: which generators are in the image is the caller's
 // manifest, and an image that shipped all of them would decide it for them.
-func (r *Query) Companion(opts ...CompanionOpts) *Companion { // companion (../../../daggerverse/avroc/main.go:128:1)
+func (r *Query) Companion(opts ...CompanionOpts) *Companion { // companion (../../../daggerverse/avroc/main.go:129:1)
 	q := r.query.Select("companion")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `version` optional argument

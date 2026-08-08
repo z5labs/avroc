@@ -65,6 +65,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -181,7 +182,10 @@ func (m *Avroc) WithGenerator(
 	// directory will do, including one that is not published.
 	// +optional
 	image *dagger.Container,
-) *Avroc {
+) (*Avroc, error) {
+	if err := checkGeneratorName(name); err != nil {
+		return nil, err
+	}
 	if image == nil {
 		image = dag.Container().From(m.Repository + "-gen-" + name + ":" + m.Version)
 	}
@@ -205,7 +209,11 @@ func (m *Avroc) WithGeneratorExecutable(
 	name string,
 	// The generator executable.
 	executable *dagger.File,
-) *Avroc {
+) (*Avroc, error) {
+	if err := checkGeneratorName(name); err != nil {
+		return nil, err
+	}
+
 	// Permissions rather than an owner: the mode is what makes the file runnable,
 	// by the image's own UID and by any UID a caller overrides it with, and the
 	// owner it would otherwise be given is a property of the image this module was
@@ -216,7 +224,7 @@ func (m *Avroc) WithGeneratorExecutable(
 		executable,
 		dagger.ContainerWithFileOpts{Permissions: executableMode},
 	)
-	return &next
+	return &next, nil
 }
 
 // Image is the composed image, for a caller who wants to do something with it
@@ -280,11 +288,17 @@ func (m *Avroc) Generate(
 		workdir = projectDir
 	}
 
+	// WithWorkdir as well as mounting there, because the two are only the same
+	// call when the image already declared one. An image that declared none runs
+	// from / — where there is no avroc.json — and the mount alone would leave the
+	// project somewhere avroc never looks.
+	//
 	// UseEntrypoint, so this is the same invocation as
 	// `docker run --rm -v "$PWD:/work" <image> generate`: the arguments are
 	// avroc's, and nothing here names the CLI by path.
 	return c.
 		WithDirectory(workdir, source, dagger.ContainerWithDirectoryOpts{Owner: owner}).
+		WithWorkdir(workdir).
 		WithExec([]string{"generate"}, dagger.ContainerWithExecOpts{UseEntrypoint: true}).
 		Directory(workdir), nil
 }
@@ -294,4 +308,34 @@ func (m *Avroc) Generate(
 // module knows about the plugin contract.
 func generatorExecutable(name string) string {
 	return "avroc-gen-" + name
+}
+
+// checkGeneratorName enforces docs/plugin/SPEC.md's rule on a generator name:
+// non-empty, and no `/`.
+//
+// It is checked here because name is interpolated into a path in the image and
+// into an image reference, and neither failure says what went wrong. A name with
+// a separator writes the executable to a directory that is not on PATH, and the
+// run then fails much later, at the capability handshake, complaining that a
+// generator the caller plainly asked for cannot be found; an empty one produces
+// `avroc-gen-`, which is a filename avroc will never search for. A `..` needs no
+// rule of its own, because without a separator it cannot leave the plugin
+// directory.
+//
+// That rule and no more. docs/plugin/SPEC.md's preference for lowercase ASCII,
+// digits and hyphens is a **SHOULD** — a convention about names that are easy to
+// type, not a constraint on what avroc will run — and a module that refused a
+// name avroc would have resolved would be making the contract smaller from the
+// outside.
+func checkGeneratorName(name string) error {
+	switch {
+	case name == "":
+		return errors.New("a generator name is required: it is the <name> in avroc-gen-<name>, which is what avroc resolves on PATH")
+	case strings.Contains(name, "/"):
+		return fmt.Errorf(
+			"generator name %q contains a /: a name is a single filename component (docs/plugin/SPEC.md), and one carrying a path separator would put the executable somewhere avroc never searches",
+			name,
+		)
+	}
+	return nil
 }
