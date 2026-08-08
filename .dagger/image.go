@@ -164,11 +164,11 @@ func (m *Avroc) Image(
 // platform in imagePlatforms, and returns the digest-qualified reference it
 // pushed.
 //
-// address carries the tag, because which tags exist and when each one moves is
-// docs/container/SPEC.md's "Tags and what pinning one buys" rather than this
-// function's: a function that assembled a tag from the refs at HEAD would be a
-// second place the tag scheme is written down. The caller names the reference
-// and this pushes exactly it.
+// address carries the tag, because this function's job is to push one reference
+// and not to decide which references exist. Which tags a release carries is
+// Release's, derived from the refs at HEAD in one place (#128); this is what a
+// person calls to put an image on a test registry, and what Release calls once
+// per tag.
 //
 // One index rather than one image per platform, so that a `FROM` line naming the
 // tag resolves to the manifest for whatever platform the builder is on, which is

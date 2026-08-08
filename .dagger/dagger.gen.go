@@ -391,6 +391,76 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return nil, (*Avroc).Regeneration(&parent, ctx, platform)
+		case "Release":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var gitDir *dagger.Directory
+			if inputArgs["gitDir"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["gitDir"]), &gitDir)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg gitDir", err))
+				}
+			}
+			var repository string
+			if inputArgs["repository"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["repository"]), &repository)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg repository", err))
+				}
+			}
+			var username string
+			if inputArgs["username"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["username"]), &username)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
+				}
+			}
+			var password *dagger.Secret
+			if inputArgs["password"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg password", err))
+				}
+			}
+			var idTokenRequestUrl string
+			if inputArgs["idTokenRequestUrl"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["idTokenRequestUrl"]), &idTokenRequestUrl)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg idTokenRequestUrl", err))
+				}
+			}
+			var idTokenRequestToken *dagger.Secret
+			if inputArgs["idTokenRequestToken"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["idTokenRequestToken"]), &idTokenRequestToken)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg idTokenRequestToken", err))
+				}
+			}
+			var builder string
+			if inputArgs["builder"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["builder"]), &builder)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg builder", err))
+				}
+			}
+			var invocation string
+			if inputArgs["invocation"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["invocation"]), &invocation)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg invocation", err))
+				}
+			}
+			return (*Avroc).Release(&parent, ctx, gitDir, repository, username, password, idTokenRequestUrl, idTokenRequestToken, builder, invocation)
+		case "TagScheme":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			return nil, (*Avroc).TagScheme(&parent)
 		case "Test":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)

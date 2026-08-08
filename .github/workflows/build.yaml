@@ -129,6 +129,19 @@ jobs:
       - name: Check the generator images against the contract
         run: dagger call generator-image-contract
 
+      # docs/container/SPEC.md's tag table, executed (#128). It runs the same
+      # derivation a release runs — refs at HEAD in, published tags out — over
+      # the cases that matter: a release, a patch release, a prerelease that
+      # must move none of the tags a derived Dockerfile pins, and the several
+      # shapes of ref that are not a release at all.
+      #
+      # It is here rather than at release time because a release is the one run
+      # where finding out is too late: a published version tag is never
+      # repointed, so a tag that moved when it should not have is a mistake this
+      # project's own contract forbids it from correcting.
+      - name: Check the tag scheme
+        run: dagger call tag-scheme
+
       # The one artifact this repository builds, built on every pull request
       # rather than only at release time. Its contents are asserted by the tests
       # `dagger call ci` just ran — that the set covers proto/, resolves on its

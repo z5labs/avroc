@@ -89,9 +89,30 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" <image> gener
 ```
 
 `dagger call publish --address …` and `dagger call publish-generator --name …
---address …` push multi-platform indexes. Nothing but
-[`.github/workflows/release.yaml`](.github/workflows/release.yaml) should call
-either.
+--address …` push one multi-platform index to the reference you give them, which
+is how to put an image on a registry of your own.
+
+A **release** is `dagger call release`, and it is the only thing
+[`.github/workflows/release.yaml`](.github/workflows/release.yaml) calls. Do not
+run it by hand: it publishes every tag
+[`docs/container/SPEC.md`](docs/container/SPEC.md) gives the release, and a
+published version tag is one this project promises never to repoint. What it
+publishes is decided from the refs at HEAD rather than from anything the workflow
+says — a single canonical version tag is a release, a prerelease moves none of
+the tags a derived Dockerfile pins, and anything else publishes nothing.
+
+That derivation is the one part of a release worth checking before there is one,
+so it is a stage of its own:
+
+```sh
+dagger call tag-scheme
+```
+
+Each published digest is signed with `cosign` keyless, with a SLSA provenance
+statement and an SPDX SBOM per executable per platform attached beside it. There
+is no avroc signing key: the identity is the release workflow, certified per run
+from the OIDC token GitHub mints for it. `docs/container/SPEC.md`'s [Verifying a
+signature](docs/container/SPEC.md#verifying-a-signature) is the consumer's half.
 
 ### Getting the tools
 

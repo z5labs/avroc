@@ -223,9 +223,32 @@ each image generating with its own generator through the inherited entrypoint,
 and the combined image reproducing the committed `example/` byte for byte as 65532
 and as an overridden UID. CI runs both on every pull request;
 `dagger call publish --address <ref>` and `dagger call publish-generator --name
-<name> --address <ref>` push multi-platform indexes and are called only from
-`.github/workflows/release.yaml`, which reads the set of generators from
-`dagger call builtin-generators` rather than repeating it in YAML.
+<name> --address <ref>` push one multi-platform index to the reference they are
+given, and are what a person calls to put an image on a test registry.
+
+### Releasing the images
+
+`.dagger/release.go` is the whole of a release, and `dagger call release` is the
+one call `.github/workflows/release.yaml` makes (#128). **Whether this commit is
+a release, and which tags it carries, is decided by the module from the refs at
+HEAD** — never by an `if:` on a job and never by a tag assembled in YAML, because
+a workflow that decided would be a second place `docs/container/SPEC.md`'s tag
+table lives, in a file exercised once per release. A single canonical version tag
+at HEAD is a release; a prerelease publishes only its own tag and moves none of
+the others; two version tags is an error. `dagger call tag-scheme` runs that
+derivation over a table of cases on every pull request, with every expected tag
+written as a literal so the check cannot move with the constant it is checking.
+
+Each published digest is then signed with `cosign`, keyless: the identity is the
+release workflow, certified per run by the public sigstore CA from the OIDC token
+`id-token: write` lets the run mint, so there is no avroc key for anybody to hold
+or trust. Signing is recursive, so the published index and every per-platform
+manifest under it are signed; the attestations — a SLSA v1 provenance statement
+and one SPDX SBOM per executable per platform — go on the **index digest** and
+only there. Nothing is ever attached to a tag.
+The verifying commands are `docs/container/SPEC.md`'s "Verifying a signature",
+and cosign itself is built by `dag.Go().Install` at a module version pinned in
+`release.go`, so there is no tool image here to keep in step with an upstream tag.
 
 ### Key Dependencies
 
