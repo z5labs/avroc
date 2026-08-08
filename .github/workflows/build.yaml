@@ -44,12 +44,11 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     permissions:
-      # Reading the source is all the pipeline does. No `packages: write`,
-      # because nothing is pushed; no `id-token: write`, because nothing is
-      # attested — the module produces no artifact to sign. Both grants belong
-      # to the change that gives it one, next to the stage that needs them,
-      # rather than being held here in advance against a job that would not
-      # notice them missing.
+      # Reading the source is all this job does. No `packages: write`, because
+      # nothing is pushed; no `id-token: write`, because nothing is attested.
+      # The module does now produce an artifact — the IR FileDescriptorSet
+      # below — but this job only builds it and throws it away; the grant that
+      # publishes it lives on the job that publishes it, in release.yaml.
       contents: read
     steps:
       # A shallow checkout on purpose. The module excludes .git from the source
@@ -82,3 +81,14 @@ jobs:
       # while CI fails.
       - name: Run the pipeline
         run: dagger call ci
+
+      # The one artifact this repository builds, built on every pull request
+      # rather than only at release time. Its contents are asserted by the tests
+      # `dagger call ci` just ran — that the set covers proto/, resolves on its
+      # own and decodes a descriptor leaving nothing undescribed — and what this
+      # step adds is that the artifact still *builds*, so a release is never the
+      # first time anybody finds out that it does not. It is exported to the
+      # runner's temporary directory and discarded; release.yaml is what
+      # publishes it.
+      - name: Build the IR FileDescriptorSet
+        run: dagger call ir-descriptor-set export --path "$RUNNER_TEMP/ir.binpb"

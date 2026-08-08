@@ -29,8 +29,9 @@ version identifying the contract it was written against, the options for the
 invocation it belongs to, and the resolved schemas themselves, with their
 fully-qualified names, their type structure, and the ordering that decides
 where a named type is defined and where it is merely referenced. Together with
-the protobuf schema language that carries all of it, and the compatibility
-policy that governs changing it.
+the protobuf schema language that carries all of it, the compatibility policy
+that governs changing it, and the `FileDescriptorSet` avroc publishes so that a
+consumer with no generated code can decode a descriptor at all.
 
 Out of scope, with reasons, in [Out of Scope](#out-of-scope).
 
@@ -387,6 +388,130 @@ so not this document's: the file avroc writes for an invocation is removed when
 that generator exits, so what a person inspects is a copy — one the plugin saved
 from the path it was handed.
 
+## A descriptor is readable by a program with no bindings
+
+The rendering above is for a person. This section is the same promise made to a
+program: a generator **MUST** be able to decode a descriptor without any code
+generated from [`proto/`](../../proto/), and avroc **MUST** publish what makes
+that possible.
+
+What makes it possible is protobuf's own `FileDescriptorSet`. Every protobuf
+runtime can build a message type out of one at run time and decode against it,
+so a set describing the IR turns "my language has no avroc bindings, and my
+build has no protobuf code generation in it" from a blocker into a file to read.
+That is the whole of Avro's self-description advantage, bought back for the
+price of one artifact, and it is why
+[protobuf is a schema language, not a service](#protobuf-is-a-schema-language-not-a-service)
+does not have to apologise for the choice.
+
+### What is published
+
+avroc **MUST** publish a `FileDescriptorSet` covering the descriptor: the file
+`GenerateRequest` is defined in, and the transitive closure of that file's
+imports, and nothing else (#113). It is called `ir.binpb`, in protobuf's binary
+wire encoding, and it is published in two places, neither of which is a
+substitute for the other:
+
+| Where | For |
+| --- | --- |
+| A release asset on each release | A build that fetches one file and never touches the image |
+| Inside the published image, at the path [`container/SPEC.md`](../container/SPEC.md) fixes | A generator image built `FROM` avroc's |
+
+The path inside the image is deliberately not written here: it is a promise a
+`COPY --from` depends on, and it is [made and versioned by
+`container/SPEC.md`](#also-out-of-scope). Two documents naming it would be two
+places to change it and one of them would be missed.
+
+The set **MUST** be self-contained — every file it names as an import is a file
+it carries — and **MUST** be ordered so that no file precedes a file it imports.
+A consumer that walks it once, building each file's types as it goes, is the
+common shape of a dynamic protobuf API, and the other order fails it at a type
+reference rather than at a file, with a diagnostic that points nowhere useful.
+
+Two publications of the same source **MUST** produce identical bytes, for the
+reason [What a descriptor carries](#what-a-descriptor-carries) gives about the
+descriptor itself: an artifact attached to a release and copied into an image is
+compared across releases, and one whose bytes moved on a rebuild would make
+every rebuild look like a change to the contract.
+
+The set **MUST** be derived from the same protos avroc itself encodes a
+descriptor with, and **MUST NOT** be a separately maintained copy of them.
+A hand-produced set is one that describes whatever the IR looked like the last
+time somebody remembered to regenerate it, and its staleness is invisible: a
+consumer decoding against it succeeds, and the fields it has never heard of
+simply are not there. Deriving it means a change to `proto/` changes the
+published set in the same commit, and it is the difference between an artifact
+that is current by construction and one that is current by diligence.
+
+### What is deliberately absent
+
+The service definition. `generator.proto` and the `GenerateResponse` it streams
+are **not** in the published set (#113), and their absence follows directly from
+[the IR defining no service](#protobuf-is-a-schema-language-not-a-service):
+publishing them in the IR's own self-description would hand a plugin author a
+machine-readable description of a service this document tells them does not
+exist, and would then break them when it is removed (#124). A generator needs to
+decode a descriptor, not to speak a protocol.
+
+### Worked example
+
+The recipe is four steps and is the same in every language: read `ir.binpb`,
+decode it as a `FileDescriptorSet`, build a registry from it, look up
+`GenerateRequest`, and decode the descriptor as a dynamic message of that type.
+Fields are then read by name — the same names this document uses.
+
+```go
+// No import of github.com/z5labs/avroc/avrocpb, and nothing generated from
+// proto/: only protobuf's own runtime. irBinpbPath is the release asset, or
+// the path container/SPEC.md fixes inside the image.
+irBinpb, err := os.ReadFile(irBinpbPath)
+if err != nil {
+	return err
+}
+
+var set descriptorpb.FileDescriptorSet
+if err := proto.Unmarshal(irBinpb, &set); err != nil {
+	return err
+}
+
+files, err := protodesc.NewFiles(&set)
+if err != nil {
+	return err
+}
+
+desc, err := files.FindDescriptorByName("GenerateRequest")
+if err != nil {
+	return err
+}
+md := desc.(protoreflect.MessageDescriptor)
+
+descriptor, err := os.ReadFile(descriptorPath) // the path avroc handed the plugin
+if err != nil {
+	return err
+}
+
+msg := dynamicpb.NewMessage(md)
+if err := proto.Unmarshal(descriptor, msg); err != nil {
+	return err
+}
+
+// The version first, as ever.
+version := msg.Get(md.Fields().ByName("version")).Int()
+```
+
+It is written in Go because this repository can execute it — the example is a
+runnable test in `avrocpb`, so it is checked rather than asserted — and not
+because Go is the audience. Go is the one language that does not need it.
+A reader in Python, C#, Java or Rust is translating four library calls whose
+names differ and whose meanings do not: `FileDescriptorSet`, a descriptor pool
+to add it to, a message type looked up by name, and a dynamic parse.
+
+Reading the version first is not a stylistic note. [The version
+field](#the-version-field) makes it a consumer's first obligation, and it binds
+a dynamic consumer exactly as it binds a generated one — a set published today
+describes today's contract, and a descriptor claiming a version this consumer
+does not know is not made safe to read by having been decoded successfully.
+
 ## Out of Scope
 
 ### Avro IDL and JSON schema syntax
@@ -463,3 +588,4 @@ is making their input identical rather than shipping one of the outputs:
 | [What *resolved* means](#what-resolved-means) | [#108](https://github.com/z5labs/avroc/issues/108) |
 | [The nested tree is kept](#the-nested-tree-is-kept) | [#108](https://github.com/z5labs/avroc/issues/108), [#112](https://github.com/z5labs/avroc/issues/112) |
 | [A descriptor is readable by a person](#a-descriptor-is-readable-by-a-person) | [#112](https://github.com/z5labs/avroc/issues/112) |
+| [A descriptor is readable by a program with no bindings](#a-descriptor-is-readable-by-a-program-with-no-bindings) | [#113](https://github.com/z5labs/avroc/issues/113) |

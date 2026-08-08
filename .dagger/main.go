@@ -166,6 +166,37 @@ func (m *Avroc) Test(ctx context.Context) error {
 		Check(ctx)
 }
 
+// IrDescriptorSet builds the IR's protobuf FileDescriptorSet — the published
+// ir.binpb — by compiling this repository and asking avrocpb for it. It is the
+// pipeline's one artifact, and it is what the release workflow attaches to a
+// release and what the base image copies to
+// /usr/local/share/avroc/ir.binpb (docs/container/SPEC.md, #126).
+//
+// It is a function on this module rather than a step in a workflow for the
+// reason .github/workflows/build.yaml gives: repo-specific work lands here and
+// is invoked with `dagger call`, so a contributor produces the same bytes CI
+// does with the same command, and there is no second recipe living in YAML that
+// nobody can run locally.
+//
+// dag.Go().Container is the escape hatch the standard Go module offers for
+// exactly this — a command its typed helpers do not cover. Using it rather than
+// a container of this module's own keeps the toolchain version read out of
+// go.mod, where this repository's toolchain version already lives, instead of
+// pinning a golang: tag here that could drift from it.
+//
+// The bytes are a function of the source: avrocpb.MarshalFileDescriptorSet
+// encodes deterministically and the file order is fixed by the protos'
+// imports, so two runs over an unchanged tree produce an identical artifact.
+// That is what makes the published file comparable across releases at all.
+func (m *Avroc) IrDescriptorSet() *dagger.File {
+	const out = "/out/ir.binpb"
+
+	return dag.Go().
+		Container(m.Source).
+		WithExec([]string{"go", "run", "./internal/tools/ir-descriptor-set", "-o", out}).
+		File(out)
+}
+
 // stage returns the check builder the standard pipeline builds on, bound to
 // this module's source and with no stage enabled yet. Callers enable the one
 // they want. The Go toolchain version is left unset so the builder reads it from

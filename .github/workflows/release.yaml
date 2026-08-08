@@ -1,0 +1,71 @@
+name: Release
+
+# A published release is the trigger, not a pushed tag. The distinction matters
+# for what this workflow does: it uploads an asset onto a release object, and a
+# release object only exists once somebody has published one. Firing on the tag
+# would mean racing the human who is about to create the release, and losing
+# that race means uploading to a release that is not there yet.
+#
+# `published` covers both a release created straight away and a draft released
+# later, which is the shape a release with notes to write actually takes.
+on:
+  release:
+    types: [published]
+
+# The floor for every job. The one job that has to write says so itself.
+permissions:
+  contents: read
+
+jobs:
+  # The IR's FileDescriptorSet, attached to the release as ir.binpb.
+  #
+  # It is here so that a plugin author whose language has no protobuf code
+  # generation in the build can fetch one file and decode a descriptor
+  # dynamically — docs/ir/SPEC.md's "Reading a descriptor without generated
+  # code". The same bytes ship inside the published image at
+  # /usr/local/share/avroc/ir.binpb (docs/container/SPEC.md); a release asset is
+  # the form for somebody who is not using the image at all, and neither is a
+  # substitute for the other.
+  ir-descriptor-set:
+    name: IR FileDescriptorSet
+    runs-on: ubuntu-latest
+    permissions:
+      # Reading the source, and writing the one asset onto the release. Nothing
+      # else on this workflow needs either, which is why the grant is on the job
+      # rather than at the top of the file.
+      contents: write
+    steps:
+      # At the release's tag, not at whatever main has moved to since. The
+      # artifact is a function of the source, so an asset built from a different
+      # commit would describe an IR that release never shipped.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      # Pinned to the engineVersion the module declares, read out of dagger.json
+      # rather than repeated here — the same step, for the same reason, as
+      # build.yaml's.
+      - name: Install the Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
+              BIN_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The same function CI builds on every pull request and a contributor runs
+      # locally, so the released asset is produced by the recipe that has already
+      # been exercised rather than by one that only ever runs at release time.
+      - name: Build the IR FileDescriptorSet
+        run: dagger call ir-descriptor-set export --path "$RUNNER_TEMP/ir.binpb"
+
+      # --clobber so that re-running a failed release job replaces the asset
+      # instead of failing on a name that is already taken. The bytes are a
+      # function of the tag's source, so a re-upload cannot change what the
+      # asset says.
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "$RUNNER_TEMP/ir.binpb" --clobber

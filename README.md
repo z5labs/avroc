@@ -260,3 +260,21 @@ import "github.com/z5labs/avroc/avrocpb"
 ```console
 go get github.com/z5labs/avroc
 ```
+
+### A generator in a language with no protobuf codegen
+
+A generator does not have to compile `proto/` to read a descriptor. avroc publishes
+**`ir.binpb`** — a protobuf `FileDescriptorSet` describing the descriptor — as an
+asset on each release. Load it, look up `GenerateRequest` by name, and decode the
+descriptor as a dynamic message: four library calls in any protobuf runtime, and no
+build step.
+
+The same bytes are also destined for avroc's container image, at the path
+[`docs/container/SPEC.md`](docs/container/SPEC.md#the-ir-filedescriptorset) fixes.
+That image is not published yet — it is
+[#126](https://github.com/z5labs/avroc/issues/126) — so today the release asset is
+the way to get the file.
+
+See [_A descriptor is readable by a program with no
+bindings_](docs/ir/SPEC.md#a-descriptor-is-readable-by-a-program-with-no-bindings)
+for the worked example and what the set does and does not contain.
