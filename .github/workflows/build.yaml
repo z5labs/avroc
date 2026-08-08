@@ -28,18 +28,14 @@ jobs:
   #
   # Repo-specific verification lands in this workflow the same way: as another
   # function on the root module invoked by another `dagger call`, never as raw
-  # Go steps beside it. Two things this file used to do are therefore not here:
-  #
-  #   - the example round-trip (build the four binaries, `avroc generate` in
-  #     example/, `git diff --exit-code -- example`). It stays in the local
-  #     verify list; it comes back to CI as a function on the root module once
-  #     the plugin-contract stories settle how generators are invoked at all,
-  #     because writing it against today's gRPC socket model would be writing it
-  #     twice.
-  #   - the ubuntu/macos/windows matrix. Dagger runs Linux containers, so a
-  #     matrix over runners buys nothing once the pipeline is a container, and
-  #     the Windows half of it has no target left to check: avroc targets POSIX
-  #     hosts, as docs/plugin/SPEC.md records.
+  # Go steps beside it. That is why the example round-trip is the
+  # `dagger call regeneration` step below rather than a handful of `go build`
+  # steps here, and why the ubuntu/macos/windows matrix this file used to carry
+  # is gone: Dagger runs Linux containers, so a matrix over runners buys nothing
+  # once the pipeline is a container, and the Windows half of it has no target
+  # left to check — avroc targets POSIX hosts, as docs/plugin/SPEC.md records.
+  # The platforms that do still differ are covered inside the module, by the
+  # regeneration stage, which runs on each of them.
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -81,6 +77,21 @@ jobs:
       # while CI fails.
       - name: Run the pipeline
         run: dagger call ci
+
+      # docs/plugin/SPEC.md's determinism requirement, checked rather than
+      # asserted (#120). It builds the four binaries for each platform the image
+      # ships on, generates the worked example twice under deliberately
+      # different surroundings — different absolute paths, working directory,
+      # temporary directory, user, hostname, locale and time zone — and requires
+      # the two trees to be byte-identical, and identical to what is committed.
+      #
+      # It is a separate call rather than part of `ci` because `ci` is the
+      # Z5Labs standard pipeline and this is avroc's own, not a stage every
+      # Z5Labs repository has. Determinism is the kind of property that holds
+      # until nobody is looking, and generated code that changes when nothing
+      # changed makes the committed output worthless.
+      - name: Check that regeneration is byte-identical
+        run: dagger call regeneration
 
       # The one artifact this repository builds, built on every pull request
       # rather than only at release time. Its contents are asserted by the tests

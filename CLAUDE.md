@@ -148,6 +148,39 @@ it to each release, and `docs/container/SPEC.md` fixes the path it ships at
 inside the image. `avrocpb/descriptor_set_test.go` is the staleness gate: a new
 `.proto` that nothing in the descriptor's import graph reaches fails there.
 
+### Determinism
+
+Two runs of a generator over the same descriptor produce byte-identical output
+(`docs/plugin/SPEC.md`, "Determinism", #120). Generated code is a thing a project
+commits, so output that changes when nothing changed turns every regeneration
+into a diff. It holds regardless of the clock, the hostname, the user, the
+working directory, the locale, the absolute paths in `--descriptor` and `--out`,
+filesystem order and any concurrency — everything except `SOURCE_DATE_EPOCH`,
+which is an input rather than an accident of the machine.
+
+Three checks, because no one of them sees all of it:
+
+- **`dagger call regeneration`** (`.dagger/main.go`) builds the four binaries and
+  generates `example/` twice, in scratch containers that disagree about every one
+  of those, then byte-compares the trees. Its second comparison is the first run
+  against the committed `example/`, which is the round-trip that catches output
+  nobody regenerated; both need the same binaries and worked example, so they are
+  one function. It runs on every platform `docs/container/SPEC.md` publishes.
+- **`TestGenerateIsDeterministic`** in each generator package runs the generation
+  many times in one process. That is what exercises Go's randomised map iteration
+  order, which is the usual way the rule gets broken and the one that breaks
+  intermittently.
+- **`internal/plugin.TestNoGeneratorReadsTheClock`** parses every generator's
+  source and fails on any *reference* — called, assigned or passed — to
+  something that could not give the same answer twice: `time.Now`,
+  `os.Hostname`, `os.Getenv`, `os/user`, either random. Repetition cannot catch
+  a clock read, because two runs a moment apart agree on the date.
+
+`internal/plugin.SourceDateEpoch` is the only sanctioned way to get a timestamp:
+it reads `SOURCE_DATE_EPOCH`, returns UTC, and reports a malformed value rather
+than falling back to the clock. Nothing here needs it yet, and a generator that
+grows a timestamp uses it rather than inventing its own.
+
 ### Key Dependencies
 
 - `github.com/z5labs/avro-go` — Avro IDL parser

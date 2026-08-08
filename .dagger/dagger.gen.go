@@ -216,6 +216,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
 			return nil, (*Avroc).Fmt(&parent, ctx)
+		case "IrDescriptorSet":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			return (*Avroc).IrDescriptorSet(&parent), nil
 		case "Lint":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -223,6 +230,20 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
 			return nil, (*Avroc).Lint(&parent, ctx)
+		case "Regeneration":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var platform string
+			if inputArgs["platform"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["platform"]), &platform)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg platform", err))
+				}
+			}
+			return nil, (*Avroc).Regeneration(&parent, ctx, platform)
 		case "Test":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
