@@ -1,23 +1,41 @@
 {
-  "inputs": [
-    "schema.avdl"
-  ],
   "generators": [
     {
       "name": "go",
       "out": "gen",
+      "inputs": [
+        "schema.avdl"
+      ],
       "options": {
         "encoding": "single_object",
         "package_name": "avro"
       }
     },
     {
+      "name": "go",
+      "out": "stream",
+      "inputs": [
+        "events.avdl"
+      ],
+      "options": {
+        "package_name": "stream"
+      }
+    },
+    {
       "name": "json",
-      "out": "."
+      "out": ".",
+      "inputs": [
+        "schema.avdl",
+        "events.avdl"
+      ]
     },
     {
       "name": "pcf",
-      "out": "pcf"
+      "out": "pcf",
+      "inputs": [
+        "schema.avdl",
+        "events.avdl"
+      ]
     }
   ]
 }

@@ -1,0 +1,18 @@
+/*
+ * A schema whose root type is an array, which says the file it describes is a
+ * stream of Event rather than a single value containing some Events.
+ *
+ * It is here so that the streaming reader the Go generator emits for such a
+ * root is generated, committed and round-tripped like everything else in this
+ * example.
+ */
+
+namespace org.apache.avro.test;
+
+schema array<Event>;
+
+record Event {
+  long id;
+  double value;
+  boolean ok;
+}

@@ -10,6 +10,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/z5labs/avro-go v0.5.0 h1:WBEAp23ClHu5Zg6y7owKyVoPIS887TOXMHSUWTR5qbU=
 github.com/z5labs/avro-go v0.5.0/go.mod h1:vMukPZwJkvVA/4h48m2poyE0d5B1ETgx/K5L2qQRYns=
+github.com/z5labs/avro-go v0.6.0 h1:HXlGMv3bpE0IMYyfBH82cW7USO0D6scRgjcxixpjJuQ=
+github.com/z5labs/avro-go v0.6.0/go.mod h1:vMukPZwJkvVA/4h48m2poyE0d5B1ETgx/K5L2qQRYns=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
