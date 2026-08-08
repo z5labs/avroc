@@ -268,8 +268,8 @@ func TestImageCachePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := imageCachePath("/cache", h)
-	// Build the expected path with filepath.Join so the separator matches the
-	// host OS (backslash on Windows), keeping the assertion platform-agnostic.
+	// Build the expected path with filepath.Join rather than by concatenation,
+	// so the assertion checks the digest encoding and not the separator.
 	want := filepath.Join("/cache", "images", "sha256-"+strings.Repeat("b", 64))
 	if got != want {
 		t.Errorf("imageCachePath = %q, want %q", got, want)

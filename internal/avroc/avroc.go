@@ -85,6 +85,16 @@ Commands:
 	_, _ = io.WriteString(w, usage)
 }
 
+// isGeneratorExecutable reports whether a directory entry is a generator
+// plugin: a regular file named avroc-gen-<name> carrying an execute bit.
+//
+// avroc targets POSIX hosts (see docs/plugin/SPEC.md), so the mode bits are the
+// whole test. There is no extension to strip and no second rule for a second
+// operating system — the entry's name is the generator's name.
+func isGeneratorExecutable(name string, mode fs.FileMode) bool {
+	return strings.HasPrefix(name, "avroc-gen-") && mode.IsRegular() && mode&0o111 != 0
+}
+
 func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string) fs.FS, dirs ...string) (map[string]string, error) {
 	generatorIndex := make(map[string]string)
 
@@ -111,7 +121,7 @@ func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string
 			if !isGeneratorExecutable(name, info.Mode()) {
 				continue
 			}
-			generatorIndex[generatorKey(name)] = filepath.Join(dir, name)
+			generatorIndex[name] = filepath.Join(dir, name)
 		}
 	}
 
@@ -165,10 +175,10 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		_ = cmd.Wait()
 	}()
 
-	// Use the passthrough resolver with a custom dialer rather than "unix://".
-	// gRPC's URL-based target parsing mishandles Windows absolute paths (the
-	// drive-letter colon is read as host:port); passthrough hands the address
-	// to the dialer verbatim so the socket path is never URL-parsed.
+	// Use the passthrough resolver with a custom dialer rather than "unix://":
+	// passthrough hands the address to the dialer verbatim, so a socket path
+	// is never run through gRPC's URL-based target parsing. The whole gRPC
+	// path here goes away with the story that deletes the Generator service.
 	cc, err := grpc.NewClient(
 		"passthrough:///"+socketPath,
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
