@@ -488,6 +488,55 @@ func TestBuildSchemaFile_Filename(t *testing.T) {
 	}
 }
 
+// TestBuildSchemaFile_ArrayRootFilename asserts this generator names the file
+// after what an array root is about rather than after the namespace, which is
+// where ir.SchemaBaseName used to land for a root that is not itself a named
+// type.
+func TestBuildSchemaFile_ArrayRootFilename(t *testing.T) {
+	filename, _, err := buildSchemaFile("mypackage", arrayRootSchema(), false)
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+	if filename != "event.go" {
+		t.Errorf("expected event.go, got %q", filename)
+	}
+}
+
+// arrayRootSchema is the resolved form of `schema array<Event>;`: the record is
+// written out in full at its first use, inside the array's items, so the
+// schema's own types list is empty and its namespace is all that is left to
+// name a file after.
+func arrayRootSchema() *avrocpb.Schema {
+	const ns = "org.example"
+
+	return &avrocpb.Schema{
+		Namespace: proto.String(ns),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Array{
+				Array: &avrocpb.Array{
+					Items: &avrocpb.Type{
+						Type: &avrocpb.Type_Record{
+							Record: &avrocpb.Record{
+								Name:      proto.String("Event"),
+								Namespace: proto.String(ns),
+								FullName:  proto.String(ns + ".Event"),
+								Fields: []*avrocpb.Field{
+									{
+										Name: proto.String("id"),
+										Type: &avrocpb.Type{
+											Type: &avrocpb.Type_Reference{Reference: primRef("string")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestGenerate_PackageNameOption(t *testing.T) {
 	tmpDir := t.TempDir()
 

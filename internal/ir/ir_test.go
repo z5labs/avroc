@@ -13,6 +13,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func arrayOf(items *avrocpb.Type) *avrocpb.Type {
+	return &avrocpb.Type{
+		Type: &avrocpb.Type_Array{Array: &avrocpb.Array{Items: items}},
+	}
+}
+
+func mapOf(values *avrocpb.Type) *avrocpb.Type {
+	return &avrocpb.Type{
+		Type: &avrocpb.Type_MapType{MapType: &avrocpb.Map{Values: values}},
+	}
+}
+
 func TestSchemaBaseName(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -56,6 +68,95 @@ func TestSchemaBaseName(t *testing.T) {
 			name:   "reference primary type",
 			schema: &avrocpb.Schema{Type: namedRef("com.example.MyRecord")},
 			want:   "com.example.MyRecord",
+		},
+		{
+			name: "primitive primary type falls back to the namespace",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type:      primRef("string"),
+			},
+			want: "example",
+		},
+		{
+			name: "array root names its item type",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type: arrayOf(&avrocpb.Type{
+					Type: &avrocpb.Type_Record{
+						Record: &avrocpb.Record{Name: proto.String("Event")},
+					},
+				}),
+			},
+			want: "Event",
+		},
+		{
+			name: "nested array root names the type it finally reaches",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type: arrayOf(arrayOf(&avrocpb.Type{
+					Type: &avrocpb.Type_EnumType{
+						EnumType: &avrocpb.Enum{Name: proto.String("Suit")},
+					},
+				})),
+			},
+			want: "Suit",
+		},
+		{
+			name: "map root names its value type",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type: mapOf(&avrocpb.Type{
+					Type: &avrocpb.Type_Fixed{
+						Fixed: &avrocpb.Fixed{Name: proto.String("MD5")},
+					},
+				}),
+			},
+			want: "MD5",
+		},
+		{
+			name: "array of a reference names what it references",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type:      arrayOf(namedRef("org.example.Event")),
+			},
+			want: "org.example.Event",
+		},
+		{
+			name: "array of a primitive falls back to the namespace",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type:      arrayOf(primRef("string")),
+			},
+			want: "example",
+		},
+		{
+			name: "array of a primitive prefers an additional type",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type:      arrayOf(primRef("string")),
+				Types: []*avrocpb.Type{
+					{
+						Type: &avrocpb.Type_Record{
+							Record: &avrocpb.Record{Name: proto.String("Leftover")},
+						},
+					},
+				},
+			},
+			want: "Leftover",
+		},
+		{
+			name: "union root has no single subject",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("org.example"),
+				Type: &avrocpb.Type{
+					Type: &avrocpb.Type_Union{
+						Union: &avrocpb.Union{
+							Types: []*avrocpb.Type{primRef("null"), namedRef("org.example.Event")},
+						},
+					},
+				},
+			},
+			want: "example",
 		},
 		{
 			name: "first additional type",
