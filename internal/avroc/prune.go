@@ -40,8 +40,7 @@ import (
 const outputRecordFilename = "avroc.gen.json"
 
 // outputRecordVersion is the schema version of the record format. It lets a
-// future avroc detect and migrate an older record instead of misreading it, the
-// same way lockfileVersion does.
+// future avroc detect and migrate an older record instead of misreading it.
 const outputRecordVersion = 1
 
 // outputRecord is the parsed avroc.gen.json: every file the last successful run
@@ -66,7 +65,7 @@ type outputRecord struct {
 // file a person wrote is ever removed on a hunch.
 //
 // It reads through os rather than through cli.Context.OpenDir, unlike the
-// manifest and the lockfile. The record is the list of files pruneStale then
+// manifest. The record is the list of files pruneStale then
 // removes with os.Remove, and reading it through an injectable filesystem would
 // let the record avroc validates and the tree avroc edits come from two
 // different places — which is the one way this file could be made to delete

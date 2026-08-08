@@ -76,7 +76,7 @@ func UnmarshalDescriptor(b []byte) (*avrocpb.GenerateRequest, error) {
 }
 
 // descriptorJSONIndent is the indentation a rendered descriptor is written with.
-// Two spaces, matching the manifest and lockfile avroc writes, so the three
+// Two spaces, matching the manifest and the output record avroc writes, so the
 // artifacts a person reads in one sitting are indented alike.
 const descriptorJSONIndent = "  "
 

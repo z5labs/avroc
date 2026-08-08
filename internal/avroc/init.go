@@ -46,14 +46,17 @@ func runInit(ctx context.Context, cli cli.Context) int {
 
 // scaffoldManifest is the starter manifest avroc init writes: a single Go
 // generator over one example input, ready for the user to edit.
+//
+// A generator entry is a name, an output directory and options, and nothing
+// else. The scaffold is where most adopters learn the manifest's shape, so it
+// must not suggest a source or a version to fill in — avroc neither fetches a
+// generator nor pins one (#125), and avroc-gen-go is expected on PATH.
 func scaffoldManifest() *Manifest {
 	return &Manifest{
 		Inputs: []string{"schema.avdl"},
 		Generators: []GeneratorConfig{
 			{
 				Name:    "go",
-				Source:  "ghcr.io/z5labs/avroc-gen-go",
-				Version: "v0.1.0",
 				Out:     "gen",
 				Options: map[string]string{"package_name": "models"},
 			},
