@@ -22,6 +22,7 @@ three use, and what else they have in common.
 - **Declarative manifest** — a project's generators and their configuration live in a checked-in `avroc.json` manifest, so generator selection and options are diffable, reviewable, and shared across a team and CI. `avroc init` scaffolds one to get started.
 - **Dynamic generator discovery** — avroc discovers generator plugins on your `PATH` using the naming convention `avroc-gen-<name>`; a manifest entry's `name` resolves to the matching `avroc-gen-<name>` executable.
 - **No acquisition machinery** — avroc never fetches, pins or verifies a generator: there is no registry, no lockfile and no cache. A generator arrives on `PATH` by whatever means put it there, and reproducibility comes from a [container image](docs/container/SPEC.md) pinned by digest rather than from a file avroc writes.
+- **Capability handshake** — every resolved generator is asked what it accepts (`--plugin-info`) before any schema is parsed, so a generator too old for the IR, or one handed an option it does not know, fails the run immediately rather than late and confusingly.
 - **Type validation** — avroc resolves all type references in your Avro IDL schemas and reports errors for any undefined types before invoking generators.
 - **Value validation** — avroc validates field defaults and enum defaults against their declared types, catching mistakes (e.g. a `null` default on an `int` field) at generation time.
 - **Parallel generation** — all generators run concurrently, so code generation scales with the number of plugins you use.
@@ -29,26 +30,49 @@ three use, and what else they have in common.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │  avroc generate                                      │
 │                                                      │
 │  1. Read avroc.json manifest                         │
 │  2. Resolve each generator to avroc-gen-<name>       │
-│  3. Parse & validate the declared Avro IDL inputs    │
+│     on PATH, and ask it what it can do:              │
+│       exec avroc-gen-<name> --plugin-info  ─────────►│  writes {"name",
+│                                            ◄─────────│   "version",
+│     A refusal here fails the run, before any         │   "ir_version",
+│     schema is parsed and with nothing generated.     │   "options"}, exits
+│  3. Parse & validate the declared Avro IDL inputs,   │
+│     and resolve every type reference in them         │
 │  4. For each generator (concurrently):               │
-│     a. Write the descriptor into a directory         │
-│        created for that invocation alone             │
-│     b. exec avroc-gen-<name>  ─────────────────────► │  avroc-gen-<name>
-│          --descriptor <path>                         │  reads the descriptor,
+│     a. Write the descriptor — the resolved schemas   │
+│        and that generator's options, protobuf-       │
+│        encoded — into a directory created for        │
+│        that one invocation                           │
+│     b. exec avroc-gen-<name>  ──────────────────────►│  reads the file at
+│          --descriptor <path>                         │  --descriptor,
 │          --out <dir>                                 │  writes files beneath
 │          [--opt k=v ...]                             │  --out, exits
 │     c. Wait for it to exit; non-zero fails the run   │
-└─────────────────────────────────────────────────────┘
+│  5. Merge each zero-exit generator's files into the  │
+│     project, prune what avroc.gen.json still names,  │
+│     and rewrite the record                           │
+└──────────────────────────────────────────────────────┘
 ```
 
-A generator is an **executable, not a server**: avroc finds it on `PATH`, runs it with a descriptor and an output directory, and waits. There is no socket, no port and no protobuf runtime required to be reachable — so a generator can be written in any language, including a shell script. [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md) is the contract.
+A generator is an **executable, not a server**: avroc finds it on `PATH`, runs it with a descriptor file and an output directory, and waits for it to exit. There is no socket, no port, no stream and no protobuf runtime required to be reachable — so a generator can be written in any language, including a shell script.
+
+The only thing that crosses between the two is **files**: a descriptor file avroc writes and the generator reads, and the files the generator writes beneath `--out`. `--out` is a private, empty scratch directory for that one invocation, merged into the project only on a zero exit, so a generator that fails partway leaves nothing behind. [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md) is the contract.
 
 ## Installation
+
+There are two ways to get avroc and its generators, and they are not
+interchangeable:
+
+| | What you get | Reproducible? |
+|---|---|---|
+| [`go install`](#go-install) | Executables on your `PATH` | **No** — see [Where generators come from](#where-generators-come-from-and-reproducibility) |
+| [The published image](#the-published-image) | avroc and a generator in one container | **Yes**, when pinned by digest |
+
+### `go install`
 
 ```bash
 go install github.com/z5labs/avroc/cmd/avroc@latest
@@ -66,6 +90,51 @@ go install github.com/z5labs/avroc/cmd/avroc-gen-json@latest
 # Avro Parsing Canonical Form generator
 go install github.com/z5labs/avroc/cmd/avroc-gen-pcf@latest
 ```
+
+Each generator lands on your `PATH` under the name avroc looks for, and a
+manifest entry's `name` resolves to it. This is the convenient path for a
+developer's laptop; it makes no reproducibility guarantee.
+
+### The published image
+
+avroc is published as a container image, and each built-in generator as an image
+built `FROM` it. Run one over the project in the working directory — `/work` is
+where the image expects it:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+  ghcr.io/z5labs/avroc-gen-go:v0 generate
+```
+
+Nothing is installed on the host and there is no `avroc` binary to keep in step
+with the generator: the image is both. Four tags are published for every image —
+`v0.2.0`, `v0.2`, `v0`, `latest` — and a digest is the fifth way to name one.
+**Pin the digest when reproducibility is the requirement**, since that fixes
+avroc and every generator in the image together.
+
+A project whose manifest names more than one generator needs a single image
+holding all of them, which is two `COPY --from` lines and no build from source:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/z5labs/avroc-gen-go:v0
+COPY --from=ghcr.io/z5labs/avroc-gen-json:v0 \
+     /usr/local/bin/avroc-gen-json /usr/local/bin/avroc-gen-json
+COPY --from=ghcr.io/z5labs/avroc-gen-pcf:v0 \
+     /usr/local/bin/avroc-gen-pcf /usr/local/bin/avroc-gen-pcf
+```
+
+The same two lines add a generator this project has never heard of, because the
+only thing they depend on is the plugin directory being where the [container
+base-image contract](docs/container/SPEC.md) says it is. That document is also
+where the [tag table](docs/container/SPEC.md#tags-and-what-pinning-one-buys) and
+the `cosign` commands that [verify a
+signature](docs/container/SPEC.md#verifying-a-signature) live; every published
+image is signed keyless, so there is no avroc key to obtain.
+
+To use the container path without writing a Dockerfile at all, see [Generating in
+a pipeline, without a Dockerfile](#generating-in-a-pipeline-without-a-dockerfile).
 
 ## Usage
 
@@ -126,8 +195,9 @@ That carries a trade, stated in full under
 > it, and that is the configuration this project supports when reproducibility is a requirement.
 > `go install` and a `PATH` are a convenience for a developer's laptop.
 
-The [container base-image contract](docs/container/SPEC.md) is what a Dockerfile building `FROM`
-the published image may rely on.
+[The published image](#the-published-image) above is how to run one, and the [container
+base-image contract](docs/container/SPEC.md) is what a Dockerfile building `FROM` it may rely
+on.
 
 ### Generating in a pipeline, without a Dockerfile
 
@@ -285,11 +355,22 @@ No options required.
 ## Writing a Custom Generator
 
 1. Create an executable named `avroc-gen-<name>` and put it on your `PATH`.
-2. Accept `--descriptor <path> --out <dir> [--opt k=v ...]`, each option followed by its value as the next argument. `--descriptor -` means the descriptor arrives on standard input.
-3. Decode the descriptor at that path: it is a `GenerateRequest` in the protobuf binary wire encoding (see [`proto/`](proto/) and [`docs/ir/SPEC.md`](docs/ir/SPEC.md)). Check its `version` first.
-4. Write every generated file beneath `--out`, report problems on stderr, and exit zero. A non-zero exit fails the run.
+2. Answer `--plugin-info` by writing a capability declaration to stdout and exiting zero — nothing else. avroc runs this on every generator before any generation begins, and a generator that will not answer fails the run:
 
-The full contract — discovery, the argument vector, the descriptor's lifetime, exit codes and the stderr diagnostic format, and the determinism a plugin must exhibit — is [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md).
+   ```json
+   {"name": "mygen", "version": "0.1.0", "ir_version": 1, "options": ["style"]}
+   ```
+
+   `options` lists the `--opt` keys you accept; omit the member to decide for yourself instead.
+3. Accept `--descriptor <path> --out <dir> [--opt k=v ...]`, each option followed by its value as the next argument. `--descriptor -` means the descriptor arrives on standard input. Nothing else is on the vector, and nothing comes from the environment.
+4. Decode the descriptor at that path: it is a `GenerateRequest` in the protobuf binary wire encoding (see [`proto/`](proto/) and [`docs/ir/SPEC.md`](docs/ir/SPEC.md)). Check its `version` first.
+5. Write every generated file beneath `--out`, report problems on stderr, and exit zero. A non-zero exit fails the run and nothing you wrote is adopted as output.
+
+`--out` is a private, empty scratch directory for that one invocation, not the project's output directory: avroc merges it in only after a zero exit, which is what makes a partial failure harmless. Two runs over the same descriptor must produce byte-identical output.
+
+The full contract — discovery, the argument vector, capability negotiation, the descriptor's lifetime, exit codes and the stderr diagnostic format, and the determinism a plugin must exhibit — is [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md).
+
+To ship it, build an image `FROM` the published one and `COPY` the executable into the plugin directory — that is the whole of the distribution mechanism, and [_Worked example: adding a generator_](docs/container/SPEC.md#worked-example-adding-a-generator) is a runnable multi-stage Dockerfile doing exactly that.
 
 The schemas you are handed are **resolved**: every named type carries its fully-qualified name, every `Reference` states whether it names an Avro primitive or a named type, and a named type's definition travels at its first use with every later use carrying only its name. A generator therefore builds no symbol table and re-derives no namespace qualification, primitive classification or first-use ordering — see [`docs/ir/SPEC.md`](docs/ir/SPEC.md).
 
@@ -311,11 +392,11 @@ asset on each release. Load it, look up `GenerateRequest` by name, and decode th
 descriptor as a dynamic message: four library calls in any protobuf runtime, and no
 build step.
 
-The same bytes are also destined for avroc's container image, at the path
-[`docs/container/SPEC.md`](docs/container/SPEC.md#the-ir-filedescriptorset) fixes.
-That image is not published yet — it is
-[#126](https://github.com/z5labs/avroc/issues/126) — so today the release asset is
-the way to get the file.
+The same bytes ship inside the container image, at
+`/usr/local/share/avroc/ir.binpb` — the path
+[`docs/container/SPEC.md`](docs/container/SPEC.md#the-ir-filedescriptorset) fixes,
+so a `COPY --from` can name it. The release asset and the file in the image are two
+ways of getting one artifact, not two artifacts.
 
 See [_A descriptor is readable by a program with no
 bindings_](docs/ir/SPEC.md#a-descriptor-is-readable-by-a-program-with-no-bindings)
