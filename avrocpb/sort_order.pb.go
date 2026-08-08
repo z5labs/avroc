@@ -84,7 +84,7 @@ const file_sort_order_proto_rawDesc = "" +
 	"\tSortOrder\x12\x12\n" +
 	"\x0eSORT_ORDER_ASC\x10\x00\x12\x13\n" +
 	"\x0fSORT_ORDER_DESC\x10\x01\x12\x15\n" +
-	"\x11SORT_ORDER_IGNORE\x10\x02B2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x11SORT_ORDER_IGNORE\x10\x02B)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_sort_order_proto_rawDescOnce sync.Once

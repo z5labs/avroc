@@ -95,7 +95,7 @@ const file_schema_proto_rawDesc = "" +
 	"\x06Schema\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x19\n" +
 	"\x04type\x18\x02 \x01(\v2\x05.TypeR\x04type\x12\x1b\n" +
-	"\x05types\x18\x03 \x03(\v2\x05.TypeR\x05typesB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x05types\x18\x03 \x03(\v2\x05.TypeR\x05typesB)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_schema_proto_rawDescOnce sync.Once

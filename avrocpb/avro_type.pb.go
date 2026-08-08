@@ -805,7 +805,7 @@ const file_avro_type_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
 	"\aaliases\x18\x03 \x03(\tR\aaliases\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x05R\x04size\x12\x1b\n" +
-	"\tfull_name\x18\x05 \x01(\tR\bfullNameB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\tfull_name\x18\x05 \x01(\tR\bfullNameB)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_avro_type_proto_rawDescOnce sync.Once

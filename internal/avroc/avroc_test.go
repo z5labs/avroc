@@ -19,7 +19,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 	"github.com/z5labs/avroc/internal/ir"
 

@@ -31,7 +31,7 @@ const file_generator_proto_rawDesc = "" +
 	"\n" +
 	"\x0fgenerator.proto\x1a\x16generate_request.proto\x1a\x17generate_response.proto2>\n" +
 	"\tGenerator\x121\n" +
-	"\bGenerate\x12\x10.GenerateRequest\x1a\x11.GenerateResponse0\x01B2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\bGenerate\x12\x10.GenerateRequest\x1a\x11.GenerateResponse0\x01B)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var file_generator_proto_goTypes = []any{
 	(*GenerateRequest)(nil),  // 0: GenerateRequest

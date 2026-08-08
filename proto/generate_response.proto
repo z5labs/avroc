@@ -5,7 +5,7 @@
 
 edition = "2023";
 
-option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
+option go_package = "github.com/z5labs/avroc/avrocpb;avrocpb";
 
 // One streamed chunk of generated output. A file is the ordered concatenation
 // of all chunks sharing the same `path`, terminated by the chunk whose `last`

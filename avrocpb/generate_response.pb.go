@@ -104,7 +104,7 @@ const file_generate_response_proto_rawDesc = "" +
 	"\x10GenerateResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x12\n" +
-	"\x04last\x18\x03 \x01(\bR\x04lastB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x04last\x18\x03 \x01(\bR\x04lastB)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_generate_response_proto_rawDescOnce sync.Once

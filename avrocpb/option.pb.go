@@ -86,7 +86,7 @@ const file_option_proto_rawDesc = "" +
 	"\foption.proto\"2\n" +
 	"\x06Option\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05valueB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x05value\x18\x02 \x01(\tR\x05valueB)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_option_proto_rawDescOnce sync.Once

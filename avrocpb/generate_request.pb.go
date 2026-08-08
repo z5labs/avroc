@@ -115,7 +115,7 @@ const file_generate_request_proto_rawDesc = "" +
 	"\x0fGenerateRequest\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x05R\aversion\x12!\n" +
 	"\aoptions\x18\x01 \x03(\v2\a.OptionR\aoptions\x12!\n" +
-	"\aschemas\x18\x02 \x03(\v2\a.SchemaR\aschemasB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\aschemas\x18\x02 \x03(\v2\a.SchemaR\aschemasB)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_generate_request_proto_rawDescOnce sync.Once

@@ -11,7 +11,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 
 	"github.com/sourcegraph/conc/pool"

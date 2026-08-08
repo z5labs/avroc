@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 )
 
 // primitiveGoTypes maps Avro primitive type names to their Go equivalents.

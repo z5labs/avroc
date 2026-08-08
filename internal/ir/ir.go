@@ -15,7 +15,7 @@ package ir
 import (
 	"strings"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 )
 
 // NamedTypeName returns the simple name of a named type, or the empty string

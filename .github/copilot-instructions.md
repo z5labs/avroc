@@ -38,7 +38,7 @@ The CLI scans `PATH` for executables matching `avroc-gen-<name>`. Each discovere
 - **`internal/avroc/`** — Core CLI logic: plugin discovery, Avro IDL parsing, code generation orchestration
 - **`internal/avroc-gen-go/`** — Go generator implementing the `Generator` gRPC service
 - **`internal/cli/`** — Shared `cli.Context` type providing logger, environment, filesystem, and args
-- **`internal/avrocpb/`** — Generated protobuf code (do not edit)
+- **`avrocpb/`** — Generated protobuf code, public because third-party generators import it (do not edit)
 - **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service
 
 ### Key Dependencies

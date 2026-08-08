@@ -92,7 +92,7 @@ const file_type_ref_kind_proto_rawDesc = "" +
 	"\vTypeRefKind\x12\x1d\n" +
 	"\x19TYPE_REF_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17TYPE_REF_KIND_PRIMITIVE\x10\x01\x12\x17\n" +
-	"\x13TYPE_REF_KIND_NAMED\x10\x02B2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x13TYPE_REF_KIND_NAMED\x10\x02B)Z'github.com/z5labs/avroc/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_type_ref_kind_proto_rawDescOnce sync.Once

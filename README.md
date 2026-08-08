@@ -229,4 +229,12 @@ No options required.
 
 The schemas you are handed are **resolved**: every named type carries its fully-qualified name, every `Reference` states whether it names an Avro primitive or a named type, and a named type's definition travels at its first use with every later use carrying only its name. A generator therefore builds no symbol table and re-derives no namespace qualification, primitive classification or first-use ordering — see [`docs/ir/SPEC.md`](docs/ir/SPEC.md).
 
-The protobuf definitions and generated Go stubs are in [`internal/avrocpb/`](internal/avrocpb/).
+The protobuf definitions are in [`proto/`](proto/) and the generated Go stubs are in [`avrocpb/`](avrocpb/). A generator written in Go imports them directly:
+
+```go
+import "github.com/z5labs/avroc/avrocpb"
+```
+
+```console
+go get github.com/z5labs/avroc
+```
