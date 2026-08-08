@@ -202,6 +202,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 	switch parentName {
 	case "Avroc":
 		switch fnName {
+		case "BuiltinGenerators":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			return (*Avroc).BuiltinGenerators(&parent), nil
 		case "Ci":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -216,6 +223,55 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
 			return nil, (*Avroc).Fmt(&parent, ctx)
+		case "GeneratorBundleImage":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var platform string
+			if inputArgs["platform"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["platform"]), &platform)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg platform", err))
+				}
+			}
+			return (*Avroc).GeneratorBundleImage(&parent, ctx, platform)
+		case "GeneratorImage":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var name string
+			if inputArgs["name"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["name"]), &name)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg name", err))
+				}
+			}
+			var platform string
+			if inputArgs["platform"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["platform"]), &platform)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg platform", err))
+				}
+			}
+			return (*Avroc).GeneratorImage(&parent, ctx, name, platform)
+		case "GeneratorImageContract":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var platform string
+			if inputArgs["platform"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["platform"]), &platform)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg platform", err))
+				}
+			}
+			return nil, (*Avroc).GeneratorImageContract(&parent, ctx, platform)
 		case "Image":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -286,6 +342,41 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return (*Avroc).Publish(&parent, ctx, address, username, password)
+		case "PublishGenerator":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var name string
+			if inputArgs["name"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["name"]), &name)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg name", err))
+				}
+			}
+			var address string
+			if inputArgs["address"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["address"]), &address)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg address", err))
+				}
+			}
+			var username string
+			if inputArgs["username"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["username"]), &username)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
+				}
+			}
+			var password *dagger.Secret
+			if inputArgs["password"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg password", err))
+				}
+			}
+			return (*Avroc).PublishGenerator(&parent, ctx, name, address, username, password)
 		case "Regeneration":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)

@@ -32,8 +32,9 @@ entrypoint, the working directory a project is mounted at, the user and UID the
 process runs as together with the guidance for overriding it with
 `--user $(id -u):$(id -g)`, whether a shell is present and what follows from the
 answer, the path the IR `FileDescriptorSet` ships at, the tags a derived image
-may pin, and which of these are covered by a compatibility guarantee and which
-are implementation detail that may change without notice.
+may pin, what avroc's own generator images are and how they are combined, and
+which of these are covered by a compatibility guarantee and which are
+implementation detail that may change without notice.
 
 Out of scope, with reasons, in [Out of Scope](#out-of-scope).
 
@@ -88,7 +89,11 @@ requirement here rather than two facts in different sections.
 
 The image **MUST** set `Env` such that `PATH` contains `/usr/local/bin`, and the
 directory **MUST** exist in the base image even when it is empty, so that a
-`COPY` into it never depends on the builder creating it. A derived image
+`COPY` into it never depends on the builder creating it. The base image holds one
+executable in it — the avroc CLI — and **no generator**: avroc's own three are
+images built `FROM` the base, exactly as a stranger's is, and
+[avroc's own generators](#avrocs-own-generators) is where they are described
+(#127). A derived image
 **MUST NOT** remove the directory from `PATH` or shadow it with an earlier entry
 containing an executable of the same name; the plugin contract's rule that
 [the earliest `PATH` match
@@ -137,8 +142,12 @@ The image's `Entrypoint` is the avroc CLI, and its `Cmd` is empty (#126). The
 arguments a caller passes to `docker run` are therefore avroc's arguments:
 
 ```console
-$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc:v0 generate
+$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
+
+The image named there is a [generator image](#avrocs-own-generators), because
+generating needs a generator and the base ships none; everything this section
+says about the entrypoint is the base's, inherited unchanged.
 
 A derived image **MUST NOT** replace or clear `Entrypoint`. That is the one
 edit which turns a derived image into a different program wearing avroc's
@@ -160,7 +169,7 @@ against the working directory, so a mount at `/work` and no further arguments is
 the shortest complete invocation:
 
 ```console
-$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc:v0 generate
+$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 
 `/work` **MUST** exist in the base image and **MUST** be owned by the [image's
@@ -220,7 +229,7 @@ A caller **SHOULD** therefore run as themselves:
 
 ```console
 $ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
-    ghcr.io/z5labs/avroc:v0 generate
+    ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 
 This is supported and is the recommended invocation whenever output is written
@@ -359,10 +368,102 @@ reproducibility](../plugin/SPEC.md#plugin-distribution-and-reproducibility).
 Pinning a digest fixes every generator in the image along with avroc itself,
 which is the whole reason this project has no lockfile.
 
+The same four tags are published for each of [avroc's own generator
+images](#avrocs-own-generators), and a given version tag means the same release
+across all of them: `avroc-gen-go:v0.2.0` is built `FROM` `avroc:v0.2.0`.
+
 Images are signed and carry provenance and an SBOM (#128), and a consumer can
 verify a signature before trusting a tag. That verification is a thing a
 consumer can perform, so it is in scope here; how the signature comes to exist
 is not, and is under [Out of Scope](#how-the-image-is-built-and-published).
+
+## avroc's own generators
+
+avroc ships three generators, and each one is published as an image built `FROM`
+the base — `avroc-gen-go`, `avroc-gen-json` and `avroc-gen-pcf` (#127). They are
+not in the base image, and that is the whole point of this section.
+
+Each of the three **MUST** be the base image plus exactly one executable, at the
+[plugin directory](#the-plugin-directory) path the generator's name gives it, and
+**MUST NOT** change anything else the base image sets. The Dockerfile below is a
+complete statement of what one of them is:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM golang:1.25 AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/avroc-gen-go ./cmd/avroc-gen-go
+
+FROM ghcr.io/z5labs/avroc:v0
+COPY --from=build --chown=65532:65532 --chmod=0755 \
+     /out/avroc-gen-go /usr/local/bin/avroc-gen-go
+```
+
+There is nothing in it that is not in the [worked
+example](#worked-example-adding-a-generator) a stranger is given: the same base,
+the same destination, the same ownership and mode, no `RUN` in the stage built
+`FROM` the base, and no `ENTRYPOINT` line, because the entrypoint is inherited
+and a generator image is still avroc. Running one is running avroc with one more
+generator on its `PATH`:
+
+```console
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+    ghcr.io/z5labs/avroc-gen-json:v0 generate
+```
+
+### Why the built-ins are not in the base
+
+A base image carrying its own generators would publish the same bytes to a
+consumer and would quietly stop testing anything. A built-in that is on `PATH`
+because the build put it there is not a consumer of this contract; it is a
+private arrangement that resembles one. If the built-ins needed a path this
+document does not promise, or an entrypoint edit, or a shell in the final stage,
+nobody here would find out — the first person to find out would be a stranger, at
+their `docker build`, against a contract that had never been used.
+
+So the mechanism has three users before it has any: `avroc-gen-go`,
+`avroc-gen-json` and `avroc-gen-pcf` go through the front door, and the pipeline
+checks each published image against exactly the promises above — the inherited
+entrypoint, `Cmd`, user, working directory and `PATH`, a filesystem that is the
+base's plus one executable and nothing else, and the image generating with its
+own generator through the inherited entrypoint and no further configuration.
+
+The cost is one extra image reference in a consumer's Dockerfile, and it buys the
+guarantee that the extension mechanism described here is the one avroc itself
+uses.
+
+### Combining more than one generator
+
+A project whose manifest names several generators needs one image holding all of
+them, and no rebuild from source is required to get one: a generator image is
+itself a valid base, and each executable sits at a path this document promises,
+so `COPY --from` reaches it.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/z5labs/avroc-gen-go:v0
+COPY --from=ghcr.io/z5labs/avroc-gen-json:v0 \
+     /usr/local/bin/avroc-gen-json /usr/local/bin/avroc-gen-json
+COPY --from=ghcr.io/z5labs/avroc-gen-pcf:v0 \
+     /usr/local/bin/avroc-gen-pcf /usr/local/bin/avroc-gen-pcf
+```
+
+That image runs the [example project](../../example), whose manifest names all
+three generators, with no arguments beyond `generate`. Nothing about it is
+special to avroc's own images: the same two `COPY --from` lines combine a
+generator this project has never heard of with one it publishes, because the only
+thing either line depends on is the plugin directory being where this document
+says it is.
+
+The images being combined **MUST** agree about the base they were built `FROM`,
+in the sense that matters to the result: the final image's avroc is the one in
+the `FROM` line, and a generator copied out of an image built on a much older
+base is subject to the [plugin contract](../plugin/SPEC.md#capability-negotiation)'s
+version handshake like any other. That handshake failing is the good outcome, and
+is why nothing here needs to police the combination.
 
 ## Worked example: adding a generator
 
@@ -497,6 +598,7 @@ to any of them is a breaking change:
 | [No shell](#no-shell) | Absent; extension is `COPY`-only |
 | [The `FileDescriptorSet`](#the-ir-filedescriptorset) | `/usr/local/share/avroc/ir.binpb` |
 | [Tags](#tags-and-what-pinning-one-buys) | A published full-version tag never moves |
+| [avroc's own generators](#avrocs-own-generators) | One image each, `FROM` the base, adding one executable and changing nothing else |
 
 Not covered, and explicitly implementation detail. Depending on any of it is
 depending on something that may change in a patch release, with no notice:
@@ -599,9 +701,9 @@ found there and what happens to it.
 | [No shell](#no-shell) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [The IR `FileDescriptorSet`](#the-ir-filedescriptorset) | [#113](https://github.com/z5labs/avroc/issues/113), [#126](https://github.com/z5labs/avroc/issues/126) |
 | [Tags and what pinning one buys](#tags-and-what-pinning-one-buys) | [#128](https://github.com/z5labs/avroc/issues/128) |
+| [avroc's own generators](#avrocs-own-generators) | [#127](https://github.com/z5labs/avroc/issues/127) |
 | [Worked example: adding a generator](#worked-example-adding-a-generator) | [#129](https://github.com/z5labs/avroc/issues/129) |
 | [Compatibility guarantees](#compatibility-guarantees) | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128) |
-| avroc's own generators as the first consumers of this contract | [#127](https://github.com/z5labs/avroc/issues/127) |
 | Multi-platform build and publishing — out of scope, see above | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128) |
 | A convenience over this contract, with no spec of its own | [#130](https://github.com/z5labs/avroc/issues/130) |
 | The plugin contract this one is the deployment half of | [#106](https://github.com/z5labs/avroc/issues/106) |

@@ -48,13 +48,15 @@ generates [`example/`](example/) twice, and requires the two trees to be
 byte-identical — and identical to what is committed. See
 [Determinism](#determinism) below for why both comparisons are one function.
 
-### The base image
+### The images
 
 ```sh
 dagger call image-contract                          # every platform
 dagger call image-contract --platform linux/arm64   # one of them
+dagger call generator-image-contract                # the images built FROM it
 
 dagger call image export --path ./avroc.tar         # build one, to look at
+dagger call generator-bundle-image export --path ./avroc-all.tar
 ```
 
 `image` builds the image [`docs/container/SPEC.md`](docs/container/SPEC.md)
@@ -62,26 +64,34 @@ describes — the one other people's Dockerfiles say `FROM` — and
 `image-contract` is that document's compatibility guarantees table executed
 rather than read: the plugin directory and its place on `PATH`, the entrypoint,
 the empty `Cmd`, the working directory, the pinned non-root UID, the absence of
-a shell, the `FileDescriptorSet`'s path, and the image generating
-[`example/`](example/) through its own entrypoint as itself and as an overridden
-UID.
+a shell, and the `FileDescriptorSet`'s path.
+
+The base ships the CLI and **no generator**. avroc's own three are images built
+`FROM` it, one `COPY` each, exactly as a stranger's generator image is
+(`generator-image --name go|json|pcf`), and `generator-image-contract` checks
+them: the configuration inherited unchanged, a filesystem that is the base's plus
+exactly one executable, each image generating with its own generator through the
+inherited entrypoint, and the combined image reproducing the committed
+[`example/`](example/) as itself and as an overridden UID.
 
 It is a check because every one of those promises is depended on from a
 repository this project cannot see and breaks without breaking anything here: an
 image whose `PATH` lost `/usr/local/bin` runs avroc perfectly and fails at the
 point where somebody else's generator is not found.
 
-To run the image the way a consumer does, load the tarball and mount a project
-at `/work`:
+To run an image the way a consumer does, load the tarball and mount a project
+at `/work`. Use the bundle rather than the base — `example/`'s manifest names
+three generators, and the base carries none:
 
 ```sh
-docker load -i ./avroc.tar
+docker load -i ./avroc-all.tar
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" <image> generate
 ```
 
-`dagger call publish --address …` pushes a multi-platform index. Nothing but
+`dagger call publish --address …` and `dagger call publish-generator --name …
+--address …` push multi-platform indexes. Nothing but
 [`.github/workflows/release.yaml`](.github/workflows/release.yaml) should call
-it.
+either.
 
 ### Getting the tools
 
