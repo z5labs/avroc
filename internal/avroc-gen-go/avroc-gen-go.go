@@ -16,17 +16,17 @@ import (
 //
 // avroc-gen-go is an executable, not a server: it is handed a descriptor and an
 // output directory on its command line, writes files, and exits. The Unix
-// listener and the gRPC server it used to stand up are gone with the socket
-// rendezvous that required them (#114); what remains of the service — the
-// streaming emission generatorService still implements internally — is #121's
-// to replace and #124's to delete.
+// listener and the gRPC server it used to stand up went with the socket
+// rendezvous that required them (#114), and the streaming emission that
+// outlived them went with #121 — Generate writes whole files through
+// plugin.FileWriter, and nothing here names the Generator service any more.
 //
 // The declared option vocabulary is the one Generate reads, and the two are
 // checked against each other by TestDeclaredOptionsAreTheOnesGenerateReads: a
 // key declared here and ignored there would be a manifest line avroc lets
 // through and the generator silently drops.
 func Main(ctx context.Context, c cli.Context) int {
-	return plugin.Main(ctx, c, plugin.NewInfo("go", declaredOptions()...), (&generatorService{}).Generate)
+	return plugin.Main(ctx, c, plugin.NewInfo("go", declaredOptions()...), Generate)
 }
 
 // declaredOptions is the --opt vocabulary avroc-gen-go declares, in the order

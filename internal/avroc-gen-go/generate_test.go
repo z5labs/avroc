@@ -58,8 +58,7 @@ func TestGenerate_Record(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -119,8 +118,7 @@ func TestGenerate_Enum(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -175,8 +173,7 @@ func TestGenerate_Fixed(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -238,8 +235,7 @@ func TestGenerate_Union(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -308,8 +304,7 @@ func TestGenerate_Array(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -368,8 +363,7 @@ func TestGenerate_Map(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -439,8 +433,7 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -519,8 +512,7 @@ func TestGenerate_PackageNameOption(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{
 			{
 				Name:  proto.String("package_name"),
@@ -578,8 +570,7 @@ func TestGenerate_MissingPackageName(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	_, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err == nil {
@@ -617,8 +608,7 @@ func TestGenerate_SingleObjectEncoding(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{
 			{Name: proto.String("package_name"), Value: proto.String("avro")},
 			{Name: proto.String("encoding"), Value: proto.String("single_object")},
@@ -719,8 +709,7 @@ func TestGenerate_WithoutEncodingOption_NoFingerprint(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -763,8 +752,7 @@ func TestGenerate_InvalidEncodingOption(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	_, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{
 			{Name: proto.String("package_name"), Value: proto.String("avro")},
 			{Name: proto.String("encoding"), Value: proto.String("invalid_value")},
@@ -825,8 +813,7 @@ func TestGenerate_RejectsUnresolvedDescriptor(t *testing.T) {
 				},
 			}
 
-			svc := &generatorService{}
-			_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+			_, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 				Options: []*avrocpb.Option{
 					{Name: proto.String("package_name"), Value: proto.String("avro")},
 				},

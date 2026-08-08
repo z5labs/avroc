@@ -44,8 +44,7 @@ func TestUnmarshal_Record(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -95,8 +94,7 @@ func TestUnmarshal_Fixed(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -146,8 +144,7 @@ func TestUnmarshal_Enum(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -209,8 +206,7 @@ func TestUnmarshal_Union(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -284,8 +280,7 @@ func TestUnmarshal_ArrayField(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -348,8 +343,7 @@ func TestUnmarshal_MapField(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -433,8 +427,7 @@ func TestUnmarshal_NestedRecord(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -524,8 +517,7 @@ func TestUnmarshal_AllPrimitiveTypes(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -576,8 +568,7 @@ func TestUnmarshal_EmptyRecord(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
