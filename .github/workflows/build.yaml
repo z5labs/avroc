@@ -112,6 +112,23 @@ jobs:
       - name: Check the base image against its contract
         run: dagger call image-contract
 
+      # The other half of that contract: the images avroc's own three generators
+      # ship in, each built FROM the base with nothing but a COPY (#127). It
+      # checks that a generator image inherits the base's entrypoint, Cmd, user,
+      # working directory and PATH unchanged, that its filesystem is the base's
+      # plus exactly one executable at the promised path — which is what makes
+      # "only COPY ran" an assertion rather than a claim — that each image
+      # generates with its own generator through the inherited entrypoint and no
+      # further configuration, and that an image combining all three reproduces
+      # the committed worked example byte for byte.
+      #
+      # It is a separate step from the one above because it is a separate claim:
+      # the base can keep every promise it makes while the extension mechanism
+      # built on it has stopped working, and this is the step that says which of
+      # the two broke.
+      - name: Check the generator images against the contract
+        run: dagger call generator-image-contract
+
       # The one artifact this repository builds, built on every pull request
       # rather than only at release time. Its contents are asserted by the tests
       # `dagger call ci` just ran — that the set covers proto/, resolves on its

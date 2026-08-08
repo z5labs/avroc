@@ -183,16 +183,27 @@ it reads `SOURCE_DATE_EPOCH`, returns UTC, and reports a malformed value rather
 than falling back to the clock. Nothing here needs it yet, and a generator that
 grows a timestamp uses it rather than inventing its own.
 
-### The published image
+### The published images
 
 `.dagger/image.go` builds the base image `docs/container/SPEC.md` describes, and
-that document is normative: `/usr/local/bin` on `PATH` holding the CLI and the
-three generators, the CLI as `Entrypoint` with an empty `Cmd`, `/work` as
+that document is normative: `/usr/local/bin` on `PATH` holding the CLI **and no
+generator**, the CLI as `Entrypoint` with an empty `Cmd`, `/work` as
 `WorkingDir`, UID and GID 65532 owning both directories and running the process,
 the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a `scratch`
 base — no shell, no libc, no package manager, so extension is `COPY`-only. The
 one thing in the filesystem the document does not name is a 1777 `/tmp`, which
 avroc needs because it writes each invocation's descriptor under `os.TempDir`.
+
+`.dagger/generator_image.go` builds the three images that carry avroc's own
+generators, each of them the base plus one executable in the plugin directory
+(#127). The generators are deliberately not in the base: a built-in on `PATH`
+because the pipeline put it there is not a consumer of the extension mechanism,
+and the first person to discover that the mechanism needs a path the contract
+does not promise would otherwise have been a stranger at their own
+`docker build`. `dagger call generator-image --name go`, `... publish-generator`
+and `... generator-bundle-image` — the last being all three combined by copying
+each executable out of the image that publishes it, which is what an adopter
+writes as `COPY --from`.
 
 It is built here rather than by the devex `GoApp` archetype, whose image half
 produces one scratch image per binary with `/app/<binaryName>` as entrypoint and
@@ -203,10 +214,18 @@ definition of what "checked" means.
 
 `dagger call image-contract` is the compatibility guarantees table executed
 rather than read — the OCI configuration, an *exact* listing of every path in
-the image with its owner and mode, and the image generating `example/` through
-its own entrypoint both as 65532 and as an overridden UID. CI runs it on every
-pull request; `dagger call publish --address <ref>` pushes a multi-platform
-index and is called only from `.github/workflows/release.yaml`.
+the image with its owner and mode, and `help` through the entrypoint, which is
+all a base holding no generator can be asked to do.
+`dagger call generator-image-contract` is the other half: each generator image's
+configuration inherited unchanged, its filesystem exhaustively equal to the
+base's plus one executable (which is how "only `COPY` ran" becomes an assertion),
+each image generating with its own generator through the inherited entrypoint,
+and the combined image reproducing the committed `example/` byte for byte as 65532
+and as an overridden UID. CI runs both on every pull request;
+`dagger call publish --address <ref>` and `dagger call publish-generator --name
+<name> --address <ref>` push multi-platform indexes and are called only from
+`.github/workflows/release.yaml`, which reads the set of generators from
+`dagger call builtin-generators` rather than repeating it in YAML.
 
 ### Key Dependencies
 

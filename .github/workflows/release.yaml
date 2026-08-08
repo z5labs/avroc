@@ -71,7 +71,14 @@ jobs:
             "$RUNNER_TEMP/ir.binpb" --clobber
 
   # The published base image (#126) — the one docs/container/SPEC.md describes
-  # and strangers' Dockerfiles say FROM.
+  # and strangers' Dockerfiles say FROM — and the three generator images built
+  # FROM it (#127).
+  #
+  # One job rather than two, because the four images are one release: a base
+  # published without its generator images would leave every `FROM` line in this
+  # repository's own documentation naming a tag whose generators are a release
+  # behind, and the generator images are built from the same base this job
+  # checked, so splitting them would mean building it twice.
   #
   # Only the full version tag is pushed here. docs/container/SPEC.md publishes
   # four tags and promises that a full version tag never moves while the other
@@ -79,7 +86,7 @@ jobs:
   # are #128's, and they are a change to this job rather than to the module,
   # because which tags exist is a property of a release and not of an image.
   image:
-    name: Base image
+    name: Images
     runs-on: ubuntu-latest
     permissions:
       # Reading the source, and writing the package. Both grants are here rather
@@ -110,6 +117,12 @@ jobs:
       - name: Check the base image against its contract
         run: dagger call image-contract
 
+      # And the images built FROM it, for the same reason: a tag is published
+      # once and never repointed, so this is the last moment at which a generator
+      # image that had stopped inheriting the entrypoint costs nothing.
+      - name: Check the generator images against the contract
+        run: dagger call generator-image-contract
+
       # One multi-platform index covering linux/amd64 and linux/arm64, so that a
       # `FROM` line naming the tag resolves to the manifest for whatever
       # platform the builder is on.
@@ -117,7 +130,7 @@ jobs:
       # The address is assembled here rather than in the module: the module
       # pushes the reference it is given, and a function that derived a tag from
       # the refs at HEAD would be a second place the tag scheme is written down.
-      - name: Build and publish it
+      - name: Build and publish the base image
         env:
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -125,3 +138,25 @@ jobs:
             --address "ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}" \
             --username "${{ github.actor }}" \
             --password env://REGISTRY_PASSWORD
+
+      # One image per built-in generator, at ghcr.io/<owner>/avroc-gen-<name>:
+      # the base with that generator copied into the plugin directory, which is
+      # the same two instructions docs/container/SPEC.md gives a third-party
+      # author (#127).
+      #
+      # The set of generators is read from the module rather than written out
+      # here, because the module is where that set is defined; a `for name in go
+      # json pcf` in this file would be forgotten exactly once, at the release
+      # where a fourth generator silently did not get published. The tags are
+      # still assembled here, for the reason the base image's step gives.
+      - name: Build and publish the generator images
+        env:
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for name in $(dagger call builtin-generators); do
+            dagger call publish-generator \
+              --name "$name" \
+              --address "ghcr.io/${{ github.repository }}-gen-$name:${{ github.event.release.tag_name }}" \
+              --username "${{ github.actor }}" \
+              --password env://REGISTRY_PASSWORD
+          done
