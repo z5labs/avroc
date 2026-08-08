@@ -523,6 +523,26 @@ The requirement is checked rather than asserted — a pipeline stage generates
 twice and byte-compares, failing on any difference (#120) — because determinism
 is the kind of property that holds until nobody is looking.
 
+That stage is `dagger call regeneration`, and the two runs it compares
+deliberately disagree about everything listed above: the absolute paths in
+`--descriptor` and `--out`, the working directory, the temporary directory,
+`PATH` beyond the entry that resolves the generators, the user, the hostname,
+the locale and the time zone. They agree about `SOURCE_DATE_EPOCH`, because
+that one is an input to generation rather than an accident of the machine. The
+stage runs on every platform avroc's image ships on
+([`../container/SPEC.md`](../container/SPEC.md)); the host platforms beyond
+those are covered by [Host platform](#host-platform) rather than by a stage,
+since neither distribution path puts one of them in the position of running a
+generator executable.
+
+Repetition catches output ordered by map iteration, because Go randomises that
+on every range. It cannot catch a clock read — two runs a moment apart agree on
+the date — so this repository's own generators are additionally held to the rule
+by a check on their source, which is what makes "no generator here can reach a
+clock, a hostname, a username or a random value" a fact rather than an
+intention. A third-party plugin is bound by the requirement above however it
+chooses to meet it.
+
 ## Capability negotiation
 
 A plugin **MUST** support being invoked as:

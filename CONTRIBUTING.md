@@ -32,8 +32,21 @@ These are not a second definition of the pipeline. Each drives the same builder
 `ci` drives with one stage enabled instead of four, against the same lint
 configuration, so a stage that passes on its own passes inside `ci`.
 
-`dagger check` runs all five as a checklist, if you would rather see them
-together than pick one.
+`dagger check` runs them as a checklist, if you would rather see them together
+than pick one.
+
+### Regeneration
+
+```sh
+dagger call regeneration                          # every platform
+dagger call regeneration --platform linux/arm64   # one of them
+```
+
+`regeneration` is avroc's own stage rather than part of the Z5Labs standard, so
+CI runs it as a second `dagger call` beside `ci`. It builds the four binaries,
+generates [`example/`](example/) twice, and requires the two trees to be
+byte-identical — and identical to what is committed. See
+[Determinism](#determinism) below for why both comparisons are one function.
 
 ### Getting the tools
 
@@ -136,19 +149,47 @@ schema's version, not the tool pin; the pin lives in
 [`github.com/z5labs/devex/daggerverse/go`](https://github.com/z5labs/devex/tree/main/daggerverse/go),
 which is where a bump belongs.
 
-## What the pipeline does not check yet
+## Determinism
 
-The example round-trip — build the four binaries, run `avroc generate` in
-[`example/`](example/), and confirm the committed output is unchanged — is not
-part of `dagger call ci`. It runs in the repository's local verify list instead.
+Two runs of a generator over the same descriptor produce byte-identical output.
+[`docs/plugin/SPEC.md`](docs/plugin/SPEC.md)'s *Determinism* is normative and
+binds third-party generators too; generated code is a thing a project commits,
+so output that changes when nothing changed turns every regeneration into a diff
+and makes the output useless as a thing to commit.
 
-It comes back to CI the same way everything else does: as another function on the
-root module invoked by another `dagger call`, never as raw Go steps beside it in
-[`.github/workflows/build.yaml`](.github/workflows/build.yaml). It belongs with
-the stage that generates twice and byte-compares, because that stage needs the
-same four binaries and the same worked example — one function, not two that drift.
+It is checked in three places, because no one of them can see all of it:
 
-Until then, run it by hand before pushing a change to generation:
+- **`dagger call regeneration`** generates [`example/`](example/) twice under
+  deliberately different surroundings — different absolute paths for
+  `--descriptor` and `--out`, working directory, temporary directory, `PATH`,
+  user, hostname, locale and time zone — and byte-compares the trees. It holds
+  `SOURCE_DATE_EPOCH` fixed across the two, because that one is an input to
+  generation rather than an accident of the machine. It runs on every platform
+  the image ships on.
+- **The round-trip is the same stage.** Its second comparison is the first run
+  against the committed tree, which is what fails when `example/` was not
+  regenerated after a change to a generator. Both comparisons need the same four
+  binaries and the same worked example, so they are one function rather than two
+  that drift.
+- **`go test ./...`** covers the parts a pipeline cannot. Each generator's
+  `TestGenerateIsDeterministic` runs it many times in one process, which is what
+  exercises Go's randomised map iteration order — the usual way the rule gets
+  broken, and the way that breaks intermittently rather than every time. And
+  `internal/plugin.TestNoGeneratorReadsTheClock` reads the source of every
+  generator to prove none of them can reach a clock, a hostname, a username or a
+  random value; two runs a moment apart agree on the date, so no amount of
+  repetition would catch that one.
+
+Where a generator genuinely cannot avoid a timestamp,
+`internal/plugin.SourceDateEpoch` is the only sanctioned way to get one. It
+reads `SOURCE_DATE_EPOCH` and never the clock, returns UTC because `TZ` is part
+of the environment output may not vary with, and reports a malformed value as an
+error rather than falling back — a build that quietly carries on being
+nondeterministic is the failure the whole rule exists to prevent. No generator
+here needs it yet.
+
+The round-trip is also in the local verify list, so it runs without a container
+runtime:
 
 ```sh
 go build -o ./bin/avroc ./cmd/avroc

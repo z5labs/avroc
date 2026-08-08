@@ -60,6 +60,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 
 	"dagger/avroc/internal/dagger"
 )
@@ -195,6 +198,246 @@ func (m *Avroc) IrDescriptorSet() *dagger.File {
 		Container(m.Source).
 		WithExec([]string{"go", "run", "./internal/tools/ir-descriptor-set", "-o", out}).
 		File(out)
+}
+
+// Regeneration is docs/plugin/SPEC.md's determinism requirement, checked
+// rather than asserted (#120): it builds the four binaries, runs
+// `avroc generate` over the worked example in example/ twice, and requires the
+// two trees to be byte-identical — and identical to what is committed.
+//
+// Two comparisons, one function, because they need the same binaries and the
+// same worked example and two functions would drift:
+//
+//   - The two runs against each other. This is the determinism check. Generated
+//     code is a thing a project commits, so output that changes when nothing
+//     changed turns every regeneration into a diff and makes the output useless
+//     as a thing to commit. The property holds until nobody is looking, which is
+//     why it is a stage and not a paragraph.
+//   - The first run against the committed tree. This is the round-trip
+//     CONTRIBUTING.md used to run only locally. It fails when example/ was not
+//     regenerated after a change to a generator, which is the other way the
+//     committed output stops meaning anything.
+//
+// The runs deliberately disagree about everything docs/plugin/SPEC.md says a
+// generator's output must not vary with: the absolute paths in --descriptor and
+// --out, the working directory, the temporary directory, PATH beyond the entry
+// that resolves the generators, the user, the hostname, the locale and the time
+// zone. They agree about SOURCE_DATE_EPOCH, because that one is an input rather
+// than an accident of the machine — a run that varied it would be asking two
+// different questions and calling the difference a bug.
+//
+// What this cannot catch is a generator reading the clock: two runs a moment
+// apart agree on the date. internal/plugin.TestNoGeneratorReadsTheClock is the
+// static half that closes it, and internal/plugin.SourceDateEpoch is the one
+// sanctioned way to get a timestamp at all.
+//
+// platform restricts the check to one of the platforms below; empty runs every
+// one of them.
+//
+// +check
+// +cache="session"
+func (m *Avroc) Regeneration(
+	ctx context.Context,
+	// Run the check on this platform alone, as `GOOS/GOARCH` — one of the
+	// platforms the check otherwise covers. Empty covers all of them.
+	// +optional
+	platform string,
+) error {
+	platforms := regenerationPlatforms()
+	if platform != "" {
+		if !slices.Contains(platforms, dagger.Platform(platform)) {
+			return fmt.Errorf("platform %q is not one this repository targets: %v", platform, platforms)
+		}
+		platforms = []dagger.Platform{dagger.Platform(platform)}
+	}
+
+	// Every platform is checked and every failure reported, rather than
+	// stopping at the first: "it is deterministic on amd64 and not on arm64" is
+	// the finding, and a run that stopped early would hide half of it.
+	var errs []error
+	for _, p := range platforms {
+		if err := m.regenerationOn(ctx, p); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", p, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// regenerationPlatforms is every platform Regeneration covers, and it is
+// docs/container/SPEC.md's published set rather than a list invented here.
+//
+// docs/plugin/SPEC.md's "Host platform" targets POSIX hosts and distinguishes
+// nothing between Linux, macOS and the other Unixes. Neither distribution path
+// puts any of them in the position of running a generator: the image runs Linux
+// containers, and so does the companion Dagger module, whatever the host they
+// are driven from. So the platforms a generator executable actually runs on are
+// the image's, and those are the two below.
+//
+// The two share a data model — both are 64-bit and little-endian — so this is
+// not a check for an endianness bug. It is a check that the executable actually
+// published for each platform is the one that behaves, which is a different
+// claim and the only one worth making about a binary somebody else will run. A
+// contributor on macOS covers the remaining ground with `go test ./...`: the
+// per-generator determinism tests run natively on the host they are actually
+// on, which is the only way that host is ever covered at all.
+func regenerationPlatforms() []dagger.Platform {
+	return []dagger.Platform{"linux/amd64", "linux/arm64"}
+}
+
+// regenerationOn runs both generations for one platform and compares the trees.
+//
+// The comparison is `diff --recursive` in a container of the pipeline's own
+// platform rather than a digest of the two directories, for two reasons: a
+// digest reports only that something differs, where diff names the file and
+// prints the lines; and a directory digest covers metadata that two runs are
+// entitled to disagree about, which would fail the check for reasons that are
+// not the property under test.
+func (m *Avroc) regenerationOn(ctx context.Context, platform dagger.Platform) error {
+	// One build per platform, cross-compiled by the toolchain container rather
+	// than compiled under emulation, so only the generation itself runs on the
+	// target platform. CGO is off because the run container below is scratch:
+	// there is no libc in it, and nothing in avroc needs one.
+	binaries := dag.Go().Build(m.Source, dagger.GoBuildOpts{
+		Pkg:        "./cmd/...",
+		Platform:   string(platform),
+		DisableCgo: true,
+	})
+
+	committed := m.Source.Directory("example")
+	first := generateWorkedExample(binaries, committed, platform, firstRun())
+	second := generateWorkedExample(binaries, committed, platform, secondRun())
+
+	const (
+		committedAt = "/regeneration/committed"
+		firstAt     = "/regeneration/first"
+		secondAt    = "/regeneration/second"
+	)
+
+	// --text because every file either generator writes is text, and a diff that
+	// said only "binary files differ" would report the failure without reporting
+	// what it was.
+	diff := func(a, b string) []string {
+		return []string{"diff", "--recursive", "--unified", "--text", a, b}
+	}
+
+	_, err := dag.Go().
+		Container(m.Source).
+		WithMountedDirectory(committedAt, committed).
+		WithMountedDirectory(firstAt, first).
+		WithMountedDirectory(secondAt, second).
+		WithExec(diff(firstAt, secondAt)).
+		WithExec(diff(committedAt, firstAt)).
+		Sync(ctx)
+	return err
+}
+
+// generateWorkedExample runs `avroc generate` once over a pristine copy of the
+// worked example and returns the tree it left behind.
+//
+// The container is scratch, holding the four statically linked binaries, an
+// empty temporary directory and the example: nothing else is in it, so nothing
+// else can be what the output depended on. It is also the shape
+// docs/container/SPEC.md publishes — the CLI and the generators on PATH, no
+// shell — so a generation that needs anything more than that is a finding about
+// the image as much as about determinism.
+func generateWorkedExample(
+	binaries *dagger.Directory,
+	example *dagger.Directory,
+	platform dagger.Platform,
+	run regenerationRun,
+) *dagger.Directory {
+	c := dag.Container(dagger.ContainerOpts{Platform: platform}).
+		WithDirectory(pluginDir, binaries).
+		WithDirectory(run.tmp, dag.Directory()).
+		WithDirectory(run.root, example).
+		WithWorkdir(run.root)
+
+	// Applied in order from a slice rather than a map: the environment is part
+	// of the container's identity, and a map would vary it between two calls of
+	// this function for no reason but Go's iteration order — which is the very
+	// thing being checked for downstream.
+	for _, v := range run.env {
+		c = c.WithEnvVariable(v.name, v.value)
+	}
+
+	// The executable by absolute path, because PATH is a variable of this run
+	// rather than a thing to rely on; PATH is what avroc searches to find the
+	// generators, and that is the one job it has here.
+	return c.
+		WithExec([]string{pluginDir + "/avroc", "generate"}).
+		Directory(run.root)
+}
+
+// pluginDir is where the binaries go, and it is docs/container/SPEC.md's plugin
+// directory rather than an arbitrary one: avroc discovers generators on PATH, so
+// the run container's layout is the published image's layout.
+const pluginDir = "/usr/local/bin"
+
+// regenerationRun is one generation's arrangement of everything the output must
+// not depend on.
+type regenerationRun struct {
+	// root is the directory the worked example is copied to, and so the prefix
+	// of every absolute path avroc passes a generator in --out.
+	root string
+	// tmp is TMPDIR, and so where the descriptor avroc passes in --descriptor is
+	// written.
+	tmp string
+	env []envVar
+}
+
+type envVar struct {
+	name  string
+	value string
+}
+
+// sourceDateEpoch is the one part of the environment both runs agree on: an
+// input to generation rather than a property of the machine, so varying it
+// would make a generator that correctly honoured it fail this check. The
+// instant itself is arbitrary and fixed — 2024-06-03T00:00:00Z.
+const sourceDateEpoch = "1717372800"
+
+// firstRun and secondRun disagree about everything else. Where a value has a
+// plausible-looking default, the second run deliberately does not use it: a
+// generator that read HOME and got the same answer both times would pass a
+// check that was not looking.
+func firstRun() regenerationRun {
+	return regenerationRun{
+		root: "/work",
+		tmp:  "/tmp",
+		env: []envVar{
+			{"PATH", pluginDir},
+			{"TMPDIR", "/tmp"},
+			{"HOME", "/root"},
+			{"USER", "root"},
+			{"LOGNAME", "root"},
+			{"HOSTNAME", "builder-one"},
+			{"TZ", "UTC"},
+			{"LANG", "C"},
+			{"LC_ALL", "C"},
+			{"SOURCE_DATE_EPOCH", sourceDateEpoch},
+		},
+	}
+}
+
+func secondRun() regenerationRun {
+	return regenerationRun{
+		// Longer than the first, and at a different depth, because a path that
+		// leaked into the output would most plausibly leak as its own text.
+		root: "/srv/a-considerably-longer-project-directory",
+		tmp:  "/var/tmp/second",
+		env: []envVar{
+			{"PATH", "/nonexistent:" + pluginDir + ":/also-nonexistent"},
+			{"TMPDIR", "/var/tmp/second"},
+			{"HOME", "/home/somebody-else"},
+			{"USER", "somebody-else"},
+			{"LOGNAME", "somebody-else"},
+			{"HOSTNAME", "builder-two"},
+			{"TZ", "Pacific/Kiritimati"},
+			{"LANG", "en_US.UTF-8"},
+			{"LC_ALL", "en_US.UTF-8"},
+			{"SOURCE_DATE_EPOCH", sourceDateEpoch},
+		},
+	}
 }
 
 // stage returns the check builder the standard pipeline builds on, bound to
