@@ -231,7 +231,7 @@ func TestPluralize(t *testing.T) {
 		{name: "MD5", want: "MD5s"},
 		{name: "Status", want: "Statuses"},
 		{name: "Box", want: "Boxes"},
-		{name: "Quiz", want: "Quizes"},
+		{name: "Topaz", want: "Topazes"},
 		{name: "Batch", want: "Batches"},
 		{name: "Hash", want: "Hashes"},
 		{name: "Entry", want: "Entries"},
@@ -243,6 +243,32 @@ func TestPluralize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := pluralize(tc.name); got != tc.want {
 				t.Errorf("pluralize(%q) = %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPluralizeIsRegularAndOnlyRegular records what the rule gives up on, so
+// that "Childs" is a decision this repository made and can be read, rather than
+// a surprise the next person finds in a generated identifier.
+//
+// Every case here needs a fact about the word that its spelling does not carry:
+// which nouns are irregular, which -ch is pronounced /k/, which single -z sits
+// after a stressed syllable and so doubles. Quiz and Topaz differ in that last
+// one alone, which is why neither a "z doubles" rule nor an "-es" rule is right
+// for both, and why the one that can be read off the letters is the one here.
+func TestPluralizeIsRegularAndOnlyRegular(t *testing.T) {
+	knownWrong := map[string]string{
+		"Child":   "Children",
+		"Person":  "People",
+		"Stomach": "Stomachs",
+		"Quiz":    "Quizzes",
+	}
+
+	for name, english := range knownWrong {
+		t.Run(name, func(t *testing.T) {
+			if got := pluralize(name); got == english {
+				t.Errorf("pluralize(%q) = %q, which is the English plural: the rule has grown a case, so this expectation is stale rather than failing", name, got)
 			}
 		})
 	}

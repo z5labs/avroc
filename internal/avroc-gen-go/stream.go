@@ -81,6 +81,15 @@ func streamItemType(t *avrocpb.Type) string {
 // naming, so an irregular noun getting Childs rather than Children is a wart in
 // a name and not a defect in the encoding, and a table of exceptions would be a
 // second thing to keep correct for no gain in what the code does.
+//
+// "Regular" is doing real work in that sentence, and the cases it gives up on
+// are not only the famous ones. Every English plural that needs a fact about the
+// word beyond its spelling is out of reach here: Childs and Persons, but equally
+// Stomaches, and Quizes for a quiz whose z doubles only because the syllable is
+// stressed — where the otherwise identical Topazes does not. Nothing short of a
+// dictionary tells those apart, so the rule is deliberately the one that can be
+// read off the letters, and a schema author who dislikes what it made of their
+// type name has the whole of the item type's own API available un-pluralised.
 func pluralize(name string) string {
 	lower := strings.ToLower(name)
 	switch {
