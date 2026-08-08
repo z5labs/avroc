@@ -4,8 +4,8 @@
 // https://opensource.org/licenses/MIT
 
 // This file builds and checks the published generator images: avroc's own three
-// generators, each shipped as an image built FROM the base image image.go builds
-// (#127).
+// generators, each shipped as an image built FROM the base image, which image.go
+// builds (#127).
 //
 // # Why the built-ins go through the front door
 //
