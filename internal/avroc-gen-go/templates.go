@@ -131,7 +131,7 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject b
 		}
 	}
 
-	// Last, and after every type they name have been written: the reader and
+	// Last, and after every type they name has been written: the reader and
 	// the writer are about the file rather than about any one type in it, and a
 	// person reading the file meets the item type before the stream over it.
 	if stream != nil {
