@@ -11,6 +11,7 @@ import (
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
+	"github.com/z5labs/avroc/internal/plugin"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -31,17 +32,15 @@ func TestGenerateRejectsUnknownIRVersion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &generatorService{}
-
 			// Deliberately not routed through generateToDir: that helper stamps
 			// a valid version onto a request that carries none, which is the
 			// one thing this test needs left alone.
-			cs := &captureStream{ctx: t.Context()}
-			err := svc.Generate(&avrocpb.GenerateRequest{
+			w := plugin.NewOutputDir(t.TempDir())
+			err := Generate(&avrocpb.GenerateRequest{
 				Version: tc.version,
 				Options: nil,
 				Schemas: []*avrocpb.Schema{versionTestSchema()},
-			}, cs)
+			}, w)
 
 			if err == nil {
 				t.Fatal("Generate accepted a descriptor whose IR version it does not know")
@@ -49,8 +48,8 @@ func TestGenerateRejectsUnknownIRVersion(t *testing.T) {
 			if !strings.Contains(err.Error(), "IR version") {
 				t.Errorf("diagnostic %q does not name the IR version", err.Error())
 			}
-			if len(cs.msgs) != 0 {
-				t.Errorf("generator emitted %d chunks from a descriptor it refused", len(cs.msgs))
+			if len(w.Written()) != 0 {
+				t.Errorf("generator wrote %v from a descriptor it refused", w.Written())
 			}
 		})
 	}
@@ -59,9 +58,7 @@ func TestGenerateRejectsUnknownIRVersion(t *testing.T) {
 // TestGenerateAcceptsTheCurrentIRVersion is the guard on the test above: a check
 // that refused everything would pass it.
 func TestGenerateAcceptsTheCurrentIRVersion(t *testing.T) {
-	svc := &generatorService{}
-
-	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Version: proto.Int32(ir.Version),
 		Options: nil,
 		Schemas: []*avrocpb.Schema{versionTestSchema()},
@@ -78,9 +75,7 @@ func TestGenerateAcceptsTheCurrentIRVersion(t *testing.T) {
 // and is indistinguishable from an unset field through the getter — defaulting
 // it away would quietly rewrite a failing case into a passing one.
 func TestGenerateToDirPreservesAnExplicitVersion(t *testing.T) {
-	svc := &generatorService{}
-
-	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Version: proto.Int32(0),
 		Options: nil,
 		Schemas: []*avrocpb.Schema{versionTestSchema()},
