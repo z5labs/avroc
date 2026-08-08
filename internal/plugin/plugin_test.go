@@ -306,7 +306,7 @@ func TestMain_WritesGeneratedFiles(t *testing.T) {
 	out := t.TempDir()
 	c, _ := newTestCLI("--descriptor", path, "--out", out)
 
-	if code := Main(t.Context(), c, "avroc-gen-test", echoGenerate); code != 0 {
+	if code := Main(t.Context(), c, testInfo(), echoGenerate); code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 
@@ -335,14 +335,14 @@ func TestMain_Failures(t *testing.T) {
 
 	t.Run("an argument vector the contract does not define", func(t *testing.T) {
 		c, _ := newTestCLI("--out", t.TempDir())
-		if code := Main(t.Context(), c, "avroc-gen-test", echoGenerate); code == 0 {
+		if code := Main(t.Context(), c, testInfo(), echoGenerate); code == 0 {
 			t.Error("exit code = 0 for a vector with no descriptor")
 		}
 	})
 
 	t.Run("a descriptor that is not there", func(t *testing.T) {
 		c, _ := newTestCLI("--descriptor", filepath.Join(t.TempDir(), "absent"), "--out", t.TempDir())
-		if code := Main(t.Context(), c, "avroc-gen-test", echoGenerate); code == 0 {
+		if code := Main(t.Context(), c, testInfo(), echoGenerate); code == 0 {
 			t.Error("exit code = 0 for a descriptor that does not exist")
 		}
 	})
@@ -354,7 +354,7 @@ func TestMain_Failures(t *testing.T) {
 		failing := func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error {
 			return io.ErrUnexpectedEOF
 		}
-		if code := Main(t.Context(), c, "avroc-gen-test", failing); code == 0 {
+		if code := Main(t.Context(), c, testInfo(), failing); code == 0 {
 			t.Error("exit code = 0 for a generator that returned an error")
 		}
 		if !strings.Contains(logs.String(), "failed to generate") {
@@ -372,7 +372,7 @@ func TestMain_Failures(t *testing.T) {
 				Last:    proto.Bool(false),
 			})
 		}
-		if code := Main(t.Context(), c, "avroc-gen-test", halfEmitted); code == 0 {
+		if code := Main(t.Context(), c, testInfo(), halfEmitted); code == 0 {
 			t.Error("exit code = 0 for a generator that left a file unterminated")
 		}
 	})

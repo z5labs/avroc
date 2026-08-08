@@ -51,6 +51,29 @@ Discovery is a `PATH` search in order, and **the earliest match wins**, exactly 
 
 What is not yet there, so that it is not mistaken for a gap: `--out` is the project's own output directory rather than a private empty scratch directory, and avroc does not yet enforce the boundary or merge — that is #117, with collisions #118 and stale files #119. The generators here still emit chunks internally through the `Generator` service's stream type, reassembled in `internal/plugin`; #121–#123 replace that with a plain write and #124 deletes the service.
 
+### The capability handshake
+
+Before any generation begins, avroc runs every generator the manifest resolved as
+`avroc-gen-<name> --plugin-info` and reads the JSON capability declaration it
+writes to standard output: `name`, `version`, `ir_version` and `options`
+(`docs/plugin/SPEC.md`, "Capability negotiation"). A run fails there — with
+nothing generated — when a generator will not answer, answers with something
+unparseable or incomplete, declares a name that is not the one avroc resolved,
+understands a lower `ir_version` than `ir.Version`, or declares a vocabulary the
+manifest's options are not in. That early failure is the whole point: without it
+a plugin too old for the IR fails late, as a confusing complaint about a type.
+
+The two halves are `internal/plugin.Info`/`WriteInfo` (the generator writes it)
+and `internal/avroc/plugininfo.go` (avroc reads it), and they deliberately share
+no code and no constant — a third-party generator implements the handshake with
+one `printf` and imports nothing from here.
+`internal/avroc.TestTheDeclarationThisRepositorysGeneratorsWriteIsOneAvrocAccepts`
+is what keeps them from drifting.
+
+`options` present-and-empty ("I accept none") is a different declaration from
+`options` absent ("you pass them, I decide"); `avroc-gen-json` and
+`avroc-gen-pcf` declare the first.
+
 ### The resolved IR
 
 Generators are handed **resolved** schemas (`docs/ir/SPEC.md`). `internal/avroc/resolve.go` is the only place that qualifies a namespace, knows Avro's primitive list, or decides where a named type is written out in full versus referred to by name. Every named type carries `full_name`; every type reference is a `Reference` stating its `kind`. A generator that re-derives any of this is a bug.

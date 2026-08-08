@@ -56,6 +56,15 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
+	// docs/plugin/SPEC.md's capability handshake, and it runs before the pool
+	// rather than inside it: a plugin too old for this avroc's IR must fail the
+	// run with nothing written, not after some other generator has already
+	// produced output the user now has to work out whether to keep.
+	if err := checkGenerators(ctx, cli.Log, tasks); err != nil {
+		cli.Log.ErrorContext(ctx, "generator capability handshake failed", slog.Any("error", err))
+		return 1
+	}
+
 	genPool := pool.New().WithContext(ctx)
 	for _, task := range tasks {
 		genPool.Go(func(ctx context.Context) error {
