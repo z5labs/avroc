@@ -42,11 +42,19 @@ func Main(ctx context.Context, c cli.Context) int {
 
 // declaredOptions is the --opt vocabulary avroc-gen-pcf declares: none.
 //
-// A function returning an empty slice rather than a nil variable, so that the
-// declaration is present-and-empty — "I accept none", which avroc can reject a
-// stray manifest option against — rather than absent, which tells avroc to pass
-// the options through and let the generator decide. Those are opposite
-// instructions and this generator means the first.
+// It exists to give that vocabulary one definition with a name on it, so that
+// "this generator accepts no options" is something a test can hold Generate
+// against — TestDeclaredOptionsAreTheOnesGenerateReads — rather than the
+// absence of an argument at the call site, which nothing can assert about.
+//
+// What the declaration says on the wire is present-and-empty: "I accept none",
+// which avroc can reject a stray manifest option against, rather than absent,
+// which tells avroc to pass the options through and let the generator decide.
+// Those are opposite instructions and this generator means the first — but
+// plugin.NewInfo's normalizeOptions is what guarantees it, and would do so for
+// a nil slice too. Returning an empty one here is agreement with that, not the
+// mechanism behind it; TestDeclaredVocabularyIsPresentAndEmpty is what checks
+// the mechanism.
 func declaredOptions() []string {
 	return []string{}
 }
