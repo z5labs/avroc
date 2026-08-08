@@ -232,17 +232,6 @@ func OutputPath(out, p string) (string, error) {
 // only its bytes.
 type GenerateFunc func(*avrocpb.GenerateRequest, FileWriter) error
 
-// StreamGenerateFunc is the transitional generation entry point: a descriptor
-// in, files out as chunks through the Generator service's stream type.
-//
-// Nothing in the contract this package implements requires it — avroc no longer
-// speaks to a generator over a socket, and the chunks never leave the process.
-// No generator here emits chunks any more (#121, #122, #123), so it survives
-// only until #124 removes the service the type comes from, and this one with
-// it. Its own tests are what keep it honest in the meantime; nothing new should
-// be written against it.
-type StreamGenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error
-
 // Main runs one invocation from an argument vector and returns the process exit
 // status.
 //
@@ -257,20 +246,6 @@ type StreamGenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_Generat
 // in a pipeline.
 func Main(ctx context.Context, c cli.Context, info Info, generate GenerateFunc) int {
 	return run(ctx, c, info, generate, os.Stdout)
-}
-
-// MainStream is Main for a generator that still emits chunks: the stream is
-// reassembled into whole files and written exactly as Main writes them.
-//
-// Transitional, with StreamGenerateFunc, and removed by #124.
-func MainStream(ctx context.Context, c cli.Context, info Info, generate StreamGenerateFunc) int {
-	return Main(ctx, c, info, func(req *avrocpb.GenerateRequest, w FileWriter) error {
-		s := &fileStream{ctx: ctx, w: w}
-		if err := generate(req, s); err != nil {
-			return err
-		}
-		return s.finish()
-	})
 }
 
 // run is Main with the declaration's destination passed in, so that a test can

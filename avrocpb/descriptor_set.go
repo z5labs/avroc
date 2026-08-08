@@ -43,13 +43,15 @@ import (
 // specifies exactly one message a plugin is handed — so the set is its file
 // plus the transitive closure of that file's imports, and nothing else.
 //
-// generator.proto and generate_response.proto are therefore absent, and their
-// absence is a decision rather than an oversight. Both belong to the gRPC
-// Generator service, which docs/ir/SPEC.md says the IR MUST NOT define and which
-// is being removed outright; publishing them here would hand a plugin author a
-// self-description of a service the specification tells them does not exist, and
-// would then break them when it goes. A generator needs to decode a descriptor,
-// not to speak a protocol.
+// Nothing else is reachable from that root, and since #124 nothing else is in
+// proto/ either: generator.proto and generate_response.proto — the gRPC
+// Generator service and the message that existed only as its streamed response —
+// are deleted. They were excluded from this set before they were deleted, for
+// the reason docs/ir/SPEC.md gives for the IR defining no service at all:
+// publishing them here would have handed a plugin author a self-description of a
+// service the specification tells them does not exist, and would then have broken
+// them when it went. A generator needs to decode a descriptor, not to speak a
+// protocol.
 //
 // # Order
 //

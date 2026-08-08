@@ -276,25 +276,6 @@ func echoGenerate(req *avrocpb.GenerateRequest, w FileWriter) error {
 	return nil
 }
 
-// echoStream is the same stand-in in the transitional shape: it emits each file
-// in two chunks, so the reassembly MainStream performs is exercised.
-func echoStream(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
-	for _, schema := range req.GetSchemas() {
-		name := schema.GetType().GetRecord().GetFullName() + ".txt"
-		for i, chunk := range [][]byte{[]byte("first\n"), []byte("second\n")} {
-			last := i == 1
-			if err := stream.Send(&avrocpb.GenerateResponse{
-				Path:    proto.String(name),
-				Content: chunk,
-				Last:    proto.Bool(last),
-			}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func newTestCLI(args ...string) (cli.Context, *bytes.Buffer) {
 	var logs bytes.Buffer
 	return cli.Context{
@@ -389,74 +370,6 @@ func TestMain_Failures(t *testing.T) {
 		}
 		if !strings.Contains(logs.String(), "failed to write generated output") {
 			t.Errorf("the failure was not reported: %s", logs.String())
-		}
-	})
-}
-
-func TestMainStream(t *testing.T) {
-	descriptorPath := func(t *testing.T) string {
-		t.Helper()
-		b, err := proto.Marshal(testDescriptor())
-		if err != nil {
-			t.Fatal(err)
-		}
-		path := filepath.Join(t.TempDir(), "descriptor.binpb")
-		if err := os.WriteFile(path, b, 0o444); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-
-	t.Run("reassembles the chunks into whole files", func(t *testing.T) {
-		out := t.TempDir()
-		c, _ := newTestCLI("--descriptor", descriptorPath(t), "--out", out)
-
-		if code := MainStream(t.Context(), c, testInfo(), echoStream); code != 0 {
-			t.Fatalf("exit code = %d, want 0", code)
-		}
-
-		got, err := os.ReadFile(filepath.Join(out, "com.example.User.txt"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := "first\nsecond\n"; string(got) != want {
-			t.Errorf("content = %q, want %q", string(got), want)
-		}
-	})
-
-	t.Run("a generator that fails", func(t *testing.T) {
-		c, logs := newTestCLI("--descriptor", descriptorPath(t), "--out", t.TempDir())
-
-		failing := func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error {
-			return io.ErrUnexpectedEOF
-		}
-		if code := MainStream(t.Context(), c, testInfo(), failing); code == 0 {
-			t.Error("exit code = 0 for a generator that returned an error")
-		}
-		if !strings.Contains(logs.String(), "failed to generate") {
-			t.Errorf("the failure was not reported: %s", logs.String())
-		}
-	})
-
-	t.Run("a generator that stops with a file unterminated", func(t *testing.T) {
-		out := t.TempDir()
-		c, _ := newTestCLI("--descriptor", descriptorPath(t), "--out", out)
-
-		halfEmitted := func(_ *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
-			return stream.Send(&avrocpb.GenerateResponse{
-				Path:    proto.String("user.go"),
-				Content: []byte("package pkg\n"),
-				Last:    proto.Bool(false),
-			})
-		}
-		if code := MainStream(t.Context(), c, testInfo(), halfEmitted); code == 0 {
-			t.Error("exit code = 0 for a generator that left a file unterminated")
-		}
-
-		// Nothing was written for it: the chunks are held until the file is
-		// complete, so a half-emitted file never reaches the filesystem at all.
-		if _, err := os.Stat(filepath.Join(out, "user.go")); !os.IsNotExist(err) {
-			t.Errorf("an unterminated file reached the output directory: %v", err)
 		}
 	})
 }

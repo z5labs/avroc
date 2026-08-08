@@ -445,12 +445,13 @@ that is current by construction and one that is current by diligence.
 
 ### What is deliberately absent
 
-The service definition. `generator.proto` and the `GenerateResponse` it streams
-are **not** in the published set (#113), and their absence follows directly from
+The service definition. `generator.proto` and the `GenerateResponse` it streamed
+were kept out of the published set (#113) and are now deleted outright (#124), so
+`proto/` holds the IR and nothing else. The absence follows directly from
 [the IR defining no service](#protobuf-is-a-schema-language-not-a-service):
-publishing them in the IR's own self-description would hand a plugin author a
-machine-readable description of a service this document tells them does not
-exist, and would then break them when it is removed (#124). A generator needs to
+publishing them in the IR's own self-description would have handed a plugin
+author a machine-readable description of a service this document tells them does
+not exist, and would then have broken them when it went. A generator needs to
 decode a descriptor, not to speak a protocol.
 
 ### Worked example

@@ -22,20 +22,6 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// serviceOnlyProtos are the files in proto/ that the published set leaves out,
-// with the reason each one is out. They are the gRPC Generator service and the
-// message that exists only as its streamed response; docs/ir/SPEC.md says the IR
-// MUST NOT define a service, and #124 removes both files outright.
-//
-// The list is here rather than in the implementation on purpose. The
-// implementation names one root and follows imports, so it has no exclusion list
-// to get wrong; this is the test's own statement of which files that root is
-// expected to miss, and it is what turns "a new .proto nobody wired into the
-// descriptor" into a failure rather than a silently unpublished file.
-func serviceOnlyProtos() []string {
-	return []string{"generate_response.proto", "generator.proto"}
-}
-
 // TestFileDescriptorSetCoversEveryProtoTheDescriptorReaches is the staleness
 // gate. The set is computed from the descriptors compiled into avrocpb, so it
 // cannot drift from them; what it can do is quietly stop covering proto/, which
@@ -44,8 +30,14 @@ func serviceOnlyProtos() []string {
 // meet a field whose type the published set does not describe.
 //
 // So the assertion is against the directory rather than against another copy of
-// the same descriptors: every .proto on disk is either in the set or in
-// serviceOnlyProtos, and nothing is in the set that is not on disk.
+// the same descriptors, and it is now an equality with no exclusions: every
+// .proto on disk is in the set, and nothing is in the set that is not on disk.
+// It carried an exclusion list until #124 — generator.proto and the
+// generate_response.proto it streamed, the two files of the gRPC Generator
+// service docs/ir/SPEC.md says the IR MUST NOT define. Both are deleted, so
+// there is nothing left for the list to hold, and dropping it is what makes a
+// .proto that GenerateRequest does not reach a failure outright rather than
+// something a future change could name its way past.
 func TestFileDescriptorSetCoversEveryProtoTheDescriptorReaches(t *testing.T) {
 	onDisk, err := filepath.Glob(filepath.Join(moduleRoot(t), "proto", "*.proto"))
 	if err != nil {
@@ -57,11 +49,7 @@ func TestFileDescriptorSetCoversEveryProtoTheDescriptorReaches(t *testing.T) {
 
 	var want []string
 	for _, path := range onDisk {
-		name := filepath.Base(path)
-		if slices.Contains(serviceOnlyProtos(), name) {
-			continue
-		}
-		want = append(want, name)
+		want = append(want, filepath.Base(path))
 	}
 	slices.Sort(want)
 
@@ -72,7 +60,7 @@ func TestFileDescriptorSetCoversEveryProtoTheDescriptorReaches(t *testing.T) {
 	slices.Sort(got)
 
 	if !slices.Equal(got, want) {
-		t.Fatalf("published FileDescriptorSet does not cover proto/:\n got: %v\nwant: %v\n\nA new .proto reachable from GenerateRequest is published automatically; one that is not reachable is either a mistake or belongs beside the service files in serviceOnlyProtos.", got, want)
+		t.Fatalf("published FileDescriptorSet does not cover proto/:\n got: %v\nwant: %v\n\nA new .proto reachable from GenerateRequest is published automatically; one that is not reachable is a mistake — proto/ is the IR and the IR defines no service, so there is nothing a file there can be that the descriptor does not reach.", got, want)
 	}
 }
 
