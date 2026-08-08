@@ -182,16 +182,18 @@ const generatorWaitDelay = 5 * time.Second
 
 // generate runs one generator over one descriptor, as docs/plugin/SPEC.md's
 // Invocation specifies: fork and exec avroc-gen-<name> with the descriptor and
-// the output directory as absolute paths, and wait for it to exit.
+// an output directory as absolute paths, and wait for it to exit.
 //
 // There is no socket, no client and no stream. The generator writes its own
-// files beneath output and says what went wrong on stderr; a zero exit is the
-// whole of the success signal.
+// files beneath the directory it was given and says what went wrong on stderr; a
+// zero exit is the whole of the success signal.
 //
-// Anything else fails the run, and nothing the generator left behind is adopted
-// as output. Discarding a private scratch directory rather than merging it is
-// that same rule once #117 gives a generator one; today --out is the project's
-// own directory and there is no merge step to withhold.
+// The directory it is given is not the project's. It is a private, empty scratch
+// directory that this invocation owns, and only a zero exit gets what is in it
+// merged into the project's output tree. Anything else fails the run and the
+// scratch directory is discarded, so nothing a failing generator left behind is
+// adopted as output — which is what makes a partially written failure the
+// contract explicitly permits harmless.
 func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
 	desc := newDescriptor(options, schemas)
 
@@ -228,15 +230,31 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		return err
 	}
 
-	// A plugin may assume the output directory exists and is writable, so avroc
-	// creates it rather than making every generator do it. Making it *empty* and
-	// private, and merging what lands in it into the project tree, is #117's.
+	// The project's own output tree, which avroc owns and creates: a generator
+	// never learns where it is, and it has to exist before a scratch directory
+	// can be made inside it.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		g.log.ErrorContext(ctx, "failed to create output directory", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
 
-	args := generatorArgs(descriptorPath, outputDir, options)
+	// The directory --out names: private to this invocation, empty, and the only
+	// place this generator can write.
+	scratchDir, err := newScratchDir(outputDir, g.name)
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to create scratch directory", slog.String("generator", g.name), slog.Any("error", err))
+		return err
+	}
+	// Removed however this returns — after a successful merge has emptied it, on
+	// a failure with the partial output the contract lets a generator leave
+	// behind still in it, and on cancellation. Registered after the descriptor's
+	// removal so that it unwinds before it, and both after the process has been
+	// waited on rather than while it may still be writing.
+	defer func() {
+		err = errors.Join(err, os.RemoveAll(scratchDir))
+	}()
+
+	args := generatorArgs(descriptorPath, scratchDir, options)
 	g.log.DebugContext(ctx, "running generator",
 		slog.String("generator", g.name),
 		slog.String("executable", g.executablePath),
@@ -271,7 +289,23 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		return g.reportFailure(ctx, runErr)
 	}
 
-	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.String("out", outputDir))
+	// Only now, and only because the exit was zero: everything the generator left
+	// in its scratch directory is the output of the run, and this is the one step
+	// that puts it in the project.
+	merged, err := mergeOutput(scratchDir, outputDir)
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to merge generated output",
+			slog.String("generator", g.name),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("generator %q: %w", g.name, err)
+	}
+
+	g.log.InfoContext(ctx, "generated output",
+		slog.String("generator", g.name),
+		slog.String("out", outputDir),
+		slog.Any("output_files", merged),
+	)
 	return nil
 }
 

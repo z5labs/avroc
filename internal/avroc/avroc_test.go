@@ -8,6 +8,7 @@ package avroc
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -408,10 +409,26 @@ func TestGeneratorGenerate(t *testing.T) {
 	if filepath.Base(args[1]) != descriptorFilename {
 		t.Errorf("--descriptor %q is not the descriptor avroc writes", args[1])
 	}
-	if want, err := filepath.Abs(outputDir); err != nil {
+	// --out is a private scratch directory beneath the project's output tree, not
+	// the tree itself: a generator does not learn where the project's output goes
+	// and cannot write into it.
+	absOutput, err := filepath.Abs(outputDir)
+	if err != nil {
 		t.Fatal(err)
-	} else if args[3] != want {
-		t.Errorf("--out = %q, want the absolute %q", args[3], want)
+	}
+	if !filepath.IsAbs(args[3]) {
+		t.Errorf("--out %q is not an absolute path", args[3])
+	}
+	if args[3] == absOutput {
+		t.Errorf("--out = %q, the project's own output directory rather than a scratch directory", args[3])
+	}
+	if filepath.Dir(args[3]) != absOutput {
+		t.Errorf("--out = %q, want a directory beneath %q", args[3], absOutput)
+	}
+	// And it is gone: the scratch directory's lifetime is the invocation's, on
+	// success as much as on failure.
+	if _, err := os.Stat(args[3]); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the scratch directory %q survived the invocation: %v", args[3], err)
 	}
 	// The options follow in the order the manifest fixed, so the vector is a
 	// function of the manifest rather than of a map iteration.
@@ -437,9 +454,18 @@ func TestGeneratorGenerate(t *testing.T) {
 		t.Errorf("descriptor on disk = %v, want %v", &onDisk, want)
 	}
 
-	// The generator writes its own files now; avroc only creates the directory.
+	// The generator wrote into its scratch directory and avroc merged it: the
+	// file is in the project's tree, at the path the generator chose, with the
+	// subdirectory it asked for created on the way.
 	if _, err := os.Stat(filepath.Join(outputDir, "pkg", "output.go")); err != nil {
-		t.Errorf("expected the generator's file under the output directory: %v", err)
+		t.Errorf("expected the generator's file merged into the output directory: %v", err)
+	}
+	// And nothing else, so the merge left no scratch directory behind in a tree
+	// a person is about to commit.
+	if entries, err := os.ReadDir(outputDir); err != nil {
+		t.Error(err)
+	} else if len(entries) != 1 || entries[0].Name() != "pkg" {
+		t.Errorf("the output directory holds %v, want just the merged pkg directory", entries)
 	}
 
 	for dir := range descriptorDirs(t) {
@@ -450,9 +476,9 @@ func TestGeneratorGenerate(t *testing.T) {
 }
 
 // TestGeneratorGenerateNonZeroExit is the whole of the failure signal: a
-// non-zero exit fails the run whatever the generator left on disk, the status is
-// reported without anything being concluded from its value, and the descriptor
-// is still removed.
+// non-zero exit fails the run whatever the generator left on disk, nothing it
+// left is merged, the status is reported without anything being concluded from
+// its value, and the descriptor and scratch directories are still removed.
 func TestGeneratorGenerateNonZeroExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -493,6 +519,17 @@ exit 3
 		t.Errorf("error %q reports a generator that exited as one that was signalled", err)
 	}
 
+	// The half-written file the generator left is not output, and the scratch
+	// directory that held it is gone — so the project tree a failed run leaves
+	// behind is the one it started with.
+	entries, readErr := os.ReadDir(outputDir)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed invocation left %v in the output directory", entries)
+	}
+
 	var reported bool
 	for _, r := range records() {
 		switch r.message {
@@ -531,6 +568,49 @@ exit 3
 	}
 }
 
+// TestGeneratorGenerateRefusesAnEscape is the boundary on the real fork/exec
+// path: a generator that exits zero having planted a link out of its scratch
+// directory fails the run, and nothing it produced is merged.
+//
+// It is the escape a relative-path check cannot see. Every path the generator
+// used is beneath the directory it was given; only following the link leaves it,
+// which is why the merge refuses the link rather than resolving it.
+func TestGeneratorGenerateRefusesAnEscape(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	elsewhere := t.TempDir()
+	g := testGenerator(t, writeShellGenerator(t, fmt.Sprintf(`set -e
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) out=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf 'package avro\n' > "$out/legitimate.go"
+ln -s '%s' "$out/escape"
+`, elsewhere)))
+
+	outputDir := t.TempDir()
+	err := g.generate(ctx, outputDir, nil, testSchema("User"))
+	if err == nil {
+		t.Fatal("generate merged the output of a generator that escaped its scratch directory")
+	}
+	if !strings.Contains(err.Error(), "escape") {
+		t.Errorf("error %q does not name the entry it refused", err)
+	}
+
+	// The refusal is all or nothing: the file the generator was entitled to write
+	// does not reach the tree either, because a run that escaped is a failed run.
+	entries, readErr := os.ReadDir(outputDir)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a refused merge left %v in the output directory", entries)
+	}
+}
+
 // TestGeneratorGenerateCancellation is the other half of the process lifecycle:
 // cancelling the signal-based parent context reaches the child, and generate
 // returns rather than waiting on a process nobody is going to stop.
@@ -546,9 +626,10 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 
 	before := descriptorDirs(t)
 
+	outputDir := t.TempDir()
 	done := make(chan error, 1)
 	go func() {
-		done <- g.generate(ctx, t.TempDir(), nil, testSchema("User"))
+		done <- g.generate(ctx, outputDir, nil, testSchema("User"))
 	}()
 
 	// Cancel only once the child is definitely running, so the test is about
@@ -579,6 +660,18 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 		if _, ok := before[dir]; !ok {
 			t.Errorf("descriptor directory %q survived a cancelled invocation", dir)
 		}
+	}
+
+	// The scratch directory goes with it. Cancellation is the case that used to
+	// leave one behind — the removal is deferred rather than done on the success
+	// path for exactly this reason — and one left in the project's output tree is
+	// a directory the user then finds and has to identify.
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a cancelled invocation left %v in the output directory", entries)
 	}
 }
 
