@@ -25,6 +25,7 @@ func TestGenerateRejectsUnknownIRVersion(t *testing.T) {
 		version *int32
 	}{
 		{name: "no version at all", version: nil},
+		{name: "explicitly zero", version: proto.Int32(0)},
 		{name: "newer than this generator", version: proto.Int32(ir.Version + 1)},
 	}
 
@@ -67,6 +68,25 @@ func TestGenerateAcceptsTheCurrentIRVersion(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Generate rejected the current IR version %d: %v", ir.Version, err)
+	}
+}
+
+// TestGenerateToDirPreservesAnExplicitVersion pins generateToDir's one piece of
+// judgment: it defaults a version onto a request that carries none, and must
+// leave alone one a test set deliberately. Zero is the case that distinguishes
+// the two, because it is a reserved value a test may legitimately want to send
+// and is indistinguishable from an unset field through the getter — defaulting
+// it away would quietly rewrite a failing case into a passing one.
+func TestGenerateToDirPreservesAnExplicitVersion(t *testing.T) {
+	svc := &generatorService{}
+
+	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+		Version: proto.Int32(0),
+		Options: nil,
+		Schemas: []*avrocpb.Schema{versionTestSchema()},
+	})
+	if err == nil {
+		t.Fatal("generateToDir replaced an explicitly reserved version with a valid one")
 	}
 }
 

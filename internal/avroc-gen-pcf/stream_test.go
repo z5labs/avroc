@@ -50,7 +50,12 @@ func generateToDir(t *testing.T, svc *generatorService, dir string, req *avrocpb
 	// test. Defaulting it here keeps the version rule tested where it is the
 	// subject — see TestGenerateRejectsUnknownIRVersion — instead of restated at
 	// every call site. A test that sets a version of its own keeps it.
-	if req.GetVersion() == 0 {
+	//
+	// The field, not GetVersion: an explicit zero is a reserved value a test may
+	// legitimately want to send, and GetVersion cannot tell it from a field that
+	// was never set. Defaulting that away would rewrite the case under test into
+	// a passing one.
+	if req.Version == nil {
 		req = proto.CloneOf(req)
 		req.Version = proto.Int32(ir.Version)
 	}
