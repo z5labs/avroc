@@ -18,33 +18,35 @@ go test -v ./...
 
 ## Architecture
 
-avroc is a modular code generator for Avro IDL, following a plugin architecture inspired by protoc.
+avroc is a modular code generator for Avro IDL. A generator is an executable, not a server: there is no service, no socket and no port. `docs/plugin/SPEC.md` is normative.
 
-### Plugin Communication Flow
+### Plugin Invocation
 
-1. avroc creates a temporary Unix socket and starts a generator subprocess (`avroc-gen-<name>`), passing the socket path as its first argument
-2. The generator listens on the Unix socket and registers its `Generator` gRPC service
-3. avroc connects as a gRPC client, sends a `GenerateRequest` (schemas + output directory), and receives a `GenerateResponse` (output file paths)
-4. Generators run concurrently via `sourcegraph/conc` pools
+1. avroc writes a `GenerateRequest` descriptor into a directory created for that one invocation
+2. avroc execs `avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]`, both paths absolute, and waits for it to exit
+3. The generator writes whole files beneath `--out` and reports diagnostics on stderr; a zero exit is the whole of the success signal
+4. `--out` is a private, empty scratch directory, merged into the project's output tree only on a zero exit
+5. Generators run concurrently via `sourcegraph/conc` pools
 
 ### Plugin Discovery
 
-The CLI scans `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a `-<name>_out` CLI flag for specifying its output directory.
+The CLI scans `PATH` for executables matching `avroc-gen-<name>`, earliest match wins. Which generators run, and with which options, comes from the checked-in `avroc.json` manifest.
 
 ### Key Packages
 
 - **`cmd/avroc/`** — CLI entry point
-- **`cmd/avroc-gen-go/`** — Go generator plugin entry point
+- **`cmd/avroc-gen-go/`**, **`cmd/avroc-gen-json/`**, **`cmd/avroc-gen-pcf/`** — generator plugin entry points
 - **`internal/avroc/`** — Core CLI logic: plugin discovery, Avro IDL parsing, code generation orchestration
-- **`internal/avroc-gen-go/`** — Go generator implementing the `Generator` gRPC service
+- **`internal/avroc-gen-go/`** — Go generator; reads the descriptor it is handed and writes Go source beneath `--out`
+- **`internal/plugin/`** — The generator's half of the CLI contract: argument vector, descriptor, output directory
 - **`internal/cli/`** — Shared `cli.Context` type providing logger, environment, filesystem, and args
 - **`avrocpb/`** — Generated protobuf code, public because third-party generators import it (do not edit)
-- **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service
+- **`proto/`** — Protobuf definitions (edition 2023) for the resolved IR; protobuf is a schema language here, not a service definition language
 
 ### Key Dependencies
 
 - `github.com/z5labs/avro-go` — Avro IDL parser
-- `google.golang.org/grpc` + `google.golang.org/protobuf` — gRPC plugin communication
+- `google.golang.org/protobuf` — the IR's schema language, and the descriptor's wire encoding
 - `github.com/sourcegraph/conc` — Structured concurrency for parallel generator execution
 
 ## Conventions

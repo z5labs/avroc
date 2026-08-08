@@ -12,8 +12,10 @@
 // cannot import is not one. docs/ir/SPEC.md is the contract itself; this
 // package is only its spelling in Go.
 //
-// Every file here except this one is generated from proto/ by protoc-gen-go
-// and protoc-gen-go-grpc. Do not edit them — change the .proto and regenerate.
+// Every file here except this one and descriptor_set.go is generated from proto/
+// by protoc-gen-go. Do not edit them — change the .proto and regenerate. There
+// is no protoc-gen-go-grpc output any more: the Generator service is gone (#124)
+// and the IR is a schema, not a protocol.
 // The Go module tag this package is released under moves for Go's reasons and
 // is not the IR version; that is GenerateRequest.version, a single monotonic
 // integer, and reading it before anything else is a consumer's first

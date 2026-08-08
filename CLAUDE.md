@@ -34,7 +34,7 @@ go test -v ./...
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
-- **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service.
+- **`proto/`** — Protobuf definitions (edition 2023) for the resolved IR, and nothing else. protobuf is the IR's schema language, not a service definition language: there is no `service` here, and `avrocpb.FileDescriptorSet` publishes every file in this directory (#124).
 
 ### Plugin Invocation
 
@@ -52,7 +52,7 @@ A failed invocation is reported as one of three things, because they need differ
 
 Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
 
-What is not yet there, so that it is not mistaken for a gap: every generator here now writes through `plugin.FileWriter` (#121, #122, #123), so nothing emits chunks and nothing calls `plugin.MainStream` any more — it and `internal/plugin/stream.go` survive only until #124 deletes the `Generator` service the stream type comes from. Nothing new is written against them.
+There is one shape a generator's output takes, and no second one: every generator here writes whole files through `plugin.FileWriter` (#121, #122, #123). The chunk stream that preceded it is gone with the `Generator` service the chunk type came from — `plugin.MainStream`, `plugin.StreamGenerateFunc` and `internal/plugin/stream.go` were all deleted by #124.
 
 ### The output directory and the merge
 
@@ -187,7 +187,6 @@ grows a timestamp uses it rather than inventing its own.
 
 - `github.com/z5labs/avro-go` — Avro IDL parser
 - `google.golang.org/protobuf` — the IR's schema language, and the descriptor's wire encoding
-- `google.golang.org/grpc` — no longer a transport. Nothing dials or serves; what is left is the generated `Generator` service types the generators here still emit through, which #124 deletes
 - `github.com/sourcegraph/conc` — Structured concurrency for parallel generator execution
 
 ## Conventions
