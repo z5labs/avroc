@@ -479,7 +479,7 @@ The structure and meaning of the IR a plugin reads are **not specified here**:
 what a resolved schema contains, what each type constructor carries, what
 *resolved* means, and how the version field is compared.
 
-Reason: they are [`ir/SPEC.md`](../ir/SPEC.md)'s (#108–#113), and the split is
+Reason: they are [`ir/SPEC.md`](../ir/SPEC.md)'s (#108, #109), and the split is
 what lets the two evolve apart. The IR gains a field without this document
 changing; this document changes a flag without the IR moving. Restating any of
 the IR's shape here would produce a second description for a plugin author to
@@ -534,7 +534,7 @@ The consequence has to be stated plainly rather than discovered:
 >
 > **The container is the reproducible path.** An image pinned by digest fixes
 > every generator in it, and that is the configuration this project supports
-> when reproducibility is a requirement (#126–#128). `go install` and a
+> when reproducibility is a requirement (#126, #127, #128). `go install` and a
 > `PATH` are a convenience for a developer's laptop.
 
 That is a real trade and not a gap waiting to be filled. What it buys is that a
