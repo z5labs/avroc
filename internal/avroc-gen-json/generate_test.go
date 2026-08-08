@@ -54,8 +54,7 @@ func TestGenerate_Record(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -134,8 +133,7 @@ func TestGenerate_Enum(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -201,8 +199,7 @@ func TestGenerate_EnumWithDefault(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -244,8 +241,7 @@ func TestGenerate_Fixed(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -311,8 +307,7 @@ func TestGenerate_Union(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -379,8 +374,7 @@ func TestGenerate_Array(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -442,8 +436,7 @@ func TestGenerate_Map(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -502,8 +495,7 @@ func TestGenerate_RecordWithAliases(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -569,8 +561,7 @@ func TestGenerate_RecordEmitsResolvedNamespace(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -617,8 +608,7 @@ func TestGenerate_RecordWithOwnNamespace(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -647,8 +637,7 @@ func TestGenerate_RecordWithOwnNamespace(t *testing.T) {
 func TestGenerate_HonoursProducerOrdering(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{resolvedTestRecord()},
 	})
 	if err != nil {
@@ -766,8 +755,7 @@ func TestGenerate_UnrecognisedReferenceKind(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err == nil {
