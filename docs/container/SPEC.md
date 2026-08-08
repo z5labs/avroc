@@ -634,13 +634,33 @@ COPY --from=build --chown=65532:65532 --chmod=0755 \
 ```
 
 Build it, and run it against a project whose manifest asks for the `hello`
-generator:
+generator. The [example project](../../example)'s schema and a manifest naming
+`hello` and nothing else is one — `schema.avdl` beside an `avroc.json` reading:
+
+```json
+{
+  "inputs": ["schema.avdl"],
+  "generators": [
+    {
+      "name": "hello",
+      "out": "out"
+    }
+  ]
+}
+```
 
 ```console
 $ docker build -t avroc-hello .
 $ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
     avroc-hello generate
+$ cat out/hello.txt
+hello
 ```
+
+The `--opt` half of the plugin contract works the same way from here: adding
+`"options": {"greeting": "hei"}` to the generator's entry in the manifest is
+what avroc turns into `--opt greeting=hei` on the generator's command line, and
+`hello.txt` says `hei` instead.
 
 Five things in it are the contract rather than the example, and each one is a
 line that would be wrong in a Dockerfile written from habit:
@@ -665,6 +685,29 @@ there and writes one deterministic file under `--out`. Everything it does is
 required of it by the [plugin contract](../plugin/SPEC.md), and nothing it does
 is required of it by this one — which is the point. This document's whole
 involvement in the generator is the two lines that put it on `PATH`.
+
+### This example is built and run by the pipeline
+
+`dagger call worked-example` extracts the Dockerfile above out of this file,
+builds it, and runs the image it produces over the example project's schema; CI
+runs that on every pull request. So the example is executable documentation
+rather than a transcription, and a change that breaks it fails on the pull
+request that made it.
+
+It is checked here rather than trusted because nothing else in this repository
+reads it: avroc's own build, its tests and the checks on its published images
+would all pass on an example that stopped building releases ago, and the first
+person to find out would be an adopter at their own `docker build` — of the
+first thing they tried.
+
+Two details of how it is checked matter to a reader, because they bound what
+passing means. The final stage is *interpreted* rather than built: a
+`FROM ghcr.io/z5labs/avroc:v0` line names a published image, and a pull request
+has to check the base it just built, so the pipeline reads that stage's `COPY`
+for the flags and paths written above and replays them against its own base
+image. And the build stage is handed to the builder exactly as committed, with
+an empty build context — which is what makes "runnable as written" a property
+somebody measured rather than one somebody remembered.
 
 ## Compatibility guarantees
 

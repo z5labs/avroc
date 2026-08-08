@@ -92,6 +92,28 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" <image> gener
 --address …` push one multi-platform index to the reference you give them, which
 is how to put an image on a registry of your own.
 
+### The worked example
+
+```sh
+dagger call worked-example                              # build it and run it
+dagger call worked-example-image export --path ./hello.tar
+```
+
+`docs/container/SPEC.md`'s [worked
+example](docs/container/SPEC.md#worked-example-adding-a-generator) is a complete
+multi-stage Dockerfile that adds a generator avroc has never heard of, and
+`worked-example` is that Dockerfile extracted from the document, built, and run
+over the example project's schema. Edit the fenced block and this is what tells
+you whether it still works.
+
+It reads the document rather than a copy of it on purpose: a Dockerfile in a
+`testdata` directory would be the one that is checked while the one people read
+went stale. The build stage is built as committed with an empty build context;
+the final stage is interpreted, because `FROM ghcr.io/z5labs/avroc:v0` names a
+published image and a pull request has to check the base it just built. An
+instruction in that stage other than `COPY` fails the check rather than quietly
+applying to nothing — teach `.dagger/worked_example.go` what it means first.
+
 A **release** is `dagger call release`, and it is the only thing
 [`.github/workflows/release.yaml`](.github/workflows/release.yaml) calls. Do not
 run it by hand: it publishes every tag

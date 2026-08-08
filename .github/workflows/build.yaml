@@ -129,6 +129,23 @@ jobs:
       - name: Check the generator images against the contract
         run: dagger call generator-image-contract
 
+      # docs/container/SPEC.md's worked example, built and run rather than read
+      # (#129). It extracts the multi-stage Dockerfile that document gives a
+      # stranger, compiles the third-party generator in it with the build stage
+      # exactly as committed, copies the result into the plugin directory of the
+      # base image this pipeline just built, and generates with it through the
+      # inherited entrypoint.
+      #
+      # It is a step here because the worked example is the one part of this
+      # repository nothing else reads: the Go build, the tests and the image
+      # checks would all pass on a document whose Dockerfile stopped building
+      # releases ago. That example is the first thing an adopter tries, so one
+      # that has rotted is worse than none at all — and this is the step that
+      # says so on the pull request that broke it rather than in somebody else's
+      # terminal.
+      - name: Build and run the worked example
+        run: dagger call worked-example
+
       # docs/container/SPEC.md's tag table, executed (#128). It runs the same
       # derivation a release runs — refs at HEAD in, published tags out — over
       # the cases that matter: a release, a patch release, a prerelease that
