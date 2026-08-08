@@ -54,6 +54,16 @@ func Generate(req *avrocpb.GenerateRequest, w plugin.FileWriter) error {
 		return fmt.Errorf("unsupported encoding option: %q (supported: single_object)", encoding)
 	}
 
+	// What single-object encoding asks for is checked against every schema
+	// before the loop below writes any of them, so a descriptor this generator
+	// cannot give that encoding to fails the invocation with nothing written
+	// rather than with a package the option had no effect on.
+	if singleObject {
+		if err := checkSingleObjectRoots(req.GetSchemas()); err != nil {
+			return err
+		}
+	}
+
 	for _, schema := range req.Schemas {
 		filename, content, err := buildSchemaFile(packageName, schema, singleObject)
 		if err != nil {

@@ -324,7 +324,7 @@ Generates idiomatic Go types with binary Avro serialization support.
 | Option | Required | Description |
 |---|---|---|
 | `package_name` | Yes | The Go package name for all generated files. |
-| `encoding` | No | Set to `single_object` to generate a `Fingerprint()` method on the primary record type for [Avro Single Object Encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding). |
+| `encoding` | No | Set to `single_object` to generate a `Fingerprint()` method on the primary record type for [Avro Single Object Encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding). Every schema in the run must be rooted at a record. Any other root — an array, a map, a union, an enum, a fixed or a primitive — fails the run with a diagnostic naming that root, rather than generating without the fingerprint. |
 
 **Generated types:**
 
