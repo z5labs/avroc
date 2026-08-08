@@ -450,21 +450,78 @@ func TestGeneratorGenerate(t *testing.T) {
 }
 
 // TestGeneratorGenerateNonZeroExit is the whole of the failure signal: a
-// non-zero exit fails the run, and the descriptor is still removed.
+// non-zero exit fails the run whatever the generator left on disk, the status is
+// reported without anything being concluded from its value, and the descriptor
+// is still removed.
 func TestGeneratorGenerateNonZeroExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	g := testGenerator(t, writeShellGenerator(t, "echo 'error: nope' >&2\nexit 3\n"))
+	log, records := recordingLogger()
+	// Partial output before the failure, because a plugin MAY exit non-zero with
+	// files already written: what avroc does with them is decided by the exit
+	// status and not by their presence.
+	g := testGenerator(t, writeShellGenerator(t, `set -e
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) out=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf 'package half\n' > "$out/half.go"
+echo 'error: com.example.User: nope' >&2
+exit 3
+`))
+	g.log = log
 
 	before := descriptorDirs(t)
 
-	err := g.generate(ctx, t.TempDir(), nil, testSchema("User"))
+	outputDir := t.TempDir()
+	err := g.generate(ctx, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate accepted a generator that exited non-zero")
 	}
 	if !strings.Contains(err.Error(), testGeneratorName) {
 		t.Errorf("error %q does not name the generator", err)
+	}
+	// Distinguishable from the signal case, which is the whole point of
+	// reporting them separately.
+	if !strings.Contains(err.Error(), "exited with status 3") {
+		t.Errorf("error %q does not report the exit status", err)
+	}
+	if strings.Contains(err.Error(), "signal") {
+		t.Errorf("error %q reports a generator that exited as one that was signalled", err)
+	}
+
+	var reported bool
+	for _, r := range records() {
+		switch r.message {
+		case "generator exited non-zero":
+			reported = true
+			if r.attrs["exit_code"] != "3" {
+				t.Errorf("exit_code attribute = %q, want %q", r.attrs["exit_code"], "3")
+			}
+			if r.attrs["generator"] != testGeneratorName {
+				t.Errorf("generator attribute = %q, want %q", r.attrs["generator"], testGeneratorName)
+			}
+		case "generated output":
+			t.Error("a failed invocation was reported as having generated output")
+		}
+	}
+	if !reported {
+		t.Errorf("nothing in the log reports the exit status: %v", records())
+	}
+
+	// The generator's diagnostic still reached the log: a failing run is the one
+	// where its explanation matters most.
+	var diagnosed bool
+	for _, r := range records() {
+		if r.message == "com.example.User: nope" && r.attrs["severity"] == "error" {
+			diagnosed = true
+		}
+	}
+	if !diagnosed {
+		t.Errorf("the failing generator's diagnostic is not in the log: %v", records())
 	}
 
 	for dir := range descriptorDirs(t) {

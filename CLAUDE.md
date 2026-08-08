@@ -38,8 +38,14 @@ go test -v ./...
 
 1. avroc writes the descriptor into a directory created for that one invocation.
 2. avroc forks and execs `avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]`, both paths absolute, and waits for it to exit. Nothing else is on the vector, and in particular nothing comes from the environment — `AVROC_GENERATOR_ARGS` is gone.
-3. The generator writes its own files beneath `--out` and reports on stderr. A zero exit is the whole of the success signal.
+3. The generator writes its own files beneath `--out` and reports on stderr. A zero exit is the whole of the success signal; anything else fails the run, and nothing the generator left behind is adopted as output.
 4. Generators run concurrently via `sourcegraph/conc` pools. Cancellation flows from the signal-based parent context through `exec.CommandContext`, and every child is waited on — on success, on failure and on cancellation.
+
+### Diagnostics and the exit status
+
+Standard error is the diagnostic channel, and avroc reads it rather than inheriting it. Every line lands in avroc's structured log attributed to the generator: a `<severity>: <message>` line at the level its severity names — `error`, `warning`, `note` — carrying a `severity` attribute, and **any other line verbatim at warning level**, as it arrives rather than held until the process exits. `internal/avroc/diagnostic.go` is the parser; `internal/plugin.DiagnosticHandler` is the producer every generator here logs through, so a generator in this repository is held to the format a third-party one is held to.
+
+A failed invocation is reported as one of three things, because they need different responses: a generator that never ran, one that **exited non-zero** (a bug in the generator — the code is reported and nothing is concluded from its value), and one **terminated by a signal**, named as such (usually the run being cancelled or the machine running out of memory).
 
 Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
 
