@@ -29,6 +29,7 @@ go test -v ./...
 - **`internal/avroc/`** — Core CLI logic. Discovers generator plugins on `PATH`, registers `-<name>_out` flags for each, parses Avro IDL files, and orchestrates code generation.
 - **`internal/avroc-gen-go/`** — Go generator plugin. Implements the `Generator` gRPC service, listens on a Unix socket, and handles `GenerateRequest`s.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
+- **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
 - **`internal/avrocpb/`** — Generated Go code from the protobuf definitions. Do not edit directly.
 - **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service.
 
@@ -38,6 +39,10 @@ go test -v ./...
 2. The generator listens on the Unix socket and registers its `Generator` gRPC service.
 3. avroc connects as a gRPC client, sends a `GenerateRequest` (schemas + output directory), and receives a `GenerateResponse` (output file paths).
 4. Generators run concurrently via `sourcegraph/conc` pools.
+
+### The resolved IR
+
+Generators are handed **resolved** schemas (`docs/ir/SPEC.md`). `internal/avroc/resolve.go` is the only place that qualifies a namespace, knows Avro's primitive list, or decides where a named type is written out in full versus referred to by name. Every named type carries `full_name`; every type reference is a `Reference` stating its `kind`. A generator that re-derives any of this is a bug.
 
 ### Plugin Discovery
 

@@ -36,18 +36,20 @@ func TestGenerate_Record(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 						{
 							Name: proto.String("age"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 							},
 						},
 					},
@@ -104,7 +106,9 @@ func TestGenerate_Enum(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_EnumType{
 				EnumType: &avrocpb.Enum{
-					Name: proto.String("Status"),
+					Name:      proto.String("Status"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Status"),
 					Values: []*avrocpb.Ident{
 						{Value: proto.String("PENDING")},
 						{Value: proto.String("ACTIVE")},
@@ -162,8 +166,10 @@ func TestGenerate_Fixed(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Fixed{
 				Fixed: &avrocpb.Fixed{
-					Name: proto.String("MD5"),
-					Size: &size,
+					Name:      proto.String("MD5"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.MD5"),
+					Size:      &size,
 				},
 			},
 		},
@@ -208,7 +214,9 @@ func TestGenerate_Union(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Event"),
+					Name:      proto.String("Event"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Event"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("data"),
@@ -216,9 +224,9 @@ func TestGenerate_Union(t *testing.T) {
 								Type: &avrocpb.Type_Union{
 									Union: &avrocpb.Union{
 										Types: []*avrocpb.Type{
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("null")}}},
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}}},
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("null")}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("string")}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("int")}},
 										},
 									},
 								},
@@ -278,7 +286,9 @@ func TestGenerate_Array(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Numbers"),
+					Name:      proto.String("Numbers"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Numbers"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("values"),
@@ -286,7 +296,7 @@ func TestGenerate_Array(t *testing.T) {
 								Type: &avrocpb.Type_Array{
 									Array: &avrocpb.Array{
 										Items: &avrocpb.Type{
-											Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+											Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 										},
 									},
 								},
@@ -338,14 +348,16 @@ func TestGenerate_Map(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Config"),
+					Name:      proto.String("Config"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Config"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("settings"),
 							Type: &avrocpb.Type{
 								Type: &avrocpb.Type_MapType{
 									MapType: &avrocpb.Map{
-										Values: &avrocpb.Ident{Value: proto.String("string")},
+										Values: primType("string"),
 									},
 								},
 							},
@@ -396,12 +408,14 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Order"),
+					Name:      proto.String("Order"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Order"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("id"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -412,7 +426,9 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 			{
 				Type: &avrocpb.Type_EnumType{
 					EnumType: &avrocpb.Enum{
-						Name: proto.String("OrderStatus"),
+						Name:      proto.String("OrderStatus"),
+						Namespace: proto.String("com.example"),
+						FullName:  proto.String("com.example.OrderStatus"),
 						Values: []*avrocpb.Ident{
 							{Value: proto.String("NEW")},
 							{Value: proto.String("SHIPPED")},
@@ -456,55 +472,26 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 	}
 }
 
-func TestSchemaFilename(t *testing.T) {
-	tests := []struct {
-		name   string
-		schema *avrocpb.Schema
-		want   string
-	}{
-		{
-			name: "record type",
-			schema: &avrocpb.Schema{
-				Type: &avrocpb.Type{
-					Type: &avrocpb.Type_Record{
-						Record: &avrocpb.Record{Name: proto.String("MyRecord")},
-					},
+func TestBuildSchemaFile_Filename(t *testing.T) {
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name:      proto.String("MyRecord"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.MyRecord"),
 				},
 			},
-			want: "my_record.go",
-		},
-		{
-			name: "enum type",
-			schema: &avrocpb.Schema{
-				Type: &avrocpb.Type{
-					Type: &avrocpb.Type_EnumType{
-						EnumType: &avrocpb.Enum{Name: proto.String("MyEnum")},
-					},
-				},
-			},
-			want: "my_enum.go",
-		},
-		{
-			name: "namespace fallback",
-			schema: &avrocpb.Schema{
-				Namespace: proto.String("com.example.events"),
-			},
-			want: "events.go",
-		},
-		{
-			name:   "empty schema",
-			schema: &avrocpb.Schema{},
-			want:   "schema.go",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := schemaFilename(tt.schema)
-			if got != tt.want {
-				t.Errorf("schemaFilename() = %q, want %q", got, tt.want)
-			}
-		})
+	filename, _, err := buildSchemaFile("mypackage", schema, false)
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+	if filename != "my_record.go" {
+		t.Errorf("expected my_record.go, got %q", filename)
 	}
 }
 
@@ -516,12 +503,14 @@ func TestGenerate_PackageNameOption(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -573,12 +562,14 @@ func TestGenerate_MissingPackageName(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -604,18 +595,20 @@ func TestGenerate_SingleObjectEncoding(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 						{
 							Name: proto.String("age"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 							},
 						},
 					},
@@ -661,12 +654,14 @@ func TestGenerate_SingleObjectEncoding_FingerprintComputation(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -676,7 +671,10 @@ func TestGenerate_SingleObjectEncoding_FingerprintComputation(t *testing.T) {
 	}
 
 	// Compute the fingerprint via our code.
-	fp := schemaFingerprint(schema)
+	fp, err := schemaFingerprint(schema)
+	if err != nil {
+		t.Fatalf("schemaFingerprint failed: %v", err)
+	}
 
 	// Independently compute the expected fingerprint.
 	pcf := `{"name":"com.example.Person","type":"record","fields":[{"name":"name","type":"string"}]}`
@@ -705,12 +703,14 @@ func TestGenerate_WithoutEncodingOption_NoFingerprint(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -747,12 +747,14 @@ func TestGenerate_InvalidEncodingOption(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -774,5 +776,65 @@ func TestGenerate_InvalidEncodingOption(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported encoding option") {
 		t.Errorf("expected error about unsupported encoding, got: %v", err)
+	}
+}
+
+// TestGenerate_RejectsUnresolvedDescriptor proves the generator refuses a
+// descriptor it cannot represent before emitting any of it. The code builders
+// cannot report a problem, so without this check a reference claiming to name a
+// primitive and naming none would be generated as a call to a Go type that does
+// not exist.
+func TestGenerate_RejectsUnresolvedDescriptor(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  *avrocpb.Reference
+	}{
+		{
+			name: "unrecognised kind",
+			ref:  &avrocpb.Reference{Name: proto.String("string")},
+		},
+		{
+			name: "primitive naming no Avro primitive",
+			ref: &avrocpb.Reference{
+				Name: proto.String("strng"),
+				Kind: avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE.Enum(),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := &avrocpb.Schema{
+				Namespace: proto.String("com.example"),
+				Type: &avrocpb.Type{
+					Type: &avrocpb.Type_Record{
+						Record: &avrocpb.Record{
+							Name:      proto.String("Person"),
+							Namespace: proto.String("com.example"),
+							FullName:  proto.String("com.example.Person"),
+							Fields: []*avrocpb.Field{
+								{
+									Name: proto.String("name"),
+									Type: &avrocpb.Type{
+										Type: &avrocpb.Type_Reference{Reference: tt.ref},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			svc := &generatorService{}
+			_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+				Options: []*avrocpb.Option{
+					{Name: proto.String("package_name"), Value: proto.String("avro")},
+				},
+				Schemas: []*avrocpb.Schema{schema},
+			})
+			if err == nil {
+				t.Fatal("expected generation to fail on an unresolved descriptor")
+			}
+		})
 	}
 }

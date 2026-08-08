@@ -22,18 +22,20 @@ func TestGenerate_Record(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 						{
 							Name: proto.String("age"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 							},
 						},
 					},
@@ -78,81 +80,17 @@ func TestGenerate_Record(t *testing.T) {
 	}
 }
 
+// TestGenerate_RecordWithNamedTypes feeds the generator a resolved schema — the
+// enum and the fixed written out in full at their first use, and a
+// fully-qualified reference at the second — and asserts the canonical form
+// follows that ordering exactly. The generator decides none of it: no symbol
+// table, no first-use bookkeeping.
 func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// TestRecord with Kind (enum), MD5 (fixed), union{null, MD5}
-	schema := &avrocpb.Schema{
-		Namespace: proto.String("org.apache.avro.test"),
-		Type: &avrocpb.Type{
-			Type: &avrocpb.Type_Record{
-				Record: &avrocpb.Record{
-					Name: proto.String("TestRecord"),
-					Fields: []*avrocpb.Field{
-						{
-							Name: proto.String("name"),
-							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
-							},
-						},
-						{
-							Name: proto.String("kind"),
-							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("Kind")}},
-							},
-						},
-						{
-							Name: proto.String("hash"),
-							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("MD5")}},
-							},
-						},
-						{
-							Name: proto.String("nullableHash"),
-							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Union{
-									Union: &avrocpb.Union{
-										Types: []*avrocpb.Type{
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("null")}}},
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("MD5")}}},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Types: []*avrocpb.Type{
-			{
-				Type: &avrocpb.Type_EnumType{
-					EnumType: &avrocpb.Enum{
-						Name:      proto.String("Kind"),
-						Namespace: proto.String("org.apache.avro.test"),
-						Values: []*avrocpb.Ident{
-							{Value: proto.String("FOO")},
-							{Value: proto.String("BAR")},
-							{Value: proto.String("BAZ")},
-						},
-					},
-				},
-			},
-			{
-				Type: &avrocpb.Type_Fixed{
-					Fixed: &avrocpb.Fixed{
-						Name:      proto.String("MD5"),
-						Namespace: proto.String("org.apache.avro.test"),
-						Size:      proto.Int32(16),
-					},
-				},
-			},
-		},
-	}
-
 	svc := &generatorService{}
 	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
-		Schemas: []*avrocpb.Schema{schema},
+		Schemas: []*avrocpb.Schema{resolvedTestRecord()},
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -186,8 +124,8 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 		t.Errorf("expected type=record, got %v", obj["type"])
 	}
 
-	// Kind should be inlined (first use), MD5 should be inlined (first use),
-	// nullableHash should reference MD5 by FQ name (second use)
+	// Kind is written out in full at its first use, MD5 likewise, and
+	// nullableHash refers to MD5 by fully-qualified name at its second.
 	fields, ok := obj["fields"].([]any)
 	if !ok {
 		t.Fatalf("expected fields array")
@@ -235,47 +173,117 @@ func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 	}
 }
 
-func TestSchemaFilename(t *testing.T) {
-	tests := []struct {
-		name     string
-		schema   *avrocpb.Schema
-		expected string
-	}{
-		{
-			name: "record type",
-			schema: &avrocpb.Schema{
-				Type: &avrocpb.Type{
-					Type: &avrocpb.Type_Record{
-						Record: &avrocpb.Record{Name: proto.String("TestRecord")},
+// TestGenerate_UnresolvedReference proves the generator refuses a descriptor
+// whose reference classification it does not recognise, rather than guessing.
+func TestGenerate_UnresolvedReference(t *testing.T) {
+	schema := &avrocpb.Schema{
+		Namespace: proto.String("com.example"),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Reference{
+									Reference: &avrocpb.Reference{Name: proto.String("string")},
+								},
+							},
+						},
 					},
 				},
 			},
-			expected: "test_record.avsc",
-		},
-		{
-			name: "enum type",
-			schema: &avrocpb.Schema{
-				Type: &avrocpb.Type{
-					Type: &avrocpb.Type_EnumType{
-						EnumType: &avrocpb.Enum{Name: proto.String("Status")},
-					},
-				},
-			},
-			expected: "status.avsc",
-		},
-		{
-			name:     "fallback",
-			schema:   &avrocpb.Schema{Namespace: proto.String("com.example")},
-			expected: "example.avsc",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := schemaFilename(tt.schema)
-			if got != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, got)
-			}
-		})
+	svc := &generatorService{}
+	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+		Schemas: []*avrocpb.Schema{schema},
+	})
+	if err == nil {
+		t.Fatal("expected an error for a reference with an unrecognised kind")
+	}
+}
+
+func TestBuildSchemaFile_Filename(t *testing.T) {
+	filename, _, err := buildSchemaFile(resolvedTestRecord())
+	if err != nil {
+		t.Fatalf("buildSchemaFile failed: %v", err)
+	}
+	if filename != "test_record.avsc" {
+		t.Errorf("expected test_record.avsc, got %q", filename)
+	}
+}
+
+// resolvedTestRecord is the resolved form of the example schema: TestRecord
+// with an enum, a fixed, and a union reusing the fixed.
+func resolvedTestRecord() *avrocpb.Schema {
+	const ns = "org.apache.avro.test"
+
+	return &avrocpb.Schema{
+		Namespace: proto.String(ns),
+		Type: &avrocpb.Type{
+			Type: &avrocpb.Type_Record{
+				Record: &avrocpb.Record{
+					Name:      proto.String("TestRecord"),
+					Namespace: proto.String(ns),
+					FullName:  proto.String(ns + ".TestRecord"),
+					Fields: []*avrocpb.Field{
+						{
+							Name: proto.String("name"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
+							},
+						},
+						{
+							Name: proto.String("kind"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_EnumType{
+									EnumType: &avrocpb.Enum{
+										Name:      proto.String("Kind"),
+										Namespace: proto.String(ns),
+										FullName:  proto.String(ns + ".Kind"),
+										Values: []*avrocpb.Ident{
+											{Value: proto.String("FOO")},
+											{Value: proto.String("BAR")},
+											{Value: proto.String("BAZ")},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: proto.String("hash"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Fixed{
+									Fixed: &avrocpb.Fixed{
+										Name:      proto.String("MD5"),
+										Namespace: proto.String(ns),
+										FullName:  proto.String(ns + ".MD5"),
+										Size:      proto.Int32(16),
+									},
+								},
+							},
+						},
+						{
+							Name: proto.String("nullableHash"),
+							Type: &avrocpb.Type{
+								Type: &avrocpb.Type_Union{
+									Union: &avrocpb.Union{
+										Types: []*avrocpb.Type{
+											{Type: &avrocpb.Type_Reference{Reference: primRef("null")}},
+											{Type: &avrocpb.Type_Reference{Reference: namedRef(ns + ".MD5")}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }

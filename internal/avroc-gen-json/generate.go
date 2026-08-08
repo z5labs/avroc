@@ -8,9 +8,9 @@ package avrocgenjson
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/internal/ir"
 )
 
 type generatorService struct {
@@ -36,14 +36,21 @@ func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb
 // buildSchemaFile generates the Avro JSON schema for a single schema, returning
 // its relative filename and content.
 func buildSchemaFile(schema *avrocpb.Schema) (string, []byte, error) {
-	jsonSchema := schemaToJSON(schema)
+	if err := ir.Validate(schema); err != nil {
+		return "", nil, err
+	}
+
+	jsonSchema, err := schemaToJSON(schema)
+	if err != nil {
+		return "", nil, err
+	}
 
 	data, err := json.MarshalIndent(jsonSchema, "", "  ")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal JSON schema: %w", err)
 	}
 
-	return schemaFilename(schema), append(data, '\n'), nil
+	return ir.SnakeCase(ir.SchemaBaseName(schema)) + ".avsc", append(data, '\n'), nil
 }
 
 // maxChunkSize bounds each streamed GenerateResponse so messages stay well
@@ -71,80 +78,6 @@ func sendFile(stream avrocpb.Generator_GenerateServer, path string, content []by
 			return nil
 		}
 	}
-}
-
-// schemaConverter holds state for converting a protobuf Schema to Avro JSON,
-// tracking named type definitions so they can be inlined on first use and
-// referenced by name on subsequent uses.
-type schemaConverter struct {
-	namespace  string
-	namedTypes map[string]*avrocpb.Type
-	defined    map[string]bool
-}
-
-func newSchemaConverter(schema *avrocpb.Schema) *schemaConverter {
-	c := &schemaConverter{
-		namespace:  schema.GetNamespace(),
-		namedTypes: make(map[string]*avrocpb.Type),
-		defined:    make(map[string]bool),
-	}
-	for _, t := range schema.GetTypes() {
-		if name := typeName(t); name != "" {
-			c.namedTypes[name] = t
-		}
-	}
-	return c
-}
-
-// schemaToJSON converts a protobuf Schema to its Avro JSON schema representation.
-func schemaToJSON(schema *avrocpb.Schema) any {
-	c := newSchemaConverter(schema)
-
-	if schema.Type != nil {
-		return c.typeToJSON(schema.Type)
-	}
-	return nil
-}
-
-// typeToJSON converts a protobuf Type to its Avro JSON schema representation.
-func (c *schemaConverter) typeToJSON(t *avrocpb.Type) any {
-	if t == nil {
-		return nil
-	}
-
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Record:
-		return c.recordToJSON(v.Record)
-	case *avrocpb.Type_EnumType:
-		return c.enumToJSON(v.EnumType)
-	case *avrocpb.Type_Array:
-		return c.arrayToJSON(v.Array)
-	case *avrocpb.Type_MapType:
-		return mapToJSON(v.MapType)
-	case *avrocpb.Type_Union:
-		return c.unionToJSON(v.Union)
-	case *avrocpb.Type_Fixed:
-		return c.fixedToJSON(v.Fixed)
-	case *avrocpb.Type_Ident:
-		return c.identToJSON(v.Ident)
-	default:
-		return nil
-	}
-}
-
-// identToJSON resolves an identifier. Primitive types are returned as strings.
-// Named types are inlined on first use and referenced by name afterwards.
-func (c *schemaConverter) identToJSON(ident *avrocpb.Ident) any {
-	name := ident.GetValue()
-
-	// Check if it's a named type we can resolve
-	if t, ok := c.namedTypes[name]; ok && !c.defined[name] {
-		c.defined[name] = true
-		return c.typeToJSON(t)
-	}
-
-	// Primitive type or already-defined named type: return as string
-	return name
 }
 
 // avroRecord represents an Avro record type in JSON schema format.
@@ -195,27 +128,81 @@ type avroFixed struct {
 	Size      int32    `json:"size"`
 }
 
-func (c *schemaConverter) recordToJSON(r *avrocpb.Record) avroRecord {
-	ns := r.GetNamespace()
-	if ns == "" {
-		ns = c.namespace
+// schemaToJSON converts a resolved schema to its Avro JSON schema
+// representation.
+//
+// It is a plain walk. The producer has already qualified every name, decided
+// which named type is written out where, and stated whether a reference names a
+// primitive or a named type, so there is no symbol table here and no state
+// carried between types.
+func schemaToJSON(schema *avrocpb.Schema) (any, error) {
+	return typeToJSON(schema.GetType())
+}
+
+// typeToJSON converts a resolved Type to its Avro JSON schema representation.
+func typeToJSON(t *avrocpb.Type) (any, error) {
+	if t == nil {
+		// An absent type is not an empty schema; emitting JSON null here would
+		// write a .avsc no Avro reader accepts.
+		return nil, fmt.Errorf("nil type")
 	}
 
+	switch v := t.GetType().(type) {
+	case *avrocpb.Type_Record:
+		return recordToJSON(v.Record)
+	case *avrocpb.Type_EnumType:
+		return enumToJSON(v.EnumType), nil
+	case *avrocpb.Type_Array:
+		return arrayToJSON(v.Array)
+	case *avrocpb.Type_MapType:
+		return mapToJSON(v.MapType)
+	case *avrocpb.Type_Union:
+		return unionToJSON(v.Union)
+	case *avrocpb.Type_Fixed:
+		return fixedToJSON(v.Fixed), nil
+	case *avrocpb.Type_Reference:
+		return referenceToJSON(v.Reference)
+	default:
+		// A type constructor is a closed set: an unrecognised member is a
+		// schema this generator cannot represent, not one to skip.
+		return nil, fmt.Errorf("unsupported type: %T", t.GetType())
+	}
+}
+
+// referenceToJSON renders a reference as the name Avro's JSON schema calls for:
+// the primitive's name, or the named type's fully-qualified name. Both members
+// of the kind are written the same way; the switch is here because the kind is
+// a closed set and an unrecognised member means a schema this generator has
+// misread.
+func referenceToJSON(ref *avrocpb.Reference) (any, error) {
+	switch ref.GetKind() {
+	case avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE, avrocpb.TypeRefKind_TYPE_REF_KIND_NAMED:
+		return ref.GetName(), nil
+	default:
+		return nil, fmt.Errorf("reference %q has unrecognised kind %v", ref.GetName(), ref.GetKind())
+	}
+}
+
+func recordToJSON(r *avrocpb.Record) (avroRecord, error) {
 	fields := make([]avroField, 0, len(r.GetFields()))
 	for _, f := range r.GetFields() {
-		fields = append(fields, c.fieldToJSON(f))
+		jf, err := fieldToJSON(f)
+		if err != nil {
+			return avroRecord{}, fmt.Errorf("field %q: %w", f.GetName(), err)
+		}
+		fields = append(fields, jf)
 	}
 
 	return avroRecord{
 		Type:      "record",
 		Name:      r.GetName(),
-		Namespace: ns,
+		Namespace: r.GetNamespace(),
 		Aliases:   r.GetAliases(),
 		Fields:    fields,
-	}
+	}, nil
 }
 
-func (c *schemaConverter) fieldToJSON(f *avrocpb.Field) avroField {
+func fieldToJSON(f *avrocpb.Field) (avroField, error) {
 	var order string
 	switch f.GetSortOrder() {
 	case avrocpb.SortOrder_SORT_ORDER_DESC:
@@ -224,142 +211,75 @@ func (c *schemaConverter) fieldToJSON(f *avrocpb.Field) avroField {
 		order = "ignore"
 	}
 
+	t, err := typeToJSON(f.GetType())
+	if err != nil {
+		return avroField{}, err
+	}
+
 	return avroField{
 		Name:    f.GetName(),
-		Type:    c.typeToJSON(f.GetType()),
+		Type:    t,
 		Aliases: f.GetAliases(),
 		Order:   order,
-	}
+	}, nil
 }
 
-func (c *schemaConverter) enumToJSON(e *avrocpb.Enum) avroEnum {
-	ns := e.GetNamespace()
-	if ns == "" {
-		ns = c.namespace
-	}
-
+func enumToJSON(e *avrocpb.Enum) avroEnum {
 	symbols := make([]string, 0, len(e.GetValues()))
 	for _, v := range e.GetValues() {
 		symbols = append(symbols, v.GetValue())
 	}
 
-	var defaultVal string
-	if d := e.GetDefault(); d != nil {
-		defaultVal = d.GetValue()
-	}
-
 	return avroEnum{
 		Type:      "enum",
 		Name:      e.GetName(),
-		Namespace: ns,
+		Namespace: e.GetNamespace(),
 		Aliases:   e.GetAliases(),
 		Symbols:   symbols,
-		Default:   defaultVal,
+		Default:   e.GetDefault().GetValue(),
 	}
 }
 
-func (c *schemaConverter) arrayToJSON(a *avrocpb.Array) avroArray {
+func arrayToJSON(a *avrocpb.Array) (avroArray, error) {
+	items, err := typeToJSON(a.GetItems())
+	if err != nil {
+		return avroArray{}, err
+	}
 	return avroArray{
 		Type:  "array",
-		Items: c.typeToJSON(a.GetItems()),
-	}
+		Items: items,
+	}, nil
 }
 
-func mapToJSON(m *avrocpb.Map) avroMap {
+func mapToJSON(m *avrocpb.Map) (avroMap, error) {
+	values, err := typeToJSON(m.GetValues())
+	if err != nil {
+		return avroMap{}, err
+	}
 	return avroMap{
 		Type:   "map",
-		Values: m.GetValues().GetValue(),
-	}
+		Values: values,
+	}, nil
 }
 
-func (c *schemaConverter) unionToJSON(u *avrocpb.Union) []any {
+func unionToJSON(u *avrocpb.Union) ([]any, error) {
 	types := make([]any, 0, len(u.GetTypes()))
 	for _, t := range u.GetTypes() {
-		types = append(types, c.typeToJSON(t))
+		jt, err := typeToJSON(t)
+		if err != nil {
+			return nil, err
+		}
+		types = append(types, jt)
 	}
-	return types
+	return types, nil
 }
 
-func (c *schemaConverter) fixedToJSON(f *avrocpb.Fixed) avroFixed {
-	ns := f.GetNamespace()
-	if ns == "" {
-		ns = c.namespace
-	}
-
+func fixedToJSON(f *avrocpb.Fixed) avroFixed {
 	return avroFixed{
 		Type:      "fixed",
 		Name:      f.GetName(),
-		Namespace: ns,
+		Namespace: f.GetNamespace(),
 		Aliases:   f.GetAliases(),
 		Size:      f.GetSize(),
 	}
-}
-
-// schemaFilename determines the output filename for a schema.
-func schemaFilename(schema *avrocpb.Schema) string {
-	// Try to get a name from the primary type
-	if schema.Type != nil {
-		if name := typeName(schema.Type); name != "" {
-			return toSnakeCase(name) + ".avsc"
-		}
-		// If primary type is an Ident, try resolving it from Types
-		if ident, ok := schema.Type.Type.(*avrocpb.Type_Ident); ok {
-			return toSnakeCase(ident.Ident.GetValue()) + ".avsc"
-		}
-	}
-
-	// Try to get a name from the first type
-	if len(schema.Types) > 0 {
-		if name := typeName(schema.Types[0]); name != "" {
-			return toSnakeCase(name) + ".avsc"
-		}
-	}
-
-	// Fall back to namespace-based name
-	if ns := schema.GetNamespace(); ns != "" {
-		parts := strings.Split(ns, ".")
-		return toSnakeCase(parts[len(parts)-1]) + ".avsc"
-	}
-
-	return "schema.avsc"
-}
-
-// typeName extracts the name from a type.
-func typeName(t *avrocpb.Type) string {
-	if t == nil {
-		return ""
-	}
-
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Record:
-		return v.Record.GetName()
-	case *avrocpb.Type_EnumType:
-		return v.EnumType.GetName()
-	case *avrocpb.Type_Fixed:
-		return v.Fixed.GetName()
-	default:
-		return ""
-	}
-}
-
-// toSnakeCase converts a string to snake_case.
-func toSnakeCase(s string) string {
-	if s == "" {
-		return ""
-	}
-
-	// Handle fully-qualified names
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		s = s[idx+1:]
-	}
-
-	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteByte('_')
-		}
-		result.WriteRune(r)
-	}
-
-	return strings.ToLower(result.String())
 }

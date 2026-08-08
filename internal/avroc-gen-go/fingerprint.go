@@ -9,18 +9,27 @@ import (
 	"encoding/binary"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/internal/ir"
 
 	avro "github.com/z5labs/avro-go"
 )
 
 // schemaFingerprint computes the 8-byte CRC-64-AVRO fingerprint for a schema
-// by first converting it to Parsing Canonical Form and then hashing.
-func schemaFingerprint(schema *avrocpb.Schema) [8]byte {
-	pcf := canonicalForm(schema)
-	fp64 := avro.Fingerprint64([]byte(pcf))
+// from its Parsing Canonical Form.
+//
+// The canonical form comes from internal/ir, which is also what avroc-gen-pcf
+// publishes. Deriving both from one implementation is what keeps the
+// fingerprint embedded here matching the schema published beside it.
+func schemaFingerprint(schema *avrocpb.Schema) ([8]byte, error) {
+	pcf, err := ir.CanonicalJSON(schema)
+	if err != nil {
+		return [8]byte{}, err
+	}
+
+	fp64 := avro.Fingerprint64(pcf)
 	var fp [8]byte
 	binary.LittleEndian.PutUint64(fp[:], fp64)
-	return fp
+	return fp, nil
 }
 
 // generateFingerprintMethod generates the Fingerprint() [8]byte method for a

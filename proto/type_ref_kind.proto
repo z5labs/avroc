@@ -1,0 +1,25 @@
+// Copyright (c) 2026 Z5Labs and Contributors
+//
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
+edition = "2023";
+
+option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
+
+// TypeRefKind states whether a Reference names an Avro primitive or a named
+// type the same descriptor defines. It is a closed set: a consumer MUST switch
+// over it and MUST fail on a member it does not recognise rather than guessing.
+//
+// It exists so that no consumer recovers the classification by matching a name
+// against Avro's list of primitives.
+enum TypeRefKind {
+    // Never emitted by a conforming producer. A consumer MUST reject it.
+    TYPE_REF_KIND_UNSPECIFIED = 0;
+
+    // The reference names one of Avro's primitive types.
+    TYPE_REF_KIND_PRIMITIVE = 1;
+
+    // The reference names a record, enum or fixed the same descriptor defines.
+    TYPE_REF_KIND_NAMED = 2;
+}

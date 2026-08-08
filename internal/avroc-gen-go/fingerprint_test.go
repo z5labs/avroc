@@ -22,12 +22,14 @@ func TestSchemaFingerprint(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},
@@ -36,7 +38,10 @@ func TestSchemaFingerprint(t *testing.T) {
 		},
 	}
 
-	fp := schemaFingerprint(schema)
+	fp, err := schemaFingerprint(schema)
+	if err != nil {
+		t.Fatalf("schemaFingerprint failed: %v", err)
+	}
 
 	// Compute expected fingerprint independently.
 	pcf := `{"name":"com.example.Person","type":"record","fields":[{"name":"name","type":"string"}]}`

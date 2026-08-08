@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestToPascalCase(t *testing.T) {
@@ -36,30 +35,31 @@ func TestToPascalCase(t *testing.T) {
 	}
 }
 
-func TestGoTypeForIdent(t *testing.T) {
+func TestGoTypeForReference(t *testing.T) {
 	tests := []struct {
-		name  string
-		ident string
-		want  string
+		name string
+		ref  *avrocpb.Reference
+		want string
 	}{
-		{name: "null", ident: "null", want: ""},
-		{name: "boolean", ident: "boolean", want: "bool"},
-		{name: "int", ident: "int", want: "int32"},
-		{name: "long", ident: "long", want: "int64"},
-		{name: "float", ident: "float", want: "float32"},
-		{name: "double", ident: "double", want: "float64"},
-		{name: "bytes", ident: "bytes", want: "[]byte"},
-		{name: "string", ident: "string", want: "string"},
-		{name: "custom type", ident: "MyRecord", want: "MyRecord"},
-		{name: "qualified custom type", ident: "com.example.MyRecord", want: "MyRecord"},
+		{name: "null", ref: primRef("null"), want: ""},
+		{name: "boolean", ref: primRef("boolean"), want: "bool"},
+		{name: "int", ref: primRef("int"), want: "int32"},
+		{name: "long", ref: primRef("long"), want: "int64"},
+		{name: "float", ref: primRef("float"), want: "float32"},
+		{name: "double", ref: primRef("double"), want: "float64"},
+		{name: "bytes", ref: primRef("bytes"), want: "[]byte"},
+		{name: "string", ref: primRef("string"), want: "string"},
+		{name: "named type", ref: namedRef("com.example.MyRecord"), want: "MyRecord"},
+		// A named type whose simple name collides with a primitive's is still
+		// a named type: the kind decides, not the spelling.
+		{name: "named type spelled like a primitive", ref: namedRef("com.example.string"), want: "String"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ident := &avrocpb.Ident{Value: proto.String(tt.ident)}
-			got := goTypeForIdent(ident)
+			got := goTypeForReference(tt.ref)
 			if got != tt.want {
-				t.Errorf("goTypeForIdent(%q) = %q, want %q", tt.ident, got, tt.want)
+				t.Errorf("goTypeForReference(%q) = %q, want %q", tt.ref.GetName(), got, tt.want)
 			}
 		})
 	}

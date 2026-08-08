@@ -210,13 +210,13 @@ Generates idiomatic Go types with binary Avro serialization support.
 
 ### `avroc-gen-json`
 
-Generates [Avro JSON schema](https://avro.apache.org/docs/current/specification/#schema-declaration) files (`.avsc`). Named types are inlined on their first use and referenced by name afterwards.
+Generates [Avro JSON schema](https://avro.apache.org/docs/current/specification/#schema-declaration) files (`.avsc`). avroc decides where each named type is written out in full and where it is referenced by its fully-qualified name; the generator follows that ordering.
 
 No options required.
 
 ### `avroc-gen-pcf`
 
-Generates [Avro Parsing Canonical Form](https://avro.apache.org/docs/1.12.0/specification/#parsing-canonical-form-for-schemas) files (`.avsc`). The output is a compact JSON representation with attribute names and type ordering normalized per the Avro specification. Named types are inlined on first use and referenced by their fully-qualified name on subsequent uses. The file content is written as exact canonical bytes — no trailing newline — so it can be used directly for fingerprinting.
+Generates [Avro Parsing Canonical Form](https://avro.apache.org/docs/1.12.0/specification/#parsing-canonical-form-for-schemas) files (`.avsc`). The output is a compact JSON representation with attribute names and type ordering normalized per the Avro specification. avroc decides where each named type is written out in full and where it is referenced by its fully-qualified name; the generator follows that ordering. The file content is written as exact canonical bytes — no trailing newline — so it can be used directly for fingerprinting.
 
 No options required.
 
@@ -226,5 +226,7 @@ No options required.
 2. On startup, read the Unix socket path from `os.Args[1]`.
 3. Start a gRPC server on that socket and register your implementation of the `Generator` service (see [`proto/generator.proto`](proto/generator.proto)).
 4. Handle a `GenerateRequest` (options + schemas) by **streaming** the generated files back: each `GenerateResponse` carries a relative `path`, a chunk of `content`, and a `last` flag. avroc reassembles the chunks and writes the files, so the generator never touches the filesystem.
+
+The schemas you are handed are **resolved**: every named type carries its fully-qualified name, every `Reference` states whether it names an Avro primitive or a named type, and a named type's definition travels at its first use with every later use carrying only its name. A generator therefore builds no symbol table and re-derives no namespace qualification, primitive classification or first-use ordering — see [`docs/ir/SPEC.md`](docs/ir/SPEC.md).
 
 The protobuf definitions and generated Go stubs are in [`internal/avrocpb/`](internal/avrocpb/).

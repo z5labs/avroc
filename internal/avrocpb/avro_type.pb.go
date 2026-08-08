@@ -26,8 +26,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Ident represents an identifier in the Avro IDL, such as a schema name,
-// field name, enum value name, or primitive type reference.
+// Ident represents a bare identifier that is not a type reference: an enum
+// symbol, or an enum's default symbol. Type references are Reference.
 type Ident struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         *string                `protobuf:"bytes,1,opt,name=value" json:"value,omitempty"`
@@ -72,6 +72,69 @@ func (x *Ident) GetValue() string {
 	return ""
 }
 
+// Reference is a resolved reference to a type. Resolution is complete before a
+// descriptor is written: `kind` states whether the reference names an Avro
+// primitive or a named type, and `name` is either the primitive's name or the
+// named type's fully-qualified name. A consumer never qualifies a name against
+// an enclosing namespace and never matches one against Avro's primitive list.
+//
+// A reference to a named type appears only where that type has already been
+// defined earlier in the same descriptor: the producer decides where each named
+// type is written out in full and where it is merely referenced, so the
+// first-use ordering Avro's schema declaration implies is carried in the
+// descriptor rather than re-derived by every consumer.
+type Reference struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	Kind          *TypeRefKind           `protobuf:"varint,2,opt,name=kind,enum=TypeRefKind" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Reference) Reset() {
+	*x = Reference{}
+	mi := &file_avro_type_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reference) ProtoMessage() {}
+
+func (x *Reference) ProtoReflect() protoreflect.Message {
+	mi := &file_avro_type_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Reference.ProtoReflect.Descriptor instead.
+func (*Reference) Descriptor() ([]byte, []int) {
+	return file_avro_type_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Reference) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *Reference) GetKind() TypeRefKind {
+	if x != nil && x.Kind != nil {
+		return *x.Kind
+	}
+	return TypeRefKind_TYPE_REF_KIND_UNSPECIFIED
+}
+
 // Type represents a type in the Avro IDL. In Go, this is an interface;
 // in protobuf, it is represented as a oneof over all concrete types.
 type Type struct {
@@ -84,7 +147,7 @@ type Type struct {
 	//	*Type_MapType
 	//	*Type_Union
 	//	*Type_Fixed
-	//	*Type_Ident
+	//	*Type_Reference
 	Type          isType_Type `protobuf_oneof:"type"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -92,7 +155,7 @@ type Type struct {
 
 func (x *Type) Reset() {
 	*x = Type{}
-	mi := &file_avro_type_proto_msgTypes[1]
+	mi := &file_avro_type_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -104,7 +167,7 @@ func (x *Type) String() string {
 func (*Type) ProtoMessage() {}
 
 func (x *Type) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[1]
+	mi := &file_avro_type_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +180,7 @@ func (x *Type) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Type.ProtoReflect.Descriptor instead.
 func (*Type) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{1}
+	return file_avro_type_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Type) GetType() isType_Type {
@@ -181,10 +244,10 @@ func (x *Type) GetFixed() *Fixed {
 	return nil
 }
 
-func (x *Type) GetIdent() *Ident {
+func (x *Type) GetReference() *Reference {
 	if x != nil {
-		if x, ok := x.Type.(*Type_Ident); ok {
-			return x.Ident
+		if x, ok := x.Type.(*Type_Reference); ok {
+			return x.Reference
 		}
 	}
 	return nil
@@ -218,8 +281,8 @@ type Type_Fixed struct {
 	Fixed *Fixed `protobuf:"bytes,6,opt,name=fixed,oneof"`
 }
 
-type Type_Ident struct {
-	Ident *Ident `protobuf:"bytes,7,opt,name=ident,oneof"`
+type Type_Reference struct {
+	Reference *Reference `protobuf:"bytes,8,opt,name=reference,oneof"`
 }
 
 func (*Type_Record) isType_Type() {}
@@ -234,7 +297,7 @@ func (*Type_Union) isType_Type() {}
 
 func (*Type_Fixed) isType_Type() {}
 
-func (*Type_Ident) isType_Type() {}
+func (*Type_Reference) isType_Type() {}
 
 // Field represents a field in a record.
 type Field struct {
@@ -249,7 +312,7 @@ type Field struct {
 
 func (x *Field) Reset() {
 	*x = Field{}
-	mi := &file_avro_type_proto_msgTypes[2]
+	mi := &file_avro_type_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -261,7 +324,7 @@ func (x *Field) String() string {
 func (*Field) ProtoMessage() {}
 
 func (x *Field) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[2]
+	mi := &file_avro_type_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -274,7 +337,7 @@ func (x *Field) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Field.ProtoReflect.Descriptor instead.
 func (*Field) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{2}
+	return file_avro_type_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Field) GetName() string {
@@ -307,18 +370,24 @@ func (x *Field) GetSortOrder() SortOrder {
 
 // Record represents a record in the Avro IDL.
 type Record struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	Namespace     *string                `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
-	Aliases       []string               `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
-	Fields        []*Field               `protobuf:"bytes,4,rep,name=fields" json:"fields,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	// The namespace the record resolved to. Always the effective namespace,
+	// never left empty for a consumer to inherit from an enclosing scope.
+	Namespace *string `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
+	// Aliases, fully qualified the same way as full_name.
+	Aliases []string `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
+	Fields  []*Field `protobuf:"bytes,4,rep,name=fields" json:"fields,omitempty"`
+	// The fully-qualified name: namespace and name joined per the Avro
+	// specification's rules for full names.
+	FullName      *string `protobuf:"bytes,5,opt,name=full_name,json=fullName" json:"full_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Record) Reset() {
 	*x = Record{}
-	mi := &file_avro_type_proto_msgTypes[3]
+	mi := &file_avro_type_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +399,7 @@ func (x *Record) String() string {
 func (*Record) ProtoMessage() {}
 
 func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[3]
+	mi := &file_avro_type_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +412,7 @@ func (x *Record) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Record.ProtoReflect.Descriptor instead.
 func (*Record) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{3}
+	return file_avro_type_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Record) GetName() string {
@@ -374,21 +443,32 @@ func (x *Record) GetFields() []*Field {
 	return nil
 }
 
+func (x *Record) GetFullName() string {
+	if x != nil && x.FullName != nil {
+		return *x.FullName
+	}
+	return ""
+}
+
 // Enum represents an enum in the Avro IDL.
 type Enum struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	Namespace     *string                `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
-	Aliases       []string               `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
-	Values        []*Ident               `protobuf:"bytes,4,rep,name=values" json:"values,omitempty"`
-	Default       *Ident                 `protobuf:"bytes,5,opt,name=default" json:"default,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	// The namespace the enum resolved to. Always the effective namespace.
+	Namespace *string `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
+	// Aliases, fully qualified the same way as full_name.
+	Aliases []string `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
+	Values  []*Ident `protobuf:"bytes,4,rep,name=values" json:"values,omitempty"`
+	Default *Ident   `protobuf:"bytes,5,opt,name=default" json:"default,omitempty"`
+	// The fully-qualified name.
+	FullName      *string `protobuf:"bytes,6,opt,name=full_name,json=fullName" json:"full_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Enum) Reset() {
 	*x = Enum{}
-	mi := &file_avro_type_proto_msgTypes[4]
+	mi := &file_avro_type_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -400,7 +480,7 @@ func (x *Enum) String() string {
 func (*Enum) ProtoMessage() {}
 
 func (x *Enum) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[4]
+	mi := &file_avro_type_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -413,7 +493,7 @@ func (x *Enum) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Enum.ProtoReflect.Descriptor instead.
 func (*Enum) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{4}
+	return file_avro_type_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Enum) GetName() string {
@@ -451,6 +531,13 @@ func (x *Enum) GetDefault() *Ident {
 	return nil
 }
 
+func (x *Enum) GetFullName() string {
+	if x != nil && x.FullName != nil {
+		return *x.FullName
+	}
+	return ""
+}
+
 // Array represents an array type in the Avro IDL.
 type Array struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -461,7 +548,7 @@ type Array struct {
 
 func (x *Array) Reset() {
 	*x = Array{}
-	mi := &file_avro_type_proto_msgTypes[5]
+	mi := &file_avro_type_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -473,7 +560,7 @@ func (x *Array) String() string {
 func (*Array) ProtoMessage() {}
 
 func (x *Array) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[5]
+	mi := &file_avro_type_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -486,7 +573,7 @@ func (x *Array) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Array.ProtoReflect.Descriptor instead.
 func (*Array) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{5}
+	return file_avro_type_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Array) GetItems() *Type {
@@ -500,14 +587,14 @@ func (x *Array) GetItems() *Type {
 // Map keys are always strings in Avro; values is the value type.
 type Map struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        *Ident                 `protobuf:"bytes,1,opt,name=values" json:"values,omitempty"`
+	Values        *Type                  `protobuf:"bytes,2,opt,name=values" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Map) Reset() {
 	*x = Map{}
-	mi := &file_avro_type_proto_msgTypes[6]
+	mi := &file_avro_type_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +606,7 @@ func (x *Map) String() string {
 func (*Map) ProtoMessage() {}
 
 func (x *Map) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[6]
+	mi := &file_avro_type_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,10 +619,10 @@ func (x *Map) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Map.ProtoReflect.Descriptor instead.
 func (*Map) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{6}
+	return file_avro_type_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *Map) GetValues() *Ident {
+func (x *Map) GetValues() *Type {
 	if x != nil {
 		return x.Values
 	}
@@ -552,7 +639,7 @@ type Union struct {
 
 func (x *Union) Reset() {
 	*x = Union{}
-	mi := &file_avro_type_proto_msgTypes[7]
+	mi := &file_avro_type_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -564,7 +651,7 @@ func (x *Union) String() string {
 func (*Union) ProtoMessage() {}
 
 func (x *Union) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[7]
+	mi := &file_avro_type_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -577,7 +664,7 @@ func (x *Union) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Union.ProtoReflect.Descriptor instead.
 func (*Union) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{7}
+	return file_avro_type_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Union) GetTypes() []*Type {
@@ -589,18 +676,22 @@ func (x *Union) GetTypes() []*Type {
 
 // Fixed represents a fixed type in the Avro IDL.
 type Fixed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	Namespace     *string                `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
-	Aliases       []string               `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
-	Size          *int32                 `protobuf:"varint,4,opt,name=size" json:"size,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  *string                `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+	// The namespace the fixed resolved to. Always the effective namespace.
+	Namespace *string `protobuf:"bytes,2,opt,name=namespace" json:"namespace,omitempty"`
+	// Aliases, fully qualified the same way as full_name.
+	Aliases []string `protobuf:"bytes,3,rep,name=aliases" json:"aliases,omitempty"`
+	Size    *int32   `protobuf:"varint,4,opt,name=size" json:"size,omitempty"`
+	// The fully-qualified name.
+	FullName      *string `protobuf:"bytes,5,opt,name=full_name,json=fullName" json:"full_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Fixed) Reset() {
 	*x = Fixed{}
-	mi := &file_avro_type_proto_msgTypes[8]
+	mi := &file_avro_type_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +703,7 @@ func (x *Fixed) String() string {
 func (*Fixed) ProtoMessage() {}
 
 func (x *Fixed) ProtoReflect() protoreflect.Message {
-	mi := &file_avro_type_proto_msgTypes[8]
+	mi := &file_avro_type_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +716,7 @@ func (x *Fixed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Fixed.ProtoReflect.Descriptor instead.
 func (*Fixed) Descriptor() ([]byte, []int) {
-	return file_avro_type_proto_rawDescGZIP(), []int{8}
+	return file_avro_type_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Fixed) GetName() string {
@@ -656,51 +747,65 @@ func (x *Fixed) GetSize() int32 {
 	return 0
 }
 
+func (x *Fixed) GetFullName() string {
+	if x != nil && x.FullName != nil {
+		return *x.FullName
+	}
+	return ""
+}
+
 var File_avro_type_proto protoreflect.FileDescriptor
 
 const file_avro_type_proto_rawDesc = "" +
 	"\n" +
-	"\x0favro_type.proto\x1a\x10sort_order.proto\"\x1d\n" +
+	"\x0favro_type.proto\x1a\x10sort_order.proto\x1a\x13type_ref_kind.proto\"\x1d\n" +
 	"\x05Ident\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\"\xfa\x01\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\"A\n" +
+	"\tReference\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\x04kind\x18\x02 \x01(\x0e2\f.TypeRefKindR\x04kind\"\x8c\x02\n" +
 	"\x04Type\x12!\n" +
 	"\x06record\x18\x01 \x01(\v2\a.RecordH\x00R\x06record\x12$\n" +
 	"\tenum_type\x18\x02 \x01(\v2\x05.EnumH\x00R\benumType\x12\x1e\n" +
 	"\x05array\x18\x03 \x01(\v2\x06.ArrayH\x00R\x05array\x12!\n" +
 	"\bmap_type\x18\x04 \x01(\v2\x04.MapH\x00R\amapType\x12\x1e\n" +
 	"\x05union\x18\x05 \x01(\v2\x06.UnionH\x00R\x05union\x12\x1e\n" +
-	"\x05fixed\x18\x06 \x01(\v2\x06.FixedH\x00R\x05fixed\x12\x1e\n" +
-	"\x05ident\x18\a \x01(\v2\x06.IdentH\x00R\x05identB\x06\n" +
-	"\x04type\"{\n" +
+	"\x05fixed\x18\x06 \x01(\v2\x06.FixedH\x00R\x05fixed\x12*\n" +
+	"\treference\x18\b \x01(\v2\n" +
+	".ReferenceH\x00R\treferenceB\x06\n" +
+	"\x04typeJ\x04\b\a\x10\b\"{\n" +
 	"\x05Field\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aaliases\x18\x02 \x03(\tR\aaliases\x12\x19\n" +
 	"\x04type\x18\x03 \x01(\v2\x05.TypeR\x04type\x12)\n" +
 	"\n" +
 	"sort_order\x18\x04 \x01(\x0e2\n" +
-	".SortOrderR\tsortOrder\"t\n" +
+	".SortOrderR\tsortOrder\"\x91\x01\n" +
 	"\x06Record\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
 	"\aaliases\x18\x03 \x03(\tR\aaliases\x12\x1e\n" +
-	"\x06fields\x18\x04 \x03(\v2\x06.FieldR\x06fields\"\x94\x01\n" +
+	"\x06fields\x18\x04 \x03(\v2\x06.FieldR\x06fields\x12\x1b\n" +
+	"\tfull_name\x18\x05 \x01(\tR\bfullName\"\xb1\x01\n" +
 	"\x04Enum\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
 	"\aaliases\x18\x03 \x03(\tR\aaliases\x12\x1e\n" +
 	"\x06values\x18\x04 \x03(\v2\x06.IdentR\x06values\x12 \n" +
-	"\adefault\x18\x05 \x01(\v2\x06.IdentR\adefault\"$\n" +
+	"\adefault\x18\x05 \x01(\v2\x06.IdentR\adefault\x12\x1b\n" +
+	"\tfull_name\x18\x06 \x01(\tR\bfullName\"$\n" +
 	"\x05Array\x12\x1b\n" +
-	"\x05items\x18\x01 \x01(\v2\x05.TypeR\x05items\"%\n" +
-	"\x03Map\x12\x1e\n" +
-	"\x06values\x18\x01 \x01(\v2\x06.IdentR\x06values\"$\n" +
+	"\x05items\x18\x01 \x01(\v2\x05.TypeR\x05items\"*\n" +
+	"\x03Map\x12\x1d\n" +
+	"\x06values\x18\x02 \x01(\v2\x05.TypeR\x06valuesJ\x04\b\x01\x10\x02\"$\n" +
 	"\x05Union\x12\x1b\n" +
-	"\x05types\x18\x01 \x03(\v2\x05.TypeR\x05types\"g\n" +
+	"\x05types\x18\x01 \x03(\v2\x05.TypeR\x05types\"\x84\x01\n" +
 	"\x05Fixed\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x18\n" +
 	"\aaliases\x18\x03 \x03(\tR\aaliases\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x05R\x04sizeB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
+	"\x04size\x18\x04 \x01(\x05R\x04size\x12\x1b\n" +
+	"\tfull_name\x18\x05 \x01(\tR\bfullNameB2Z0github.com/z5labs/avroc/internal/avrocpb;avrocpbb\beditionsp\xe8\a"
 
 var (
 	file_avro_type_proto_rawDescOnce sync.Once
@@ -714,40 +819,43 @@ func file_avro_type_proto_rawDescGZIP() []byte {
 	return file_avro_type_proto_rawDescData
 }
 
-var file_avro_type_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_avro_type_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_avro_type_proto_goTypes = []any{
-	(*Ident)(nil),  // 0: Ident
-	(*Type)(nil),   // 1: Type
-	(*Field)(nil),  // 2: Field
-	(*Record)(nil), // 3: Record
-	(*Enum)(nil),   // 4: Enum
-	(*Array)(nil),  // 5: Array
-	(*Map)(nil),    // 6: Map
-	(*Union)(nil),  // 7: Union
-	(*Fixed)(nil),  // 8: Fixed
-	(SortOrder)(0), // 9: SortOrder
+	(*Ident)(nil),     // 0: Ident
+	(*Reference)(nil), // 1: Reference
+	(*Type)(nil),      // 2: Type
+	(*Field)(nil),     // 3: Field
+	(*Record)(nil),    // 4: Record
+	(*Enum)(nil),      // 5: Enum
+	(*Array)(nil),     // 6: Array
+	(*Map)(nil),       // 7: Map
+	(*Union)(nil),     // 8: Union
+	(*Fixed)(nil),     // 9: Fixed
+	(TypeRefKind)(0),  // 10: TypeRefKind
+	(SortOrder)(0),    // 11: SortOrder
 }
 var file_avro_type_proto_depIdxs = []int32{
-	3,  // 0: Type.record:type_name -> Record
-	4,  // 1: Type.enum_type:type_name -> Enum
-	5,  // 2: Type.array:type_name -> Array
-	6,  // 3: Type.map_type:type_name -> Map
-	7,  // 4: Type.union:type_name -> Union
-	8,  // 5: Type.fixed:type_name -> Fixed
-	0,  // 6: Type.ident:type_name -> Ident
-	1,  // 7: Field.type:type_name -> Type
-	9,  // 8: Field.sort_order:type_name -> SortOrder
-	2,  // 9: Record.fields:type_name -> Field
-	0,  // 10: Enum.values:type_name -> Ident
-	0,  // 11: Enum.default:type_name -> Ident
-	1,  // 12: Array.items:type_name -> Type
-	0,  // 13: Map.values:type_name -> Ident
-	1,  // 14: Union.types:type_name -> Type
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 0: Reference.kind:type_name -> TypeRefKind
+	4,  // 1: Type.record:type_name -> Record
+	5,  // 2: Type.enum_type:type_name -> Enum
+	6,  // 3: Type.array:type_name -> Array
+	7,  // 4: Type.map_type:type_name -> Map
+	8,  // 5: Type.union:type_name -> Union
+	9,  // 6: Type.fixed:type_name -> Fixed
+	1,  // 7: Type.reference:type_name -> Reference
+	2,  // 8: Field.type:type_name -> Type
+	11, // 9: Field.sort_order:type_name -> SortOrder
+	3,  // 10: Record.fields:type_name -> Field
+	0,  // 11: Enum.values:type_name -> Ident
+	0,  // 12: Enum.default:type_name -> Ident
+	2,  // 13: Array.items:type_name -> Type
+	2,  // 14: Map.values:type_name -> Type
+	2,  // 15: Union.types:type_name -> Type
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_avro_type_proto_init() }
@@ -756,14 +864,15 @@ func file_avro_type_proto_init() {
 		return
 	}
 	file_sort_order_proto_init()
-	file_avro_type_proto_msgTypes[1].OneofWrappers = []any{
+	file_type_ref_kind_proto_init()
+	file_avro_type_proto_msgTypes[2].OneofWrappers = []any{
 		(*Type_Record)(nil),
 		(*Type_EnumType)(nil),
 		(*Type_Array)(nil),
 		(*Type_MapType)(nil),
 		(*Type_Union)(nil),
 		(*Type_Fixed)(nil),
-		(*Type_Ident)(nil),
+		(*Type_Reference)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -771,7 +880,7 @@ func file_avro_type_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_avro_type_proto_rawDesc), len(file_avro_type_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

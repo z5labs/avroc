@@ -8,9 +8,9 @@ package avrocgengo
 import (
 	"fmt"
 	"go/format"
-	"strings"
 
 	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/internal/ir"
 )
 
 type generatorService struct {
@@ -82,17 +82,30 @@ func sendFile(stream avrocpb.Generator_GenerateServer, path string, content []by
 // buildSchemaFile generates the Go source for a single schema, returning its
 // relative filename and formatted content.
 func buildSchemaFile(packageName string, schema *avrocpb.Schema, singleObject bool) (string, []byte, error) {
+	// Refuse a descriptor this generator cannot represent before emitting any
+	// of it. The code builders below cannot report a problem — they append to a
+	// buffer — so a reference whose kind is unrecognised, or which claims to
+	// name a primitive and does not, would otherwise be silently generated as a
+	// call to a Go type that does not exist.
+	if err := ir.Validate(schema); err != nil {
+		return "", nil, err
+	}
+
 	// Compute fingerprint before code generation if single-object encoding is requested.
 	var fp [8]byte
 	if singleObject {
-		fp = schemaFingerprint(schema)
+		var err error
+		fp, err = schemaFingerprint(schema)
+		if err != nil {
+			return "", nil, err
+		}
 	}
 
 	// Generate the Go source code
 	code := generateFileCode(packageName, schema, singleObject, fp)
 
 	// Determine the filename from the schema
-	filename := schemaFilename(schema)
+	filename := ir.SnakeCase(ir.SchemaBaseName(schema)) + ".go"
 
 	// Format the code using go/format
 	formatted, err := format.Source([]byte(code))
@@ -101,69 +114,4 @@ func buildSchemaFile(packageName string, schema *avrocpb.Schema, singleObject bo
 	}
 
 	return filename, formatted, nil
-}
-
-// schemaFilename determines the output filename for a schema.
-func schemaFilename(schema *avrocpb.Schema) string {
-	// Try to get a name from the primary type
-	if schema.Type != nil {
-		if name := typeName(schema.Type); name != "" {
-			return toSnakeCase(name) + ".go"
-		}
-	}
-
-	// Try to get a name from the first type
-	if len(schema.Types) > 0 {
-		if name := typeName(schema.Types[0]); name != "" {
-			return toSnakeCase(name) + ".go"
-		}
-	}
-
-	// Fall back to namespace-based name
-	if ns := schema.GetNamespace(); ns != "" {
-		parts := strings.Split(ns, ".")
-		return toSnakeCase(parts[len(parts)-1]) + ".go"
-	}
-
-	return "schema.go"
-}
-
-// typeName extracts the name from a type.
-func typeName(t *avrocpb.Type) string {
-	if t == nil {
-		return ""
-	}
-
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Record:
-		return v.Record.GetName()
-	case *avrocpb.Type_EnumType:
-		return v.EnumType.GetName()
-	case *avrocpb.Type_Fixed:
-		return v.Fixed.GetName()
-	default:
-		return ""
-	}
-}
-
-// toSnakeCase converts a string to snake_case.
-func toSnakeCase(s string) string {
-	if s == "" {
-		return ""
-	}
-
-	// Handle fully-qualified names
-	if idx := strings.LastIndex(s, "."); idx != -1 {
-		s = s[idx+1:]
-	}
-
-	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteByte('_')
-		}
-		result.WriteRune(r)
-	}
-
-	return strings.ToLower(result.String())
 }

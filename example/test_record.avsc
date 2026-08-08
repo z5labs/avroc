@@ -33,7 +33,7 @@
       "name": "nullableHash",
       "type": [
         "null",
-        "MD5"
+        "org.apache.avro.test.MD5"
       ]
     }
   ]

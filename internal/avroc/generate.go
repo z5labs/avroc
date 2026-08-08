@@ -144,8 +144,8 @@ func dedupInputs(shared, own []string) []string {
 	return out
 }
 
-// loadSchema parses, validates, and maps a single IDL file to the protobuf
-// schema sent to a generator.
+// loadSchema parses, validates, and resolves a single IDL file into the
+// protobuf schema sent to a generator.
 func loadSchema(path string) (*avrocpb.Schema, error) {
 	f, err := parseIDL(path)
 	if err != nil {
@@ -157,5 +157,5 @@ func loadSchema(path string) (*avrocpb.Schema, error) {
 	if err := validateSchema(f.Schema); err != nil {
 		return nil, fmt.Errorf("schema validation failed: %w", err)
 	}
-	return mapToProtoSchema(f.Schema)
+	return resolveSchema(f.Schema)
 }

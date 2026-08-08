@@ -50,10 +50,7 @@ func safeOutputPath(root, p string) (string, error) {
 }
 
 func validateSchema(schema *idl.Schema) error {
-	primitives := map[string]struct{}{
-		"null": {}, "boolean": {}, "int": {}, "long": {},
-		"float": {}, "double": {}, "bytes": {}, "string": {},
-	}
+	primitives := avroPrimitives()
 
 	defined := collectDefinedNames(schema)
 
