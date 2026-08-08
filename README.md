@@ -74,6 +74,7 @@ avroc is driven by a project manifest (`avroc.json`) and exposes these commands:
 avroc init        # scaffold a starter avroc.json (never clobbers an existing one)
 avroc get         # resolve & pull generator images, pinning them in avroc.lock
 avroc generate    # run the generators declared in avroc.json
+avroc inspect     # render a descriptor file as JSON (use - for stdin)
 ```
 
 ### Manifest (`avroc.json`)
@@ -182,6 +183,27 @@ This produces:
 - `pcf/test_record.avsc` — Avro Parsing Canonical Form
 
 See the [`example/`](example/) directory for a working example.
+
+### Inspecting a descriptor (`avroc inspect`)
+
+Every generator invocation is handed a **descriptor**: the IR version, that generator's
+options, and the resolved schemas, in the protobuf binary encoding
+([`docs/ir/SPEC.md`](docs/ir/SPEC.md)). When a generator emits output nobody expected, the
+first question is what it was actually handed, and `avroc inspect` answers it:
+
+```bash
+avroc inspect descriptor.binpb    # render a saved descriptor as JSON
+avroc inspect - < descriptor.binpb # or read it from stdin
+```
+
+The rendering uses the field names from `proto/` and the spec (`full_name`, not `fullName`),
+and is byte-stable across runs and across avroc builds, so two descriptors can simply be
+diffed. It is a rendering for people, never an input: a generator is handed the binary
+descriptor, and nothing reads the JSON back. A descriptor whose IR version this avroc does
+not know still renders — that is the case worth reading.
+
+> avroc removes an invocation's descriptor once the generator exits, so what you inspect is a
+> copy a generator saved from the path it was handed.
 
 ## Built-in Generators
 

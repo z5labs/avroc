@@ -49,6 +49,10 @@ func Main(ctx context.Context, cli cli.Context) int {
 			return code
 		}
 		return runGenerate(ctx, cli)
+	case "inspect":
+		// inspect names the descriptor it renders, so it owns its own argument
+		// handling rather than being routed through rejectExtraArgs.
+		return runInspect(ctx, cli)
 	case "help", "-h", "-help", "--help":
 		printUsage(os.Stdout)
 		return 0
@@ -79,6 +83,7 @@ Commands:
   init       Scaffold an avroc.json manifest
   get        Resolve and pull generator images, pinning them in avroc.lock
   generate   Run the generators declared in avroc.json
+  inspect    Render a descriptor file as JSON (- reads standard input)
   help       Show this help
 `
 	_, _ = io.WriteString(w, usage)

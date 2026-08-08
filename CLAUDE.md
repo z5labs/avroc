@@ -73,6 +73,15 @@ options sort by key, schemas follow the manifest's input order — and
 reaching the encoder in Go's map iteration order is the way this gets broken, and
 it breaks intermittently.
 
+**Reading one is `avroc inspect <descriptor>`** (`-` for stdin), which renders it
+as JSON via `ir.MarshalDescriptorJSON`: `docs/ir/SPEC.md`'s "A descriptor is
+readable by a person". The rendering uses protobuf field names and is byte-stable
+across builds — protojson varies its whitespace per binary on purpose, so the
+output is re-indented through `encoding/json` before it is printed. It renders
+regardless of the descriptor's IR version and without validating the closed sets:
+looking is not consuming, and the descriptor worth reading is usually the one a
+generator refused.
+
 ### Plugin Discovery
 
 The CLI scans all directories in `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a corresponding `-<name>_out` CLI flag for specifying its output directory.

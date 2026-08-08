@@ -340,6 +340,53 @@ copy, so the descriptor stays finite. A consumer **MUST NOT** assume the type
 graph is acyclic once references are followed, even though the message it
 decoded is nested.
 
+## A descriptor is readable by a person
+
+The descriptor's encoding is protobuf, which nobody reads. avroc **MUST**
+therefore ship a rendering of a descriptor as JSON, and that rendering is the
+inspection path: the answer to *what was this generator actually handed*, which
+is the first question asked whenever a generator emits the wrong output. In
+avroc it is `avroc inspect <descriptor>`, which writes the rendering to standard
+output and accepts `-` for standard input (#112).
+
+The rendering **MUST** use protobuf's own field names — `full_name`, not
+`fullName` — so that a name on screen is the name in the schema language and in
+this document. Anyone reading a descriptor is reading it beside this spec, and a
+lowerCamelCase rendering would make them translate every name back before they
+could look one up.
+
+Two renderings of one descriptor **MUST** be byte-identical, and a rendering
+**MUST NOT** vary with the build of the tool producing it (#112). That is the
+same requirement [What a descriptor carries](#what-a-descriptor-carries) makes
+of the binary encoding, and it is here for the same reason one step further out:
+a rendering is a thing to commit, diff and paste into an issue, and one that
+churned on an upgrade could not be any of the three. It is a requirement worth
+stating because the obvious implementation does not satisfy it — a JSON printer
+is entitled to vary its whitespace, and Go's varies it deliberately, per binary,
+to stop anyone depending on the exact bytes.
+
+The rendering is **one-way**, and no consumer is entitled to be handed one. A
+plugin receives the binary encoding; a plugin that accepted both would have to
+sniff which it had, which is
+[`plugin/SPEC.md`](../plugin/SPEC.md)'s reasoning and not restated here. Nothing
+in this document defines a JSON *encoding* of a descriptor — a renderer **MUST
+NOT** be relied on to round-trip, and a producer **MUST NOT** emit JSON where a
+descriptor is called for.
+
+A renderer **MUST NOT** refuse a descriptor because of its
+[version](#the-version-field), and **MUST NOT** require the closed sets to hold.
+Rendering is looking, not consuming: a descriptor from a contract the tool does
+not know, or one carrying a member it cannot act on, is precisely the one
+somebody needs to read, and the version it claims is the first thing the
+rendering shows. `CheckVersion` and validation belong to a consumer about to act
+on a descriptor, and refusing to *print* one would withhold the output in the
+case that motivates printing it.
+
+Getting hold of a descriptor to render is [delivery](#also-out-of-scope), and
+so not this document's: the file avroc writes for an invocation is removed when
+that generator exits, so what a person inspects is a copy — one the plugin saved
+from the path it was handed.
+
 ## Out of Scope
 
 ### Avro IDL and JSON schema syntax
@@ -415,3 +462,4 @@ is making their input identical rather than shipping one of the outputs:
 | [Compatibility](#compatibility) | [#109](https://github.com/z5labs/avroc/issues/109) |
 | [What *resolved* means](#what-resolved-means) | [#108](https://github.com/z5labs/avroc/issues/108) |
 | [The nested tree is kept](#the-nested-tree-is-kept) | [#108](https://github.com/z5labs/avroc/issues/108), [#112](https://github.com/z5labs/avroc/issues/112) |
+| [A descriptor is readable by a person](#a-descriptor-is-readable-by-a-person) | [#112](https://github.com/z5labs/avroc/issues/112) |
