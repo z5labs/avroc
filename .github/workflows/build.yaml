@@ -37,8 +37,9 @@ jobs:
   #     because writing it against today's gRPC socket model would be writing it
   #     twice.
   #   - the ubuntu/macos/windows matrix. Dagger runs Linux containers, so a
-  #     matrix over runners buys nothing once the pipeline is a container; the
-  #     Windows half of it is being dropped deliberately regardless.
+  #     matrix over runners buys nothing once the pipeline is a container, and
+  #     the Windows half of it has no target left to check: avroc targets POSIX
+  #     hosts, as docs/plugin/SPEC.md records.
   build:
     name: Build
     runs-on: ubuntu-latest

@@ -30,10 +30,30 @@
 generator plugin and on the code invoking one, interpreted as described in
 [CONVENTIONS.md](../CONVENTIONS.md). Everything else is descriptive.
 
+## Host platform
+
+avroc targets POSIX hosts. A plugin author writes against a POSIX filesystem
+and a POSIX process model: an executable is a file carrying an execute bit, its
+name is the whole of its name, `PATH` is colon-separated, and paths are rooted
+at `/` (#104).
+
+Windows is not a target, and dropping it is a decision rather than an omission.
+avroc is distributed as a scratch base image that a user extends with their own
+generators, or through the companion Dagger module, whose stages run in Linux
+containers whatever the host. Neither path puts a Windows host in the position
+of running a generator executable, so the cross-platform machinery that used to
+sit behind discovery — a second executable test, an `.exe` suffix to strip
+before a generator's name could be read — was surface with nobody behind it.
+
+macOS and the other Unixes are targets in the sense that matters here: nothing
+in this document distinguishes them from Linux. What is excluded is the
+non-POSIX case, not everything that is not Linux.
+
 ## Discovery
 
-<!-- The avroc-gen-<name> naming convention and its resolution against PATH,
-     consistent with the host-platform decision in #104. -->
+<!-- The avroc-gen-<name> naming convention and its resolution against PATH.
+     The host-platform decision is recorded above; discovery is written against
+     it rather than restating it. -->
 
 ## Invocation
 
@@ -80,3 +100,4 @@ generator plugin and on the code invoking one, interpreted as described in
 | Section | Implemented by |
 | --- | --- |
 | _Document shape and stub_ | [#103](https://github.com/z5labs/avroc/issues/103) |
+| [Host platform](#host-platform) | [#104](https://github.com/z5labs/avroc/issues/104) |

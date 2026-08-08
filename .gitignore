@@ -1,10 +1,9 @@
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
+# Binaries for programs and plugins. The Windows entries the upstream template
+# carries (*.exe, *.exe~, *.dll) are gone: avroc targets POSIX hosts, so nothing
+# in this tree ever produces one.
 *.so
 *.dylib
 bin/

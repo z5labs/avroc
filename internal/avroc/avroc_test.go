@@ -276,8 +276,8 @@ func TestLookupGenerators(t *testing.T) {
 
 	t.Run("finds generator executables", func(t *testing.T) {
 		fsys := fstest.MapFS{
-			generatorFixtureName("avroc-gen-go"): generatorFixtureFile(),
-			"other-tool":                         generatorFixtureFile(),
+			"avroc-gen-go": executableFile(),
+			"other-tool":   executableFile(),
 		}
 
 		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fsys), dir)
@@ -288,16 +288,31 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d generators, want 1", len(got))
 		}
-		want := filepath.Join(dir, generatorFixtureName("avroc-gen-go"))
+		want := filepath.Join(dir, "avroc-gen-go")
 		if got["avroc-gen-go"] != want {
 			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
 		}
 	})
 
+	t.Run("skips a file without an execute bit", func(t *testing.T) {
+		fsys := fstest.MapFS{
+			"avroc-gen-go": &fstest.MapFile{Mode: 0o644},
+		}
+
+		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fsys), dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(got) != 0 {
+			t.Fatalf("got %d generators, want 0 (file not executable)", len(got))
+		}
+	})
+
 	t.Run("multiple generators in same directory", func(t *testing.T) {
 		fsys := fstest.MapFS{
-			generatorFixtureName("avroc-gen-go"):   generatorFixtureFile(),
-			generatorFixtureName("avroc-gen-java"): generatorFixtureFile(),
+			"avroc-gen-go":   executableFile(),
+			"avroc-gen-java": executableFile(),
 		}
 
 		got, err := lookupGenerators(context.Background(), discardLog, staticOpenDir(fsys), dir)
@@ -316,9 +331,9 @@ func TestLookupGenerators(t *testing.T) {
 		openDir := func(d string) fs.FS {
 			switch d {
 			case dir1:
-				return fstest.MapFS{generatorFixtureName("avroc-gen-go"): generatorFixtureFile()}
+				return fstest.MapFS{"avroc-gen-go": executableFile()}
 			case dir2:
-				return fstest.MapFS{generatorFixtureName("avroc-gen-java"): generatorFixtureFile()}
+				return fstest.MapFS{"avroc-gen-java": executableFile()}
 			}
 			return fstest.MapFS{}
 		}
@@ -331,10 +346,10 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("got %d generators, want 2", len(got))
 		}
-		if got["avroc-gen-go"] != filepath.Join(dir1, generatorFixtureName("avroc-gen-go")) {
+		if got["avroc-gen-go"] != filepath.Join(dir1, "avroc-gen-go") {
 			t.Errorf("avroc-gen-go path = %q", got["avroc-gen-go"])
 		}
-		if got["avroc-gen-java"] != filepath.Join(dir2, generatorFixtureName("avroc-gen-java")) {
+		if got["avroc-gen-java"] != filepath.Join(dir2, "avroc-gen-java") {
 			t.Errorf("avroc-gen-java path = %q", got["avroc-gen-java"])
 		}
 	})
@@ -369,7 +384,7 @@ func TestLookupGenerators(t *testing.T) {
 			if d == restricted {
 				return &errFS{err: fs.ErrPermission}
 			}
-			return fstest.MapFS{generatorFixtureName("avroc-gen-go"): generatorFixtureFile()}
+			return fstest.MapFS{"avroc-gen-go": executableFile()}
 		}
 
 		var logBuf bytes.Buffer
@@ -383,7 +398,7 @@ func TestLookupGenerators(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("got %d generators, want 1", len(got))
 		}
-		want := filepath.Join(dir, generatorFixtureName("avroc-gen-go"))
+		want := filepath.Join(dir, "avroc-gen-go")
 		if got["avroc-gen-go"] != want {
 			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
 		}
@@ -395,6 +410,13 @@ func TestLookupGenerators(t *testing.T) {
 
 func staticOpenDir(fsys fs.FS) func(string) fs.FS {
 	return func(string) fs.FS { return fsys }
+}
+
+// executableFile is a directory entry carrying the mode bits that make a POSIX
+// host treat it as a program. Discovery is defined by those bits alone, so the
+// fixture is the same one for every generator.
+func executableFile() *fstest.MapFile {
+	return &fstest.MapFile{Mode: 0o755}
 }
 
 // errFS implements fs.FS and returns a fixed error for every operation.
