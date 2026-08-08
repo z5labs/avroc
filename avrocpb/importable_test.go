@@ -55,9 +55,13 @@ require github.com/z5labs/avroc v0.0.0
 
 replace github.com/z5labs/avroc => `+root+"\n")
 
-	// The consumer's own go.sum would list the same hashes for the same
-	// transitive dependencies, so copying rather than resolving keeps the
-	// test off the network.
+	// A consumer of the IR ends up with the same hashes for the same
+	// transitive dependencies, so this module's go.sum is the one the
+	// throwaway module would have written for itself. Copying it supplies
+	// the checksums without a checksum-database lookup; the module sources
+	// themselves come from whatever the surrounding environment resolves
+	// them from, which in practice is the cache this repository's own build
+	// has already filled.
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatalf("read go.sum: %v", err)
@@ -100,12 +104,14 @@ func main() {
 }
 `)
 
-	cmd := exec.Command(goBin, "build", "./...")
+	// -mod=mod lets the throwaway module record the indirect requirements it
+	// picks up from this one, which a consumer's `go get` would record for
+	// them. It goes on the command line rather than into GOFLAGS: a
+	// command-line flag wins over a GOFLAGS the surrounding environment may
+	// already have set, where a second GOFLAGS entry in the child's
+	// environment would only shadow the first.
+	cmd := exec.Command(goBin, "build", "-mod=mod", "./...")
 	cmd.Dir = dir
-	// -mod=mod lets the throwaway module record the indirect requirements
-	// it picks up from this one, which a consumer's `go get` would do for
-	// them.
-	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
