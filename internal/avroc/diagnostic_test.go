@@ -303,7 +303,8 @@ printf 'error: com.example.User: unterminated' >&2
 `))
 	g.log = log
 
-	if err := generateOne(ctx, g, t.TempDir(), nil, testSchema("User")); err != nil {
+	projectRoot, outputDir := newProject(t)
+	if err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User")); err != nil {
 		t.Fatalf("a generator that exited zero after complaining failed the run: %v", err)
 	}
 
@@ -370,7 +371,8 @@ func TestGeneratorGenerateSignal(t *testing.T) {
 	g := testGenerator(t, writeShellGenerator(t, "kill -TERM $$\n"))
 	g.log = log
 
-	err := generateOne(ctx, g, t.TempDir(), nil, testSchema("User"))
+	projectRoot, outputDir := newProject(t)
+	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate reported success for a generator killed by a signal")
 	}

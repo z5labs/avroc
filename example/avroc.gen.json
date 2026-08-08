@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "files": [
+    "gen/test_record.go",
+    "pcf/test_record.avsc",
+    "test_record.avsc"
+  ]
+}

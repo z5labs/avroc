@@ -93,9 +93,14 @@ type generatorOutput struct {
 //
 // The plans are merged in the order they are given, which is the manifest's
 // rather than the order the generators finished in. Removing a file an earlier
-// run produced and this one did not is not done here; that is #119's.
-func mergeOutputs(outs []*generatorOutput) error {
+// run produced and this one did not is pruneStale's, and it runs after this
+// returns: nothing is removed from the tree until everything this run produced
+// is in it (#119).
+func mergeOutputs(projectRoot string, outs []*generatorOutput) error {
 	if err := checkCollisions(outs); err != nil {
+		return err
+	}
+	if err := checkReservedPaths(projectRoot, outs); err != nil {
 		return err
 	}
 
@@ -163,6 +168,37 @@ func checkCollisions(outs []*generatorOutput) error {
 		reports = append(reports, fmt.Sprintf("%q is produced by generators %s", dst, quotedList(names)))
 	}
 	return fmt.Errorf("refusing to merge: %s", strings.Join(reports, "; "))
+}
+
+// checkReservedPaths refuses a run in which a generator produces avroc's own
+// record of what the run generated.
+//
+// avroc.gen.json at the project root is avroc's file (#119), and it is rewritten
+// after every successful merge. A generator producing it would have its output
+// silently overwritten moments later, and the record avroc then read on the next
+// run would be a file two writers disagree about — so the collision is refused
+// for the same reason two generators claiming one path is, and in the same phase,
+// before anything has been written where a person would find it.
+//
+// It is checked here rather than in planMerge because a plan is built against one
+// generator's output directory, and the reserved path is a property of the
+// project root: a generator whose --out is a subdirectory cannot reach it at all,
+// and one writing into the project root itself can.
+func checkReservedPaths(projectRoot string, outs []*generatorOutput) error {
+	root, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return err
+	}
+	reserved := filepath.Join(root, outputRecordFilename)
+
+	for _, out := range outs {
+		for _, f := range out.files {
+			if f.dst == reserved {
+				return fmt.Errorf("refusing to merge: generator %q produces %q, which is %q — avroc's own record of what the run generated", out.generator, f.rel, reserved)
+			}
+		}
+	}
+	return nil
 }
 
 // quotedList renders names as a quoted list: "a" and "b" for two, "a", "b" and

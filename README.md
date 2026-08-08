@@ -182,8 +182,38 @@ This produces:
 - `gen/test_record.go` — Go types with `MarshalAvroBinary` / `UnmarshalAvroBinary` methods
 - `test_record.avsc` — Avro JSON schema
 - `pcf/test_record.avsc` — Avro Parsing Canonical Form
+- `avroc.gen.json` — the record of what was generated, below
 
 See the [`example/`](example/) directory for a working example.
+
+### Stale generated files (`avroc.gen.json`)
+
+avroc owns the output tree, so it removes what it put there and no longer produces.
+Rename a record and the file the old name produced is deleted rather than left behind
+to be committed and eventually compiled.
+
+The mechanism is a committed record, **`avroc.gen.json`**, written beside `avroc.json`
+after every successful run and naming every file that run generated:
+
+```json
+{
+  "version": 1,
+  "files": ["gen/test_record.go", "pcf/test_record.avsc", "test_record.avsc"]
+}
+```
+
+- **Commit it** alongside the generated output it describes — it is what the next
+  regeneration, including the first one in a clean checkout, prunes against. A run that
+  finds no record prunes nothing.
+- **A file avroc did not generate is never removed.** Ownership is the record, not the
+  directory, so an output directory shared with hand-written source is safe — which is
+  what makes `"out": "."` usable.
+- **Only regular files.** A recorded path a person has replaced with a directory or a
+  symlink is left alone and reported.
+- **`avroc.gen.json` is avroc's.** A generator that produces it fails the run.
+
+[`docs/plugin/SPEC.md`](docs/plugin/SPEC.md) is normative; a plugin never maintains a
+record of its own.
 
 ### Inspecting a descriptor (`avroc inspect`)
 

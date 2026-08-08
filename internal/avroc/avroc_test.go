@@ -365,17 +365,31 @@ func testGenerator(t *testing.T, executablePath string) generator {
 }
 
 // generateOne puts a single generator through the whole of generation — the
-// invocation, the plan, the collision check and the merge — which is the path a
-// run of any size takes. A run of one is where a generator's own behaviour is
-// observable without another generator's timing in the way.
-func generateOne(ctx context.Context, g generator, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) error {
-	return generateAll(ctx, g.log, []genTask{{
+// invocation, the plan, the collision check, the merge and the prune — which is
+// the path a run of any size takes. A run of one is where a generator's own
+// behaviour is observable without another generator's timing in the way.
+//
+// projectRoot is the directory a real run reads avroc.json from, and is where the
+// record of what was generated lands; output is the generator's own directory
+// beneath it.
+func generateOne(ctx context.Context, g generator, projectRoot, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) error {
+	return generateAll(ctx, g.log, projectRoot, []genTask{{
 		name:           g.name,
 		executablePath: g.executablePath,
 		output:         output,
 		options:        options,
 		schemas:        schemas,
 	}})
+}
+
+// newProject is a project directory and one generator's output directory beneath
+// it: the shape planGenerators resolves a manifest into, where the output tree is
+// a subdirectory of the project rather than the project itself.
+func newProject(t *testing.T) (projectRoot, output string) {
+	t.Helper()
+
+	projectRoot = t.TempDir()
+	return projectRoot, filepath.Join(projectRoot, "gen")
 }
 
 // TestGeneratorGenerate is docs/plugin/SPEC.md's Invocation on the real
@@ -404,9 +418,9 @@ func TestGeneratorGenerate(t *testing.T) {
 	before := descriptorDirs(t)
 
 	// A directory avroc has to create: a plugin may assume --out exists.
-	outputDir := filepath.Join(t.TempDir(), "gen")
+	projectRoot, outputDir := newProject(t)
 
-	if err := generateOne(ctx, g, outputDir, options, schema); err != nil {
+	if err := generateOne(ctx, g, projectRoot, outputDir, options, schema); err != nil {
 		t.Fatal(err)
 	}
 
@@ -516,8 +530,8 @@ exit 3
 
 	before := descriptorDirs(t)
 
-	outputDir := t.TempDir()
-	err := generateOne(ctx, g, outputDir, nil, testSchema("User"))
+	projectRoot, outputDir := newProject(t)
+	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate accepted a generator that exited non-zero")
 	}
@@ -605,8 +619,8 @@ printf 'package avro\n' > "$out/legitimate.go"
 ln -s '%s' "$out/escape"
 `, elsewhere)))
 
-	outputDir := t.TempDir()
-	err := generateOne(ctx, g, outputDir, nil, testSchema("User"))
+	projectRoot, outputDir := newProject(t)
+	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
 	if err == nil {
 		t.Fatal("generate merged the output of a generator that escaped its scratch directory")
 	}
@@ -638,7 +652,7 @@ func TestGenerateAllRefusesACollision(t *testing.T) {
 	defer cancel()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	output := t.TempDir()
+	projectRoot, output := newProject(t)
 
 	// The collision the example manifest is a single edit away from: two
 	// generators emitting .avsc into one directory, each with a file of its own
@@ -648,7 +662,7 @@ func TestGenerateAllRefusesACollision(t *testing.T) {
 
 	var reports []string
 	for _, tasks := range [][]genTask{{json, pcf}, {pcf, json}} {
-		err := generateAll(ctx, log, tasks)
+		err := generateAll(ctx, log, projectRoot, tasks)
 		if err == nil {
 			t.Fatalf("generation accepted %q and %q both producing user.avsc", tasks[0].name, tasks[1].name)
 		}
@@ -683,13 +697,13 @@ func TestGenerateAllMergesEveryGenerator(t *testing.T) {
 	defer cancel()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	output := t.TempDir()
+	projectRoot, output := newProject(t)
 
 	tasks := []genTask{
 		collidingTask(t, "json", output, "user.avsc"),
 		collidingTask(t, "pcf", output, "pcf/user.avsc"),
 	}
-	if err := generateAll(ctx, log, tasks); err != nil {
+	if err := generateAll(ctx, log, projectRoot, tasks); err != nil {
 		t.Fatal(err)
 	}
 
@@ -724,7 +738,7 @@ func TestGenerateAllDiscardsEveryGeneratorWhenOneFails(t *testing.T) {
 	defer cancel()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	output := t.TempDir()
+	projectRoot, output := newProject(t)
 
 	failing := genTask{
 		name: "avroc-gen-pcf",
@@ -735,7 +749,7 @@ exit 1
 		schemas: []*avrocpb.Schema{testSchema("User")},
 	}
 
-	err := generateAll(ctx, log, []genTask{collidingTask(t, "json", output, "user.avsc"), failing})
+	err := generateAll(ctx, log, projectRoot, []genTask{collidingTask(t, "json", output, "user.avsc"), failing})
 	if err == nil {
 		t.Fatal("generation succeeded with a generator that exited non-zero")
 	}
@@ -797,10 +811,10 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 
 	before := descriptorDirs(t)
 
-	outputDir := t.TempDir()
+	projectRoot, outputDir := newProject(t)
 	done := make(chan error, 1)
 	go func() {
-		done <- generateOne(ctx, g, outputDir, nil, testSchema("User"))
+		done <- generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
 	}()
 
 	// Cancel only once the child is definitely running, so the test is about
