@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-avroc is a modular code generator for messages and services defined in Avro IDL. It follows a plugin architecture inspired by protoc: generators are external executables discovered on `PATH` with the naming convention `avroc-gen-<name>`, and they communicate with avroc via a gRPC `Generator` service (defined in `proto/`).
+avroc is a modular code generator for messages and services defined in Avro IDL. Generators are external executables discovered on `PATH` with the naming convention `avroc-gen-<name>`. avroc runs one with a descriptor and an output directory on its command line and waits for it to exit; there is no server, no socket and no port. `docs/plugin/SPEC.md` is normative.
 
 ## Build & Test Commands
 
@@ -27,18 +27,23 @@ go test -v ./...
 - **`cmd/avroc/`** — CLI entry point. Sets up signal handling, logger, and delegates to `avroc.Main`.
 - **`cmd/avroc-gen-go/`** — Entry point for the Go code generator plugin.
 - **`internal/avroc/`** — Core CLI logic. Discovers generator plugins on `PATH`, registers `-<name>_out` flags for each, parses Avro IDL files, and orchestrates code generation.
-- **`internal/avroc-gen-go/`** — Go generator plugin. Implements the `Generator` gRPC service, listens on a Unix socket, and handles `GenerateRequest`s.
+- **`internal/avroc-gen-go/`** — Go generator plugin. Reads the descriptor it is handed and writes Go source beneath `--out`.
+- **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
 - **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service.
 
-### Plugin Communication
+### Plugin Invocation
 
-1. avroc creates a temporary Unix socket and starts the generator subprocess (`avroc-gen-<name>`), passing the socket path as its first argument.
-2. The generator listens on the Unix socket and registers its `Generator` gRPC service.
-3. avroc connects as a gRPC client, sends a `GenerateRequest` (schemas + output directory), and receives a `GenerateResponse` (output file paths).
-4. Generators run concurrently via `sourcegraph/conc` pools.
+1. avroc writes the descriptor into a directory created for that one invocation.
+2. avroc forks and execs `avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]`, both paths absolute, and waits for it to exit. Nothing else is on the vector, and in particular nothing comes from the environment — `AVROC_GENERATOR_ARGS` is gone.
+3. The generator writes its own files beneath `--out` and reports on stderr. A zero exit is the whole of the success signal.
+4. Generators run concurrently via `sourcegraph/conc` pools. Cancellation flows from the signal-based parent context through `exec.CommandContext`, and every child is waited on — on success, on failure and on cancellation.
+
+Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
+
+What is not yet there, so that it is not mistaken for a gap: `--out` is the project's own output directory rather than a private empty scratch directory, and avroc does not yet enforce the boundary or merge — that is #117, with collisions #118 and stale files #119. The generators here still emit chunks internally through the `Generator` service's stream type, reassembled in `internal/plugin`; #121–#123 replace that with a plain write and #124 deletes the service.
 
 ### The resolved IR
 
@@ -59,10 +64,12 @@ directory created for that invocation alone, read-only, complete before the
 generator starts and removed once it has exited. `docs/plugin/SPEC.md`'s
 "Location and lifetime" is normative; nothing may derive meaning from the path.
 
-The descriptor value is built once and then both written and sent, so the file is
-the value the generator received rather than a second encoding that could drift
-from it. Passing it as `--descriptor` is #114's; until then the same value still
-travels over the gRPC service #124 removes.
+The file **is** the value the generator received: its path is what `--descriptor`
+names, so there is no second encoding of the same inputs that could drift from
+it. The generator's options travel twice — in the descriptor, which
+`docs/ir/SPEC.md` puts them in, and as `--opt` pairs, which `docs/plugin/SPEC.md`
+configures a generator through. avroc emits the same pairs in the same order in
+both places, and `internal/plugin` believes the command line.
 
 **The bytes are deterministic**: two runs over unchanged inputs produce
 byte-identical descriptors, because generated output is a thing a project commits
@@ -100,14 +107,11 @@ it to each release, and `docs/container/SPEC.md` fixes the path it ships at
 inside the image. `avrocpb/descriptor_set_test.go` is the staleness gate: a new
 `.proto` that nothing in the descriptor's import graph reaches fails there.
 
-### Plugin Discovery
-
-The CLI scans all directories in `PATH` for executables matching `avroc-gen-<name>`. Each discovered generator gets a corresponding `-<name>_out` CLI flag for specifying its output directory.
-
 ### Key Dependencies
 
 - `github.com/z5labs/avro-go` — Avro IDL parser
-- `google.golang.org/grpc` + `google.golang.org/protobuf` — gRPC plugin communication
+- `google.golang.org/protobuf` — the IR's schema language, and the descriptor's wire encoding
+- `google.golang.org/grpc` — no longer a transport. Nothing dials or serves; what is left is the generated `Generator` service types the generators here still emit through, which #124 deletes
 - `github.com/sourcegraph/conc` — Structured concurrency for parallel generator execution
 
 ## Conventions

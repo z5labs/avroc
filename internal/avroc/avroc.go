@@ -12,18 +12,16 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 
 	"github.com/z5labs/avro-go/idl"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Main dispatches to an avroc subcommand. Generators are declared in an
@@ -99,10 +97,28 @@ func isGeneratorExecutable(name string, mode fs.FileMode) bool {
 	return strings.HasPrefix(name, "avroc-gen-") && mode.IsRegular() && mode&0o111 != 0
 }
 
+// lookupGenerators indexes every generator plugin reachable from dirs, which
+// are the PATH entries in the order PATH wrote them.
+//
+// The earliest match wins, exactly as it does for a shell resolving a command
+// name (docs/plugin/SPEC.md, Discovery). That rule is what makes a generator
+// under development shadow an installed one by prepending a directory, which is
+// how an author tests a change; the opposite rule makes that gesture silently do
+// nothing, and the difference is invisible in the generated output.
+//
+// An empty PATH element is a directory named "", which no host resolves to
+// anything — the working directory is searched only when PATH writes it out.
+// avroc runs generators as a side effect of a build command, and one picked up
+// from whatever directory a user happened to be standing in is an execution
+// surface nobody chose.
 func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string) fs.FS, dirs ...string) (map[string]string, error) {
 	generatorIndex := make(map[string]string)
 
 	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+
 		fsys := openDir(dir)
 		entries, err := fs.ReadDir(fsys, ".")
 		if errors.Is(err, fs.ErrNotExist) {
@@ -123,6 +139,9 @@ func lookupGenerators(ctx context.Context, log *slog.Logger, openDir func(string
 				continue
 			}
 			if !isGeneratorExecutable(name, info.Mode()) {
+				continue
+			}
+			if _, found := generatorIndex[name]; found {
 				continue
 			}
 			generatorIndex[name] = filepath.Join(dir, name)
@@ -146,11 +165,27 @@ func parseIDL(path string) (_ *idl.File, err error) {
 
 type generator struct {
 	log            *slog.Logger
-	env            cli.Environment
 	name           string
 	executablePath string
 }
 
+// generatorWaitDelay bounds how long avroc waits after a generator's process
+// has been killed before giving up on the streams it inherited.
+//
+// Cancellation kills the child, which cannot be caught or ignored, so this is
+// not what makes a cancelled run terminate. What it covers is a grandchild that
+// outlived its parent still holding avroc's stderr open: without it Wait blocks
+// on a descriptor nobody is going to close, and a cancelled run hangs on a
+// process avroc never started.
+const generatorWaitDelay = 5 * time.Second
+
+// generate runs one generator over one descriptor, as docs/plugin/SPEC.md's
+// Invocation specifies: fork and exec avroc-gen-<name> with the descriptor and
+// the output directory as absolute paths, and wait for it to exit.
+//
+// There is no socket, no client and no stream. The generator writes its own
+// files beneath output and says what went wrong on stderr; a zero exit is the
+// whole of the success signal.
 func (g generator) generate(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (err error) {
 	desc := newDescriptor(options, schemas)
 
@@ -173,169 +208,72 @@ func (g generator) generate(ctx context.Context, output string, options []*avroc
 		g.log.ErrorContext(ctx, "failed to write descriptor", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
-	// The path is logged and not yet passed: the argument vector that hands it
-	// to the generator is #114's, and until then the same descriptor value
-	// travels over the gRPC service #124 removes. Logging it is what makes the
-	// file findable while it exists.
-	g.log.DebugContext(ctx, "wrote descriptor", slog.String("generator", g.name), slog.String("descriptor", descriptorPath))
 
-	socketFile, err := os.CreateTemp("", g.name+"-*.sock")
+	// Both paths go across as absolute ones, so that two runs of the same
+	// generator from different working directories are the same invocation.
+	descriptorPath, err = filepath.Abs(descriptorPath)
 	if err != nil {
-		g.log.ErrorContext(ctx, "failed to create temporary socket file", slog.String("generator", g.name), slog.Any("error", err))
+		g.log.ErrorContext(ctx, "failed to resolve descriptor path", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
-	socketPath := socketFile.Name()
-	err = errors.Join(socketFile.Close(), os.Remove(socketPath))
+	outputDir, err := filepath.Abs(output)
 	if err != nil {
-		g.log.ErrorContext(ctx, "failed to prepare socket path", slog.String("generator", g.name), slog.Any("error", err))
+		g.log.ErrorContext(ctx, "failed to resolve output directory", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
-	defer func() {
-		err = errors.Join(err, os.Remove(socketPath))
-	}()
 
-	cmd, err := g.startGenerator(ctx, socketPath)
-	if err != nil {
-		g.log.ErrorContext(ctx, "failed to start generator", slog.String("generator", g.name), slog.Any("error", err))
+	// A plugin may assume the output directory exists and is writable, so avroc
+	// creates it rather than making every generator do it. Making it *empty* and
+	// private, and merging what lands in it into the project tree, is #117's.
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		g.log.ErrorContext(ctx, "failed to create output directory", slog.String("generator", g.name), slog.Any("error", err))
 		return err
 	}
-	defer func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		_ = cmd.Wait()
-	}()
 
-	// Use the passthrough resolver with a custom dialer rather than "unix://":
-	// passthrough hands the address to the dialer verbatim, so a socket path
-	// is never run through gRPC's URL-based target parsing. The whole gRPC
-	// path here goes away with the story that deletes the Generator service.
-	cc, err := grpc.NewClient(
-		"passthrough:///"+socketPath,
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", addr)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+	args := generatorArgs(descriptorPath, outputDir, options)
+	g.log.DebugContext(ctx, "running generator",
+		slog.String("generator", g.name),
+		slog.String("executable", g.executablePath),
+		slog.Any("args", args),
 	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = errors.Join(err, cc.Close())
-	}()
 
-	// No overall RPC timeout: a large streamed generation can legitimately run
-	// long. Cancellation flows from the signal-based parent context instead.
-	client := avrocpb.NewGeneratorClient(cc)
-	stream, err := client.Generate(ctx, desc)
-	if err != nil {
-		g.log.ErrorContext(ctx, "failed to generate code", slog.String("generator", g.name), slog.Any("error", err))
-		return err
-	}
+	// CommandContext kills the child when the signal-based parent context is
+	// done, and Run waits on it either way — so the process is reaped on
+	// success, on failure and on cancellation, and no generator outlives the
+	// avroc that started it.
+	cmd := exec.CommandContext(ctx, g.executablePath, args...)
+	// Standard input is unused: avroc always passes the descriptor as a path,
+	// never through the "-" form the contract also allows.
+	cmd.Stdin = nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.WaitDelay = generatorWaitDelay
 
-	outputFiles, err := g.writeStream(output, stream)
-	if err != nil {
-		g.log.ErrorContext(ctx, "failed to write generated output", slog.String("generator", g.name), slog.Any("error", err))
-		return err
+	if err := cmd.Run(); err != nil {
+		g.log.ErrorContext(ctx, "generator failed", slog.String("generator", g.name), slog.Any("error", err))
+		return fmt.Errorf("generator %q failed: %w", g.name, err)
 	}
 
-	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.Any("output_files", outputFiles))
+	g.log.InfoContext(ctx, "generated output", slog.String("generator", g.name), slog.String("out", outputDir))
 	return nil
 }
 
-// writeStream consumes the generator's server stream, writing each file's
-// ordered chunks directly to disk under output rather than buffering whole
-// files in memory. A path is validated to stay within output and its file is
-// created on the first chunk, so an unsafe or buggy generator cannot force
-// avroc to buffer arbitrary content before being rejected. A file is only
-// considered written once a chunk with last=true terminates it; the stream
-// ending with files still open, or any chunk arriving after a file's
-// terminating chunk, is reported as an error. It returns the OS-native paths
-// of the files written.
-func (g generator) writeStream(output string, stream avrocpb.Generator_GenerateClient) ([]string, error) {
-	open := make(map[string]*os.File)
-	finalized := make(map[string]struct{})
-	var written []string
-
-	// On any early return, discard files that never received their terminating
-	// chunk so partial/corrupt output is not left behind in the output tree.
-	defer func() {
-		for path, f := range open {
-			name := f.Name()
-			_ = f.Close()
-			_ = os.Remove(name)
-			delete(open, path)
-		}
-	}()
-
-	for {
-		msg, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			if len(open) > 0 {
-				return written, fmt.Errorf("generator %q closed the stream with %d unterminated file(s)", g.name, len(open))
-			}
-			return written, nil
-		}
-		if err != nil {
-			return written, err
-		}
-
-		path := msg.GetPath()
-		if _, done := finalized[path]; done {
-			return written, fmt.Errorf("generator %q sent a chunk for already-completed file %q", g.name, path)
-		}
-
-		f, ok := open[path]
-		if !ok {
-			dst, err := safeOutputPath(output, path)
-			if err != nil {
-				return written, fmt.Errorf("generator %q returned unsafe path %q: %w", g.name, path, err)
-			}
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return written, fmt.Errorf("failed to create output directory for %q: %w", dst, err)
-			}
-			f, err = os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-			if err != nil {
-				return written, fmt.Errorf("failed to create file %q: %w", dst, err)
-			}
-			open[path] = f
-		}
-
-		if _, err := f.Write(msg.GetContent()); err != nil {
-			return written, fmt.Errorf("failed to write file %q: %w", f.Name(), err)
-		}
-
-		if !msg.GetLast() {
-			continue
-		}
-
-		name := f.Name()
-		delete(open, path)
-		finalized[path] = struct{}{}
-		if err := f.Close(); err != nil {
-			return written, fmt.Errorf("failed to close file %q: %w", name, err)
-		}
-		written = append(written, name)
+// generatorArgs builds the argument vector docs/plugin/SPEC.md specifies:
+//
+//	avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]
+//
+// and nothing else. In particular nothing is taken from the environment: the
+// AVROC_GENERATOR_ARGS variable that used to prepend arbitrary words here is
+// gone, because it made the vector a function of the ambient environment, which
+// is the one input a manifest does not record and a reviewer cannot see.
+//
+// The options are emitted in the order they arrive, which the manifest fixes,
+// so the vector is a function of the manifest rather than of a map iteration.
+func generatorArgs(descriptorPath, outputDir string, options []*avrocpb.Option) []string {
+	args := make([]string, 0, 4+2*len(options))
+	args = append(args, "--descriptor", descriptorPath, "--out", outputDir)
+	for _, opt := range options {
+		args = append(args, "--opt", opt.GetName()+"="+opt.GetValue())
 	}
-}
-
-func (g generator) startGenerator(ctx context.Context, socket string) (*exec.Cmd, error) {
-	args := []string{socket}
-	if extra, ok := g.env.LookupEnv("AVROC_GENERATOR_ARGS"); ok {
-		args = append(strings.Fields(extra), args...)
-	}
-
-	cmd := exec.CommandContext(ctx, g.executablePath, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Start()
-	if err != nil {
-		return nil, err
-	}
-
-	return cmd, nil
+	return args
 }

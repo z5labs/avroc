@@ -12,9 +12,10 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -23,8 +24,6 @@ import (
 	"github.com/z5labs/avroc/internal/cli"
 	"github.com/z5labs/avroc/internal/ir"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -109,6 +108,46 @@ func TestLookupGenerators(t *testing.T) {
 		}
 		if got["avroc-gen-java"] != filepath.Join(dir2, "avroc-gen-java") {
 			t.Errorf("avroc-gen-java path = %q", got["avroc-gen-java"])
+		}
+	})
+
+	t.Run("the earliest PATH entry wins", func(t *testing.T) {
+		first := filepath.Join(string(filepath.Separator), "first")
+		second := filepath.Join(string(filepath.Separator), "second")
+		openDir := func(string) fs.FS {
+			return fstest.MapFS{"avroc-gen-go": executableFile()}
+		}
+
+		got, err := lookupGenerators(context.Background(), discardLog, openDir, first, second)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Prepending a directory is how an author shadows an installed
+		// generator with one under development, so the later entry must not
+		// quietly replace it.
+		if want := filepath.Join(first, "avroc-gen-go"); got["avroc-gen-go"] != want {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
+		}
+	})
+
+	t.Run("an empty PATH entry is not the working directory", func(t *testing.T) {
+		var opened []string
+		openDir := func(d string) fs.FS {
+			opened = append(opened, d)
+			return fstest.MapFS{"avroc-gen-go": executableFile()}
+		}
+
+		got, err := lookupGenerators(context.Background(), discardLog, openDir, "", dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if slices.Contains(opened, "") {
+			t.Error("an empty PATH entry was searched")
+		}
+		if want := filepath.Join(dir, "avroc-gen-go"); got["avroc-gen-go"] != want {
+			t.Errorf("avroc-gen-go path = %q, want %q", got["avroc-gen-go"], want)
 		}
 	})
 
@@ -252,165 +291,96 @@ func TestMain_Dispatch(t *testing.T) {
 	})
 }
 
-// TestHelperGenerator is a test function that doubles as a real generator subprocess.
-// When run normally by "go test", AVROC_TEST_GENERATOR is not set, so it returns immediately.
-// When re-invoked as a subprocess, it starts a real gRPC server on the Unix socket.
-func TestHelperGenerator(t *testing.T) {
-	if os.Getenv("AVROC_TEST_GENERATOR") != "1" {
-		return
-	}
+// testGeneratorName is the generator these tests drive. It is part of the
+// per-invocation descriptor directory's name, so a leftover from some other
+// test — or from another package's temporary files — is not mistaken for one of
+// these.
+const testGeneratorName = "avroc-gen-test"
 
-	socketPath := os.Args[len(os.Args)-1]
-
-	lis, err := net.Listen("unix", socketPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
-	avrocpb.RegisterGeneratorServer(srv, &testGeneratorServer{path: os.Getenv("AVROC_TEST_GEN_PATH")})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		<-ctx.Done()
-		srv.GracefulStop()
-	}()
-
-	if err := srv.Serve(lis); err != nil {
-		t.Fatal(err)
-	}
-}
-
-type testGeneratorServer struct {
-	avrocpb.UnimplementedGeneratorServer
-	path string
-}
-
-// testDescriptorGlob matches the descriptor files avroc writes for the
-// stand-in generator these tests drive. It leans on the generator's name being
-// part of the per-invocation directory, so a leftover from some other test —
-// or from another package's temporary files — is not mistaken for this one's.
-const testDescriptorGlob = "avroc-gen-test-descriptor-*/" + descriptorFilename
-
-// findDescriptorMatching reports whether a descriptor file holding exactly req
-// is readable right now. A leftover from an earlier crashed run may sit beside
-// it, so the test is "at least one decodes and equals req" rather than "exactly
-// one file exists": a stale file cannot make this pass, and cannot make it fail
-// either.
+// writeShellGenerator writes body out as an executable shell script and returns
+// its path.
 //
-// Making good on the second half is why a match that cannot be read or decoded
-// is skipped rather than returned as an error. A file that vanished between the
-// glob and the read, or that some earlier run left half-written, is not evidence
-// about the descriptor this invocation wrote — but it would sit ahead of it in
-// the glob's sorted order often enough to make the failure look real. The last
-// such error is kept only to be quoted when nothing matched, so a genuinely
-// unreadable descriptor still says why rather than reporting a bare miss.
-func findDescriptorMatching(req *avrocpb.GenerateRequest) error {
-	matches, err := filepath.Glob(filepath.Join(os.TempDir(), testDescriptorGlob))
+// A shell script is the generator these tests use on purpose. docs/plugin/SPEC.md
+// makes the contract "deliberately small enough that a generator can be a shell
+// script", and a test driving one holds avroc to that: a vector that needed a
+// flag-parsing library, or a descriptor a script could not read, would fail here
+// rather than in a plugin author's terminal.
+func writeShellGenerator(t *testing.T, body string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), testGeneratorName)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// recordArgsScript is the body of a generator that records its whole argument
+// vector one argument per line, copies the descriptor it was handed to
+// copyPath, and writes outFile beneath --out.
+//
+// Copying the descriptor rather than checking it in the shell is what lets the
+// assertions be about the bytes: the copy is taken while the generator is
+// running, which is the only vantage point from which "written in full before
+// the generator started, and removed once it exited" is observable at all.
+func recordArgsScript(argsPath, copyPath, outFile string) string {
+	return fmt.Sprintf(`set -e
+: > '%s'
+for a in "$@"; do printf '%%s\n' "$a" >> '%s'; done
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --descriptor) descriptor=$2; shift 2 ;;
+    --out) out=$2; shift 2 ;;
+    --opt) shift 2 ;;
+    *) echo "error: unexpected argument $1" >&2; exit 1 ;;
+  esac
+done
+
+cp "$descriptor" '%s'
+mkdir -p "$(dirname "$out/%s")"
+printf 'package main\n' > "$out/%s"
+`, argsPath, argsPath, copyPath, outFile, outFile)
+}
+
+func readLines(t *testing.T, path string) []string {
+	t.Helper()
+
+	b, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to search for the descriptor file: %w", err)
+		t.Fatal(err)
 	}
-	if len(matches) == 0 {
-		return fmt.Errorf("no descriptor file under %q while the generator is running", os.TempDir())
-	}
-
-	var skipped error
-	for _, m := range matches {
-		b, err := os.ReadFile(m)
-		if err != nil {
-			skipped = fmt.Errorf("failed to read descriptor %q: %w", m, err)
-			continue
-		}
-		var onDisk avrocpb.GenerateRequest
-		if err := proto.Unmarshal(b, &onDisk); err != nil {
-			skipped = fmt.Errorf("descriptor %q does not decode: %w", m, err)
-			continue
-		}
-		if proto.Equal(&onDisk, req) {
-			return nil
-		}
-	}
-
-	if skipped != nil {
-		return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received; last unusable one: %w", len(matches), skipped)
-	}
-	return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received", len(matches))
+	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 }
 
-func (s *testGeneratorServer) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
-	// This stand-in generator holds avroc to the producer half of
-	// docs/ir/SPEC.md's version rule, on the real client path rather than on a
-	// request a test constructed: if avroc stops stamping every descriptor it
-	// emits, TestGeneratorGenerate fails here with the reason rather than
-	// somewhere downstream with a missing file.
-	if err := ir.CheckVersion(req.GetVersion()); err != nil {
-		return fmt.Errorf("avroc emitted a descriptor this generator will not read: %w", err)
-	}
+func testGenerator(t *testing.T, executablePath string) generator {
+	t.Helper()
 
-	// And to the other half docs/plugin/SPEC.md adds: while a generator is
-	// running, a complete descriptor carrying exactly what it received is on
-	// disk. Checked from inside the subprocess because that is the only vantage
-	// point from which "before the generator started, and not yet deleted" is
-	// observable at all.
-	if err := findDescriptorMatching(req); err != nil {
-		return err
+	return generator{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		name:           testGeneratorName,
+		executablePath: executablePath,
 	}
-
-	path := s.path
-	if path == "" {
-		path = "output.go"
-	}
-	last := true
-	return stream.Send(&avrocpb.GenerateResponse{
-		Path:    &path,
-		Content: []byte("package main\n"),
-		Last:    &last,
-	})
 }
 
+// TestGeneratorGenerate is docs/plugin/SPEC.md's Invocation on the real
+// fork/exec path: the argument vector, the absolute paths in it, the descriptor
+// those paths name, and the files the generator wrote for itself.
 func TestGeneratorGenerate(t *testing.T) {
-	t.Setenv("AVROC_TEST_GENERATOR", "1")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	g := generator{
-		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		env: cli.EnvironmentFunc(func(key string) (string, bool) {
-			if key == "AVROC_GENERATOR_ARGS" {
-				return "-test.run=TestHelperGenerator --", true
-			}
-			return "", false
-		}),
-		name:           "avroc-gen-test",
-		executablePath: os.Args[0],
-	}
+	scratch := t.TempDir()
+	argsPath := filepath.Join(scratch, "args")
+	copyPath := filepath.Join(scratch, "descriptor.copy")
 
-	schema := &avrocpb.Schema{
-		Namespace: proto.String("com.example"),
-		Type: &avrocpb.Type{
-			Type: &avrocpb.Type_Record{
-				Record: &avrocpb.Record{
-					Name: proto.String("User"),
-					Fields: []*avrocpb.Field{
-						{
-							Name: proto.String("name"),
-							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Reference{
-									Reference: &avrocpb.Reference{
-										Name: proto.String("string"),
-										Kind: avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE.Enum(),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+	g := testGenerator(t, writeShellGenerator(t, recordArgsScript(argsPath, copyPath, "pkg/output.go")))
+
+	options := []*avrocpb.Option{
+		{Name: proto.String("encoding"), Value: proto.String("single_object")},
+		{Name: proto.String("package_name"), Value: proto.String("avro")},
 	}
+	schema := testSchema("User")
 
 	// The descriptor's lifetime ends when the generator exits, so the set of
 	// descriptor directories on disk must not grow across an invocation. Taken
@@ -418,17 +388,58 @@ func TestGeneratorGenerate(t *testing.T) {
 	// earlier run may have left one and that is not this test's failure.
 	before := descriptorDirs(t)
 
-	outputDir := t.TempDir()
-	err := g.generate(ctx, outputDir, nil, schema)
-	if err != nil {
+	// A directory avroc has to create: a plugin may assume --out exists.
+	outputDir := filepath.Join(t.TempDir(), "gen")
+
+	if err := g.generate(ctx, outputDir, options, schema); err != nil {
 		t.Fatal(err)
 	}
 
-	// avroc, not the generator, performs the write. Confirm the streamed file
-	// landed under the output directory.
-	written := filepath.Join(outputDir, "output.go")
-	if _, err := os.Stat(written); err != nil {
-		t.Errorf("expected generated file at %q: %v", written, err)
+	args := readLines(t, argsPath)
+	if len(args) != 8 {
+		t.Fatalf("generator received %d arguments %q, want 8", len(args), args)
+	}
+	if args[0] != "--descriptor" || args[2] != "--out" {
+		t.Errorf("argument vector = %q, want --descriptor <path> --out <dir> first", args)
+	}
+	if !filepath.IsAbs(args[1]) {
+		t.Errorf("--descriptor %q is not an absolute path", args[1])
+	}
+	if filepath.Base(args[1]) != descriptorFilename {
+		t.Errorf("--descriptor %q is not the descriptor avroc writes", args[1])
+	}
+	if want, err := filepath.Abs(outputDir); err != nil {
+		t.Fatal(err)
+	} else if args[3] != want {
+		t.Errorf("--out = %q, want the absolute %q", args[3], want)
+	}
+	// The options follow in the order the manifest fixed, so the vector is a
+	// function of the manifest rather than of a map iteration.
+	wantOpts := []string{"--opt", "encoding=single_object", "--opt", "package_name=avro"}
+	if got := args[4:]; !slices.Equal(got, wantOpts) {
+		t.Errorf("option arguments = %q, want %q", got, wantOpts)
+	}
+
+	// The descriptor the generator could read while it ran is the one avroc
+	// built for this invocation, complete and decodable.
+	b, err := os.ReadFile(copyPath)
+	if err != nil {
+		t.Fatalf("the generator could not copy the descriptor it was handed: %v", err)
+	}
+	var onDisk avrocpb.GenerateRequest
+	if err := proto.Unmarshal(b, &onDisk); err != nil {
+		t.Fatalf("the descriptor the generator read does not decode: %v", err)
+	}
+	if err := ir.CheckVersion(onDisk.GetVersion()); err != nil {
+		t.Errorf("avroc emitted a descriptor no generator here would read: %v", err)
+	}
+	if want := newDescriptor(options, []*avrocpb.Schema{schema}); !proto.Equal(&onDisk, want) {
+		t.Errorf("descriptor on disk = %v, want %v", &onDisk, want)
+	}
+
+	// The generator writes its own files now; avroc only creates the directory.
+	if _, err := os.Stat(filepath.Join(outputDir, "pkg", "output.go")); err != nil {
+		t.Errorf("expected the generator's file under the output directory: %v", err)
 	}
 
 	for dir := range descriptorDirs(t) {
@@ -438,12 +449,88 @@ func TestGeneratorGenerate(t *testing.T) {
 	}
 }
 
+// TestGeneratorGenerateNonZeroExit is the whole of the failure signal: a
+// non-zero exit fails the run, and the descriptor is still removed.
+func TestGeneratorGenerateNonZeroExit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	g := testGenerator(t, writeShellGenerator(t, "echo 'error: nope' >&2\nexit 3\n"))
+
+	before := descriptorDirs(t)
+
+	err := g.generate(ctx, t.TempDir(), nil, testSchema("User"))
+	if err == nil {
+		t.Fatal("generate accepted a generator that exited non-zero")
+	}
+	if !strings.Contains(err.Error(), testGeneratorName) {
+		t.Errorf("error %q does not name the generator", err)
+	}
+
+	for dir := range descriptorDirs(t) {
+		if _, ok := before[dir]; !ok {
+			t.Errorf("descriptor directory %q survived a failed invocation", dir)
+		}
+	}
+}
+
+// TestGeneratorGenerateCancellation is the other half of the process lifecycle:
+// cancelling the signal-based parent context reaches the child, and generate
+// returns rather than waiting on a process nobody is going to stop.
+func TestGeneratorGenerateCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	started := filepath.Join(t.TempDir(), "started")
+	// exec, so that the process avroc kills is the one that sleeps. A shell that
+	// forked the sleep would leave it orphaned holding the inherited standard
+	// streams, and the test binary would then outlive its own generator.
+	g := testGenerator(t, writeShellGenerator(t, fmt.Sprintf(": > '%s'\nexec sleep 300\n", started)))
+
+	before := descriptorDirs(t)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- g.generate(ctx, t.TempDir(), nil, testSchema("User"))
+	}()
+
+	// Cancel only once the child is definitely running, so the test is about
+	// cancellation reaching a live process rather than about a context that was
+	// already done before the fork.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(started); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the generator never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("generate reported success for a cancelled invocation")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("generate did not return after its context was cancelled")
+	}
+
+	for dir := range descriptorDirs(t) {
+		if _, ok := before[dir]; !ok {
+			t.Errorf("descriptor directory %q survived a cancelled invocation", dir)
+		}
+	}
+}
+
 // descriptorDirs is the set of per-invocation descriptor directories currently
 // on disk for the stand-in generator.
 func descriptorDirs(t *testing.T) map[string]struct{} {
 	t.Helper()
 
-	matches, err := filepath.Glob(filepath.Join(os.TempDir(), "avroc-gen-test-descriptor-*"))
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), testGeneratorName+"-descriptor-*"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,143 +541,41 @@ func descriptorDirs(t *testing.T) map[string]struct{} {
 	return dirs
 }
 
-// fakeClientStream replays a fixed sequence of GenerateResponse messages,
-// implementing avrocpb.Generator_GenerateClient for writeStream tests.
-type fakeClientStream struct {
-	grpc.ClientStream
-	msgs []*avrocpb.GenerateResponse
-	i    int
-}
-
-func (f *fakeClientStream) Recv() (*avrocpb.GenerateResponse, error) {
-	if f.i >= len(f.msgs) {
-		return nil, io.EOF
-	}
-	m := f.msgs[f.i]
-	f.i++
-	return m, nil
-}
-
-func TestWriteStream(t *testing.T) {
-	g := generator{
-		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		name: "avroc-gen-test",
-	}
-
-	t.Run("writes reassembled file under output root", func(t *testing.T) {
-		root := t.TempDir()
-		path := "pkg/person.go"
-		last := func(b bool) *bool { return &b }
-		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
-			{Path: &path, Content: []byte("package pkg\n"), Last: last(false)},
-			{Path: &path, Content: []byte("// trailer\n"), Last: last(true)},
-		}}
-
-		written, err := g.writeStream(root, stream)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(written) != 1 {
-			t.Fatalf("expected 1 written file, got %d", len(written))
-		}
-
-		got, err := os.ReadFile(filepath.Join(root, "pkg", "person.go"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := "package pkg\n// trailer\n"; string(got) != want {
-			t.Errorf("content = %q, want %q", string(got), want)
-		}
-	})
-
-	t.Run("rejects paths that escape the output root", func(t *testing.T) {
-		for _, bad := range []string{"../escape.go", "/etc/evil.go", "a/../../escape.go"} {
-			root := t.TempDir()
-			path := bad
-			last := true
-			stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
-				{Path: &path, Content: []byte("package x\n"), Last: &last},
-			}}
-
-			if _, err := g.writeStream(root, stream); err == nil {
-				t.Errorf("path %q: expected error, got nil", bad)
-			}
-
-			// Nothing must be written next to the output root.
-			if _, err := os.Stat(filepath.Join(filepath.Dir(root), "escape.go")); !os.IsNotExist(err) {
-				t.Errorf("path %q: file escaped the output root", bad)
-			}
-		}
-	})
-
-	t.Run("errors when the stream ends with an unterminated file", func(t *testing.T) {
-		root := t.TempDir()
-		path := "pkg/person.go"
-		last := func(b bool) *bool { return &b }
-		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
-			{Path: &path, Content: []byte("package pkg\n"), Last: last(false)},
-			// No terminating chunk: the stream just ends.
-		}}
-
-		if _, err := g.writeStream(root, stream); err == nil {
-			t.Fatal("expected error for unterminated file, got nil")
-		}
-
-		// The partial file must not be left behind in the output tree.
-		if _, err := os.Stat(filepath.Join(root, "pkg", "person.go")); !os.IsNotExist(err) {
-			t.Errorf("partial file was not discarded: %v", err)
-		}
-	})
-
-	t.Run("errors when a chunk follows a terminated file", func(t *testing.T) {
-		root := t.TempDir()
-		path := "person.go"
-		last := func(b bool) *bool { return &b }
-		stream := &fakeClientStream{msgs: []*avrocpb.GenerateResponse{
-			{Path: &path, Content: []byte("package pkg\n"), Last: last(true)},
-			{Path: &path, Content: []byte("// extra\n"), Last: last(true)},
-		}}
-
-		if _, err := g.writeStream(root, stream); err == nil {
-			t.Fatal("expected error for chunk after termination, got nil")
-		}
-	})
-}
-
-func TestGeneratorGenerate_RejectsUnsafePath(t *testing.T) {
-	t.Setenv("AVROC_TEST_GENERATOR", "1")
-	t.Setenv("AVROC_TEST_GEN_PATH", "../escape.go")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	g := generator{
-		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		env: cli.EnvironmentFunc(func(key string) (string, bool) {
-			if key == "AVROC_GENERATOR_ARGS" {
-				return "-test.run=TestHelperGenerator --", true
-			}
-			return "", false
-		}),
-		name:           "avroc-gen-test",
-		executablePath: os.Args[0],
-	}
-
-	schema := &avrocpb.Schema{
-		Namespace: proto.String("com.example"),
-		Type: &avrocpb.Type{
-			Type: &avrocpb.Type_Record{
-				Record: &avrocpb.Record{Name: proto.String("User")},
+// TestGeneratorArgs pins the vector docs/plugin/SPEC.md specifies, including
+// the case the invocation tests above cannot reach: a generator with no
+// options at all still gets --descriptor and --out and nothing more.
+func TestGeneratorArgs(t *testing.T) {
+	testCases := []struct {
+		name    string
+		options []*avrocpb.Option
+		want    []string
+	}{
+		{
+			name: "no options",
+			want: []string{"--descriptor", "/tmp/d/descriptor.binpb", "--out", "/w/gen"},
+		},
+		{
+			name: "an option whose value is empty",
+			options: []*avrocpb.Option{
+				{Name: proto.String("package_name"), Value: proto.String("")},
 			},
+			want: []string{"--descriptor", "/tmp/d/descriptor.binpb", "--out", "/w/gen", "--opt", "package_name="},
+		},
+		{
+			name: "an option whose value carries further equals signs",
+			options: []*avrocpb.Option{
+				{Name: proto.String("tag"), Value: proto.String("a=b=c")},
+			},
+			want: []string{"--descriptor", "/tmp/d/descriptor.binpb", "--out", "/w/gen", "--opt", "tag=a=b=c"},
 		},
 	}
 
-	outputDir := t.TempDir()
-	if err := g.generate(ctx, outputDir, nil, schema); err == nil {
-		t.Fatal("expected error for generator returning an escaping path")
-	}
-
-	if _, err := os.Stat(filepath.Join(filepath.Dir(outputDir), "escape.go")); !os.IsNotExist(err) {
-		t.Errorf("file escaped the output root")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := generatorArgs("/tmp/d/descriptor.binpb", "/w/gen", tc.options)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("generatorArgs = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
