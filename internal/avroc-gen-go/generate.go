@@ -82,6 +82,15 @@ func sendFile(stream avrocpb.Generator_GenerateServer, path string, content []by
 // buildSchemaFile generates the Go source for a single schema, returning its
 // relative filename and formatted content.
 func buildSchemaFile(packageName string, schema *avrocpb.Schema, singleObject bool) (string, []byte, error) {
+	// Refuse a descriptor this generator cannot represent before emitting any
+	// of it. The code builders below cannot report a problem — they append to a
+	// buffer — so a reference whose kind is unrecognised, or which claims to
+	// name a primitive and does not, would otherwise be silently generated as a
+	// call to a Go type that does not exist.
+	if err := ir.Validate(schema); err != nil {
+		return "", nil, err
+	}
+
 	// Compute fingerprint before code generation if single-object encoding is requested.
 	var fp [8]byte
 	if singleObject {

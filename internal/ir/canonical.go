@@ -24,8 +24,13 @@ import (
 //
 // The walk carries no state: because the producer decided where each named type
 // is written out in full and where it is referenced by name, a definition and a
-// reference are distinguishable from the message alone.
+// reference are distinguishable from the message alone. Validate runs first, so
+// the walk below can read what the descriptor says rather than re-checking it at
+// every node.
 func Canonical(schema *avrocpb.Schema) (canonical.Schema, error) {
+	if err := Validate(schema); err != nil {
+		return canonical.Schema{}, err
+	}
 	return canonicalType(schema.GetType())
 }
 
@@ -54,9 +59,9 @@ func canonicalType(t *avrocpb.Type) (canonical.Schema, error) {
 	case *avrocpb.Type_Record:
 		return canonicalRecord(v.Record)
 	case *avrocpb.Type_EnumType:
-		return canonicalEnum(v.EnumType)
+		return canonicalEnum(v.EnumType), nil
 	case *avrocpb.Type_Fixed:
-		return canonicalFixed(v.Fixed)
+		return canonicalFixed(v.Fixed), nil
 	case *avrocpb.Type_Array:
 		return canonicalArray(v.Array)
 	case *avrocpb.Type_MapType:
@@ -64,7 +69,10 @@ func canonicalType(t *avrocpb.Type) (canonical.Schema, error) {
 	case *avrocpb.Type_Union:
 		return canonicalUnion(v.Union)
 	case *avrocpb.Type_Reference:
-		return canonicalReference(v.Reference)
+		// Both kinds are written as a bare name: the primitive's, or the named
+		// type's fully-qualified one. Validate has already established that the
+		// kind is recognised and the name is one the kind allows.
+		return canonical.PrimitiveSchema(canonical.Primitive(v.Reference.GetName())), nil
 	default:
 		// A type constructor is a closed set: an unrecognised member is a
 		// schema this generator cannot represent, not one to skip.
@@ -73,10 +81,6 @@ func canonicalType(t *avrocpb.Type) (canonical.Schema, error) {
 }
 
 func canonicalRecord(r *avrocpb.Record) (canonical.Schema, error) {
-	if r.GetFullName() == "" {
-		return canonical.Schema{}, fmt.Errorf("record %q carries no fully-qualified name", r.GetName())
-	}
-
 	fields := make([]canonical.Field, 0, len(r.GetFields()))
 	for _, f := range r.GetFields() {
 		ft, err := canonicalType(f.GetType())
@@ -95,11 +99,7 @@ func canonicalRecord(r *avrocpb.Record) (canonical.Schema, error) {
 	}), nil
 }
 
-func canonicalEnum(e *avrocpb.Enum) (canonical.Schema, error) {
-	if e.GetFullName() == "" {
-		return canonical.Schema{}, fmt.Errorf("enum %q carries no fully-qualified name", e.GetName())
-	}
-
+func canonicalEnum(e *avrocpb.Enum) canonical.Schema {
 	symbols := make([]string, 0, len(e.GetValues()))
 	for _, v := range e.GetValues() {
 		symbols = append(symbols, v.GetValue())
@@ -108,18 +108,14 @@ func canonicalEnum(e *avrocpb.Enum) (canonical.Schema, error) {
 	return canonical.EnumSchema(canonical.Enum{
 		Name:    e.GetFullName(),
 		Symbols: symbols,
-	}), nil
+	})
 }
 
-func canonicalFixed(f *avrocpb.Fixed) (canonical.Schema, error) {
-	if f.GetFullName() == "" {
-		return canonical.Schema{}, fmt.Errorf("fixed %q carries no fully-qualified name", f.GetName())
-	}
-
+func canonicalFixed(f *avrocpb.Fixed) canonical.Schema {
 	return canonical.FixedSchema(canonical.Fixed{
 		Name: f.GetFullName(),
 		Size: int(f.GetSize()),
-	}), nil
+	})
 }
 
 func canonicalArray(a *avrocpb.Array) (canonical.Schema, error) {
@@ -148,17 +144,4 @@ func canonicalUnion(u *avrocpb.Union) (canonical.Schema, error) {
 		types = append(types, s)
 	}
 	return canonical.UnionSchema(types), nil
-}
-
-// canonicalReference emits a reference as the bare name Avro's canonical form
-// calls for. Both members of the kind are written the same way; the switch is
-// here because the kind is a closed set, and an unrecognised member means a
-// schema this generator has misread rather than one it may guess at.
-func canonicalReference(ref *avrocpb.Reference) (canonical.Schema, error) {
-	switch ref.GetKind() {
-	case avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE, avrocpb.TypeRefKind_TYPE_REF_KIND_NAMED:
-		return canonical.PrimitiveSchema(canonical.Primitive(ref.GetName())), nil
-	default:
-		return canonical.Schema{}, fmt.Errorf("reference %q has unrecognised kind %v", ref.GetName(), ref.GetKind())
-	}
 }

@@ -22,7 +22,9 @@ func TestMarshal_Record(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Person"),
+					Name:      proto.String("Person"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),
@@ -85,8 +87,10 @@ func TestMarshal_Fixed(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Fixed{
 				Fixed: &avrocpb.Fixed{
-					Name: proto.String("MD5"),
-					Size: &size,
+					Name:      proto.String("MD5"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.MD5"),
+					Size:      &size,
 				},
 			},
 		},
@@ -131,7 +135,9 @@ func TestMarshal_Enum(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_EnumType{
 				EnumType: &avrocpb.Enum{
-					Name: proto.String("Status"),
+					Name:      proto.String("Status"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Status"),
 					Values: []*avrocpb.Ident{
 						{Value: proto.String("PENDING")},
 						{Value: proto.String("ACTIVE")},
@@ -180,7 +186,9 @@ func TestMarshal_Union(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Event"),
+					Name:      proto.String("Event"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Event"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("data"),
@@ -252,7 +260,9 @@ func TestMarshal_ArrayField(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Numbers"),
+					Name:      proto.String("Numbers"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Numbers"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("values"),
@@ -316,7 +326,9 @@ func TestMarshal_MapField(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Config"),
+					Name:      proto.String("Config"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Config"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("settings"),
@@ -380,7 +392,9 @@ func TestMarshal_NestedRecord(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Order"),
+					Name:      proto.String("Order"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Order"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("id"),
@@ -402,7 +416,9 @@ func TestMarshal_NestedRecord(t *testing.T) {
 			{
 				Type: &avrocpb.Type_Record{
 					Record: &avrocpb.Record{
-						Name: proto.String("Customer"),
+						Name:      proto.String("Customer"),
+						Namespace: proto.String("com.example"),
+						FullName:  proto.String("com.example.Customer"),
 						Fields: []*avrocpb.Field{
 							{
 								Name: proto.String("name"),
@@ -458,7 +474,9 @@ func TestMarshal_AllPrimitiveTypes(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("AllTypes"),
+					Name:      proto.String("AllTypes"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.AllTypes"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("bool_field"),
@@ -552,8 +570,10 @@ func TestMarshal_EmptyRecord(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name:   proto.String("Empty"),
-					Fields: []*avrocpb.Field{},
+					Name:      proto.String("Empty"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Empty"),
+					Fields:    []*avrocpb.Field{},
 				},
 			},
 		},

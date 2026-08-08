@@ -187,7 +187,9 @@ func TestGenerate_EnumWithDefault(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_EnumType{
 				EnumType: &avrocpb.Enum{
-					Name: proto.String("Color"),
+					Name:      proto.String("Color"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Color"),
 					Values: []*avrocpb.Ident{
 						{Value: proto.String("RED")},
 						{Value: proto.String("GREEN")},
@@ -285,7 +287,9 @@ func TestGenerate_Union(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Event"),
+					Name:      proto.String("Event"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Event"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("data"),
@@ -353,7 +357,9 @@ func TestGenerate_Array(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Numbers"),
+					Name:      proto.String("Numbers"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Numbers"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("values"),
@@ -416,7 +422,9 @@ func TestGenerate_Map(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name: proto.String("Config"),
+					Name:      proto.String("Config"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.Config"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("settings"),
@@ -477,8 +485,10 @@ func TestGenerate_RecordWithAliases(t *testing.T) {
 		Type: &avrocpb.Type{
 			Type: &avrocpb.Type_Record{
 				Record: &avrocpb.Record{
-					Name:    proto.String("LongList"),
-					Aliases: []string{"LinkedLongs"},
+					Name:      proto.String("LongList"),
+					Namespace: proto.String("com.example"),
+					FullName:  proto.String("com.example.LongList"),
+					Aliases:   []string{"LinkedLongs"},
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("value"),
@@ -593,6 +603,7 @@ func TestGenerate_RecordWithOwnNamespace(t *testing.T) {
 				Record: &avrocpb.Record{
 					Name:      proto.String("Person"),
 					Namespace: proto.String("com.other"),
+					FullName:  proto.String("com.other.Person"),
 					Fields: []*avrocpb.Field{
 						{
 							Name: proto.String("name"),

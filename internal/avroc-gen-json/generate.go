@@ -36,6 +36,10 @@ func (s *generatorService) Generate(req *avrocpb.GenerateRequest, stream avrocpb
 // buildSchemaFile generates the Avro JSON schema for a single schema, returning
 // its relative filename and content.
 func buildSchemaFile(schema *avrocpb.Schema) (string, []byte, error) {
+	if err := ir.Validate(schema); err != nil {
+		return "", nil, err
+	}
+
 	jsonSchema, err := schemaToJSON(schema)
 	if err != nil {
 		return "", nil, err
@@ -132,16 +136,15 @@ type avroFixed struct {
 // primitive or a named type, so there is no symbol table here and no state
 // carried between types.
 func schemaToJSON(schema *avrocpb.Schema) (any, error) {
-	if schema.GetType() == nil {
-		return nil, nil
-	}
 	return typeToJSON(schema.GetType())
 }
 
 // typeToJSON converts a resolved Type to its Avro JSON schema representation.
 func typeToJSON(t *avrocpb.Type) (any, error) {
 	if t == nil {
-		return nil, nil
+		// An absent type is not an empty schema; emitting JSON null here would
+		// write a .avsc no Avro reader accepts.
+		return nil, fmt.Errorf("nil type")
 	}
 
 	switch v := t.GetType().(type) {
