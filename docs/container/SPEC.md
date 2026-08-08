@@ -372,10 +372,82 @@ The same four tags are published for each of [avroc's own generator
 images](#avrocs-own-generators), and a given version tag means the same release
 across all of them: `avroc-gen-go:v0.2.0` is built `FROM` `avroc:v0.2.0`.
 
-Images are signed and carry provenance and an SBOM (#128), and a consumer can
-verify a signature before trusting a tag. That verification is a thing a
-consumer can perform, so it is in scope here; how the signature comes to exist
-is not, and is under [Out of Scope](#how-the-image-is-built-and-published).
+### What counts as a release, and what a prerelease publishes
+
+A release is a **single canonical version tag** — `vMAJOR.MINOR.PATCH`, with the
+optional prerelease part semantic versioning allows — pointing at the commit
+being published. `0.2.0` without the `v`, `v0.2` without the patch and `v01.2.0`
+with a leading zero are not versions and publish nothing; a version carrying
+`+build` metadata is **refused**, because `+` cannot be spelled in an OCI tag and
+mangling it away would publish two different releases under one tag.
+
+A **prerelease** — `v0.3.0-rc.1` — publishes its own full version tag and
+**MUST NOT** move any of the other three. The moving tags are what a derived
+Dockerfile pins to pick up fixes without an edit, and a release candidate is not
+a fix anybody consented to be given.
+
+Two version tags on one commit is an **error**, not a choice: which of them
+`latest` should follow has no defensible answer, and a pipeline that picked one
+would be repointing a moving tag on a coin toss.
+
+### Verifying a signature
+
+Every published manifest is signed, and carries a
+[SLSA v1](https://slsa.dev/spec/v1.0/provenance) provenance statement and an
+SPDX SBOM per executable per platform (#128). Signing is **keyless**: there is no
+avroc public key to obtain or trust. The signing identity is the release workflow
+itself, certified for the length of one run by the public
+[sigstore](https://www.sigstore.dev/) CA from the OIDC token the CI provider
+mints, and recorded in sigstore's public transparency log. So verification asks
+*what built this image*, and the answer is checkable by anyone with
+[cosign](https://github.com/sigstore/cosign) and no prior arrangement with this
+project.
+
+Verify the signature on a full version tag:
+
+```console
+$ cosign verify \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity 'https://github.com/z5labs/avroc/.github/workflows/release.yaml@refs/tags/v0.2.0' \
+    ghcr.io/z5labs/avroc:v0.2.0
+```
+
+Both flags are required, and neither is optional in spirit: a `cosign verify`
+without them checks that *somebody* signed the image and tells you nothing about
+who. The identity is the workflow at the tag being verified, so it names a
+different ref for each release — which is why a **moving** tag is verified
+against a pattern rather than a literal:
+
+```console
+$ cosign verify \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github\.com/z5labs/avroc/\.github/workflows/release\.yaml@refs/tags/v' \
+    ghcr.io/z5labs/avroc:v0
+```
+
+The same two flags verify the attestations, with the predicate type naming which
+one is wanted — `slsaprovenance1` for the provenance and `spdxjson` for the
+SBOMs:
+
+```console
+$ cosign verify-attestation --type slsaprovenance1 \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity 'https://github.com/z5labs/avroc/.github/workflows/release.yaml@refs/tags/v0.2.0' \
+    ghcr.io/z5labs/avroc:v0.2.0
+```
+
+Every one of these works identically against a [generator
+image](#avrocs-own-generators) — substitute `ghcr.io/z5labs/avroc-gen-go` — and
+against a digest, which is the reference to verify when the answer has to stay
+true afterwards.
+
+Signatures and attestations are attached to the **digest**, never to the tag. An
+attestation about a name that moves would say nothing, and this is why verifying
+a moving tag is verifying whatever it resolves to at that moment.
+
+That this verification is *possible* is in scope here, because it is a thing a
+consumer performs. How the signature comes to exist is not, and is under [Out of
+Scope](#how-the-image-is-built-and-published).
 
 ## avroc's own generators
 
@@ -598,6 +670,7 @@ to any of them is a breaking change:
 | [No shell](#no-shell) | Absent; extension is `COPY`-only |
 | [The `FileDescriptorSet`](#the-ir-filedescriptorset) | `/usr/local/share/avroc/ir.binpb` |
 | [Tags](#tags-and-what-pinning-one-buys) | A published full-version tag never moves |
+| [Signatures](#verifying-a-signature) | Every published manifest is signed, and carries provenance and an SBOM |
 | [avroc's own generators](#avrocs-own-generators) | One image each, `FROM` the base, adding one executable and changing nothing else |
 
 Not covered, and explicitly implementation detail. Depending on any of it is
@@ -701,6 +774,7 @@ found there and what happens to it.
 | [No shell](#no-shell) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [The IR `FileDescriptorSet`](#the-ir-filedescriptorset) | [#113](https://github.com/z5labs/avroc/issues/113), [#126](https://github.com/z5labs/avroc/issues/126) |
 | [Tags and what pinning one buys](#tags-and-what-pinning-one-buys) | [#128](https://github.com/z5labs/avroc/issues/128) |
+| [Verifying a signature](#verifying-a-signature) | [#128](https://github.com/z5labs/avroc/issues/128) |
 | [avroc's own generators](#avrocs-own-generators) | [#127](https://github.com/z5labs/avroc/issues/127) |
 | [Worked example: adding a generator](#worked-example-adding-a-generator) | [#129](https://github.com/z5labs/avroc/issues/129) |
 | [Compatibility guarantees](#compatibility-guarantees) | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128) |

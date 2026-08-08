@@ -80,28 +80,45 @@ jobs:
   # behind, and the generator images are built from the same base this job
   # checked, so splitting them would mean building it twice.
   #
-  # Only the full version tag is pushed here. docs/container/SPEC.md publishes
-  # four tags and promises that a full version tag never moves while the other
-  # three do; the moving ones, together with signatures, provenance and an SBOM,
-  # are #128's, and they are a change to this job rather than to the module,
-  # because which tags exist is a property of a release and not of an image.
+  # Which tags exist, and whether this commit is a release at all, is decided by
+  # the module from the refs at HEAD (#128) — not by an `if:` here and not by a
+  # tag assembled in the step below. A workflow that decided would have to write
+  # the tag scheme down to do it, in a file that runs once per release and is
+  # exercised nowhere else; `dagger call tag-scheme` runs the same derivation on
+  # every pull request. What is left here is *where* to publish and what
+  # credentials to publish with, which genuinely are properties of this
+  # deployment rather than of the release.
   image:
     name: Images
     runs-on: ubuntu-latest
     permissions:
-      # Reading the source, and writing the package. Both grants are here rather
-      # than at the top of the file because this is the only job that pushes
-      # anything, and a grant held in advance is one nothing accounts for.
+      # Reading the source, writing the package, and minting the OIDC token that
+      # signs it. All three are here rather than at the top of the file because
+      # this is the only job that pushes or signs anything, and a grant held in
+      # advance is one nothing accounts for. `id-token: write` arrives in the
+      # same change as the signing step that needs it: it is what lets the run
+      # ask GitHub for the workload identity token cosign exchanges for a
+      # short-lived certificate, and it is also what puts
+      # ACTIONS_ID_TOKEN_REQUEST_URL and ACTIONS_ID_TOKEN_REQUEST_TOKEN in the
+      # step environment below.
       contents: read
       packages: write
+      id-token: write
     steps:
       # At the release's tag, for the same reason the asset above is built
       # there: the image is a function of the source, and an image built from a
       # different commit would be a different program wearing the tag.
+      #
+      # With full history and tags, because the module reads the refs at HEAD to
+      # decide what this release is. A shallow checkout without tags has no
+      # version tag pointing at HEAD, so the release step would correctly
+      # conclude there is nothing to publish and push nothing at all.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install the Dagger CLI
         run: |
@@ -123,40 +140,36 @@ jobs:
       - name: Check the generator images against the contract
         run: dagger call generator-image-contract
 
-      # One multi-platform index covering linux/amd64 and linux/arm64, so that a
-      # `FROM` line naming the tag resolves to the manifest for whatever
-      # platform the builder is on.
+      # One call publishes all four images — the base and one per built-in
+      # generator — as multi-platform indexes covering linux/amd64 and
+      # linux/arm64, under every tag docs/container/SPEC.md's tag table gives
+      # this release, and signs each published digest with a SLSA provenance
+      # statement and an SPDX SBOM beside it (#128).
       #
-      # The address is assembled here rather than in the module: the module
-      # pushes the reference it is given, and a function that derived a tag from
-      # the refs at HEAD would be a second place the tag scheme is written down.
-      - name: Build and publish the base image
+      # Neither the set of images nor the set of tags is written here. The
+      # generators come from the module, because that is where the set is
+      # defined; a `for name in go json pcf` in this file would be forgotten
+      # exactly once, at the release where a fourth generator silently did not
+      # get published. The tags come from the refs at HEAD, for the reason this
+      # job's comment gives. What this step supplies is the base repository —
+      # the generator repositories derive from it as `<base>-gen-<name>`, the
+      # naming that document already uses — and the credentials.
+      #
+      # The two ACTIONS_ID_TOKEN_REQUEST_* variables are put in the environment
+      # by `id-token: write` above. They are the workload identity exchange:
+      # cosign trades a token minted from them for a short-lived sigstore
+      # certificate, so the signature says which workflow at which ref produced
+      # the image rather than which key somebody is holding. The token is passed
+      # as a secret because it mints identity tokens for this repository.
+      - name: Publish, sign and attest the images
         env:
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          dagger call publish \
-            --address "ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}" \
+          dagger call release \
+            --repository "ghcr.io/${{ github.repository }}" \
             --username "${{ github.actor }}" \
-            --password env://REGISTRY_PASSWORD
-
-      # One image per built-in generator, at ghcr.io/<owner>/avroc-gen-<name>:
-      # the base with that generator copied into the plugin directory, which is
-      # the same two instructions docs/container/SPEC.md gives a third-party
-      # author (#127).
-      #
-      # The set of generators is read from the module rather than written out
-      # here, because the module is where that set is defined; a `for name in go
-      # json pcf` in this file would be forgotten exactly once, at the release
-      # where a fourth generator silently did not get published. The tags are
-      # still assembled here, for the reason the base image's step gives.
-      - name: Build and publish the generator images
-        env:
-          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for name in $(dagger call builtin-generators); do
-            dagger call publish-generator \
-              --name "$name" \
-              --address "ghcr.io/${{ github.repository }}-gen-$name:${{ github.event.release.tag_name }}" \
-              --username "${{ github.actor }}" \
-              --password env://REGISTRY_PASSWORD
-          done
+            --password env://REGISTRY_PASSWORD \
+            --id-token-request-url "$ACTIONS_ID_TOKEN_REQUEST_URL" \
+            --id-token-request-token env://ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            --builder "${{ github.server_url }}/${{ github.workflow_ref }}" \
+            --invocation "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

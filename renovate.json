@@ -3,6 +3,16 @@
         "config:best-practices"
     ],
     "ignorePaths": ["docs/**"],
+    "customManagers": [
+        {
+            "description": "The signing tool the release pipeline installs is pinned as a Go module version in a string literal, which no built-in manager reads",
+            "customType": "regex",
+            "managerFilePatterns": [".dagger/release.go"],
+            "matchStrings": [
+                "//\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)[^\"]*\"[^\"]+@(?<currentValue>v[^\"]+)\""
+            ]
+        }
+    ],
     "osvVulnerabilityAlerts": true,
     "schedule": [
         "before 4am"

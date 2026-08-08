@@ -69,11 +69,12 @@ func builtinGenerators() []string {
 
 // BuiltinGenerators names every generator avroc ships, one per line.
 //
-// It exists for .github/workflows/release.yaml, which publishes one image per
-// generator: a `for name in go json pcf` written there would be a second copy of
-// the set, in a file that is exercised once per release, and a fourth generator
-// would be forgotten exactly once — at the release where it silently did not get
-// published.
+// It is how the set is enumerated from outside the module — by a person reaching
+// for `dagger call generator-image --name`, or by a pipeline that has to do
+// something per generator. Release reads builtinGenerators directly rather than
+// through here, so a fourth generator is published by being added to that one
+// function; this exists so that answering "which are there" does not require
+// reading Go.
 func (m *Avroc) BuiltinGenerators() []string {
 	return builtinGenerators()
 }
@@ -148,9 +149,8 @@ func (m *Avroc) GeneratorBundleImage(
 // multi-platform index, and returns the digest-qualified reference it pushed.
 //
 // One function and one address per generator rather than a loop over a registry
-// prefix: which repository each image is published to and which tags it carries
-// is docs/container/SPEC.md's and the release workflow's, not this module's, for
-// the same reason Publish takes a full reference.
+// prefix: this pushes one reference, and which references a release consists of
+// is Release's (#128), for the same reason Publish takes a full reference.
 func (m *Avroc) PublishGenerator(
 	ctx context.Context,
 	// The generator to publish, by the name a manifest asks for it by.
