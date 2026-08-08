@@ -133,6 +133,27 @@ func TestSingleObjectEncodingRefusesBeforeWritingAnyFile(t *testing.T) {
 	assertNothingWritten(t, dir, w)
 }
 
+// TestSingleObjectEncodingReportsARootOutsideTheClosedSet pins the one place
+// the root check defers: the diagnostic names a type constructor, so a root
+// that is not one at all is reported by Validate, which owns that closed set,
+// rather than as a refused option. A schema carrying no root type is the case
+// that reaches it, and it must arrive as that error and not as a panic — the
+// protobuf getters are nil-safe all the way down, so the type assertion above
+// simply does not match.
+func TestSingleObjectEncodingReportsARootOutsideTheClosedSet(t *testing.T) {
+	dir := t.TempDir()
+	w := plugin.NewOutputDir(dir)
+
+	err := Generate(singleObjectRequest(&avrocpb.Schema{Namespace: proto.String("com.example")}), w)
+	if err == nil {
+		t.Fatal("Generate accepted a schema carrying no root type")
+	}
+	if !strings.Contains(err.Error(), "nil type") {
+		t.Errorf("diagnostic %q is not the one Validate gives a schema with no root type", err.Error())
+	}
+	assertNothingWritten(t, dir, w)
+}
+
 // TestSingleObjectEncodingAcceptsARecordRoot is the guard on the two tests
 // above: a check that refused every schema would pass both.
 func TestSingleObjectEncodingAcceptsARecordRoot(t *testing.T) {
@@ -270,6 +291,6 @@ func assertNothingWritten(t *testing.T, dir string, w *plugin.OutputDir) {
 		t.Fatalf("failed to read the output directory: %v", err)
 	}
 	if len(entries) != 0 {
-		t.Errorf("output directory holds %d entrie(s) from an invocation the generator refused", len(entries))
+		t.Errorf("output directory holds %d entries from an invocation the generator refused", len(entries))
 	}
 }
