@@ -363,7 +363,7 @@ is making their input identical rather than shipping one of the outputs:
 
 | Section | Implemented by |
 | --- | --- |
-| _Document shape and stub_ | [#103](https://github.com/z5labs/avroc/issues/103) |
+| _Document shape_ | [#103](https://github.com/z5labs/avroc/issues/103) |
 | [protobuf is a schema language, not a service](#protobuf-is-a-schema-language-not-a-service) | [#111](https://github.com/z5labs/avroc/issues/111), [#113](https://github.com/z5labs/avroc/issues/113), [#124](https://github.com/z5labs/avroc/issues/124) |
 | [What a descriptor carries](#what-a-descriptor-carries) | [#108](https://github.com/z5labs/avroc/issues/108), [#110](https://github.com/z5labs/avroc/issues/110), [#111](https://github.com/z5labs/avroc/issues/111) |
 | [The version field](#the-version-field) | [#109](https://github.com/z5labs/avroc/issues/109) |
