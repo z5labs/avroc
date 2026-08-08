@@ -95,6 +95,38 @@ func TestDiagnosticHandler(t *testing.T) {
 			want: []string{"error: nope"},
 		},
 		{
+			// A message MUST NOT be empty, so a trailing newline is formatting
+			// rather than a second, blank diagnostic.
+			name: "a trailing newline does not become an empty note",
+			log:  func(l *slog.Logger) { l.Error("com.example.User: no\n") },
+			want: []string{"error: com.example.User: no"},
+		},
+		{
+			name: "a blank line inside a message is dropped",
+			log:  func(l *slog.Logger) { l.Error("first\n\nsecond") },
+			want: []string{
+				"error: first",
+				"note: second",
+			},
+		},
+		{
+			name: "a leading newline does not become an empty error",
+			log:  func(l *slog.Logger) { l.Error("\ncom.example.User: no") },
+			want: []string{"error: com.example.User: no"},
+		},
+		{
+			name: "an empty message with an attribute opens with the attribute",
+			log:  func(l *slog.Logger) { l.Error("", slog.String("generator", "avroc-gen-go")) },
+			want: []string{"error: generator=avroc-gen-go"},
+		},
+		{
+			// Nothing to say, so nothing written: a severity with an empty
+			// message is the one form of the line the contract does not allow.
+			name: "a record with nothing in it writes nothing",
+			log:  func(l *slog.Logger) { l.Error("") },
+			want: nil,
+		},
+		{
 			name: "debug is below the default level",
 			log:  func(l *slog.Logger) { l.Debug("generated output") },
 			want: nil,

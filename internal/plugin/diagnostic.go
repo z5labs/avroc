@@ -104,17 +104,30 @@ func (h *DiagnosticHandler) Handle(_ context.Context, r slog.Record) error {
 	severity := severityFor(r.Level)
 
 	var out strings.Builder
-	for i, line := range strings.Split(msg.String(), "\n") {
-		// The first line carries the record's severity and the rest continue it.
-		// A record split this way is one diagnostic, which is why the notes are
-		// written in the same call as the line they belong to.
-		if i > 0 {
-			severity = SeverityNote
+	for _, line := range strings.Split(msg.String(), "\n") {
+		// A blank line is not a diagnostic: the contract requires a message, and
+		// "note: " with nothing after it is a line avroc surfaces verbatim
+		// because it cannot classify it. Dropping it loses nothing — a trailing
+		// newline on a message and a blank line inside one are both formatting.
+		if line == "" {
+			continue
 		}
+
 		out.WriteString(severity)
 		out.WriteString(": ")
 		out.WriteString(line)
 		out.WriteString("\n")
+		// The first line carries the record's severity and the rest continue it.
+		// A record split this way is one diagnostic, which is why the notes are
+		// written in the same call as the line they belong to.
+		severity = SeverityNote
+	}
+
+	// A record with nothing to say is not written at all rather than as a
+	// severity with an empty message, which is the one form of the line the
+	// contract does not allow.
+	if out.Len() == 0 {
+		return nil
 	}
 
 	h.mu.Lock()
@@ -193,5 +206,10 @@ func writeAttr(msg *strings.Builder, groups []string, a slog.Attr) {
 	}
 
 	a = qualify(groups, a)
-	fmt.Fprintf(msg, " %s=%s", a.Key, a.Value.String())
+	// The separator goes between, not before: a record with an empty message and
+	// one attribute would otherwise render as a message opening with a space.
+	if msg.Len() > 0 {
+		msg.WriteByte(' ')
+	}
+	fmt.Fprintf(msg, "%s=%s", a.Key, a.Value.String())
 }
