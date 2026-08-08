@@ -39,21 +39,23 @@ Out of scope, with reasons, in [Out of Scope](#out-of-scope).
 
 ### Governing sources
 
-- **OCI Image Format Specification** — normative for what an image *is*, and so
-  for what a guarantee about one can be made about at all. It fixes the terms
-  this document uses for layers, manifests, digests and platforms.
+- **OCI Image Specification v1.1.1**, *Image Format Specification* — normative
+  for what an image *is*, and so for what a guarantee about one can be made
+  about at all. It fixes the terms this document uses for layers, manifests,
+  digests and platforms.
   <https://github.com/opencontainers/image-spec/blob/main/spec.md>
-- **OCI Image Configuration** — normative for `Entrypoint`, `Cmd`, `User`, `Env`
-  and `WorkingDir`, which are precisely the fields a derived image inherits and
-  the ones this contract makes promises about. Every promise below is a promise
-  about a value in that structure or about a file in the filesystem it
-  describes.
+- **OCI Image Specification v1.1.1**, *Image Configuration* — normative for
+  `Entrypoint`, `Cmd`, `User`, `Env` and `WorkingDir`, which are precisely the
+  fields a derived image inherits and the ones this contract makes promises
+  about. Every promise below is a promise about a value in that structure or
+  about a file in the filesystem it describes.
   <https://github.com/opencontainers/image-spec/blob/main/config.md>
-- **Dockerfile reference** — the reference for the `FROM` and `COPY --from`
-  forms the [worked example](#worked-example-adding-a-generator) uses, and for
-  how a derived image's `USER` and `ENTRYPOINT` interact with the base image's.
-  It is cited as the builder syntax the examples are written in, not as a
-  standard this image claims conformance to.
+- **Dockerfile**, *Docker reference* — the reference for the `FROM` and
+  `COPY --from` forms the [worked
+  example](#worked-example-adding-a-generator) uses, and for how a derived
+  image's `USER` and `ENTRYPOINT` interact with the base image's. It is cited
+  as the builder syntax the examples are written in, not as a standard this
+  image claims conformance to.
   <https://docs.docker.com/reference/dockerfile/>
 - **[`plugin/SPEC.md`](../plugin/SPEC.md)** — normative for what belongs in the
   plugin directory. That an executable there is named `avroc-gen-<name>`, is
@@ -240,9 +242,17 @@ what a policy wants to see.
 The consequence is a rule and not a nuance, because it is the difference between
 a Dockerfile that builds and one that fails on its second line: **extension is
 `COPY`-only.** A stage built `FROM` the avroc image **MUST NOT** contain a `RUN`
-instruction — there is no shell for the shell form and no executable to name in
-the exec form — and **MUST** do everything it needs with `COPY`, `COPY --from`,
+instruction, and **MUST** do everything it needs with `COPY`, `COPY --from`,
 `ENV`, `CMD`, `LABEL` and the other instructions that only edit metadata.
+
+The shell form of `RUN` is the one that bites first: it is implemented as
+`/bin/sh -c`, and there is no `/bin/sh`. The exec form fails for a different
+reason — the image is not empty, so an exec-form `RUN` naming a generator on
+`PATH` would in fact execute, but every executable in the image is either a
+generator or the CLI, whose [path is not part of this
+contract](#the-clis-own-path-is-not-part-of-the-contract). There is no `cp`, no
+`chmod`, no `mkdir` and no package manager, so nothing a build step would
+plausibly want to `RUN` is there to be run.
 
 Everything that needs a shell belongs in an earlier stage, which is a full
 distribution image and can do as it likes. That is not a restriction on what a
