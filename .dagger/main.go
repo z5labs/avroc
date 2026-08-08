@@ -37,11 +37,11 @@
 // that as-is, and deciding how it should is a live design question that belongs
 // to the base-image story rather than being pre-decided here by an archetype.
 //
-// So this module takes the checks and the base-image work owns how images get
-// built — whether that means extending GoApp upstream in devex, building the
-// image in this module, or using a non-scratch base. Moving to GoApp is a change
-// to which factory New calls, plus dropping .git from the ignore list below; it
-// is not a change to what the pipeline is.
+// So this module takes the checks from the standard and builds the image itself,
+// in image.go, which records why that was chosen over extending GoApp upstream
+// or accepting a non-scratch base (#126). Moving the *checks* to GoApp remains a
+// change to which factory New calls, plus dropping .git from the ignore list
+// below; it is not a change to what the pipeline is.
 //
 // # Why the stage functions exist alongside it
 //
@@ -264,7 +264,9 @@ func (m *Avroc) Regeneration(
 }
 
 // regenerationPlatforms is every platform Regeneration covers, and it is
-// docs/container/SPEC.md's published set rather than a list invented here.
+// docs/container/SPEC.md's published set rather than a list invented here — it
+// is imagePlatforms, read from the one place that set is written down, so a
+// platform added to the image is checked for determinism in the same change.
 //
 // docs/plugin/SPEC.md's "Host platform" targets POSIX hosts and distinguishes
 // nothing between Linux, macOS and the other Unixes. Neither distribution path
@@ -281,7 +283,7 @@ func (m *Avroc) Regeneration(
 // per-generator determinism tests run natively on the host they are actually
 // on, which is the only way that host is ever covered at all.
 func regenerationPlatforms() []dagger.Platform {
-	return []dagger.Platform{"linux/amd64", "linux/arm64"}
+	return imagePlatforms()
 }
 
 // regenerationOn runs both generations for one platform and compares the trees.
@@ -370,7 +372,8 @@ func generateWorkedExample(
 
 // pluginDir is where the binaries go, and it is docs/container/SPEC.md's plugin
 // directory rather than an arbitrary one: avroc discovers generators on PATH, so
-// the run container's layout is the published image's layout.
+// the run container's layout is the published image's layout. image.go reads the
+// same constant, which is what makes that sentence true rather than aspirational.
 const pluginDir = "/usr/local/bin"
 
 // regenerationRun is one generation's arrangement of everything the output must
