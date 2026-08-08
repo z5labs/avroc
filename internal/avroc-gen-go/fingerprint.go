@@ -33,4 +33,3 @@ func generateFingerprintMethod(cb *codeBuilder, name string, fp [8]byte) {
 		fp[0], fp[1], fp[2], fp[3], fp[4], fp[5], fp[6], fp[7])
 	cb.writeln("}")
 }
-

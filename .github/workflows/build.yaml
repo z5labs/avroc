@@ -1,68 +1,83 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches:
-      - "main"
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/build.yaml'
-  pull_request:
-    branches:
-      - "main"
+      - main
   merge_group:
 
+# A pull request only needs an answer about its newest commit. Superseded runs
+# are cancelled so the queue reflects what is actually up for review. Pushes to
+# main keep their runs — main's history is the record.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The floor for every job. A job that needs more says so itself, so that reading
+# one job tells you what that job can reach.
+permissions:
+  contents: read
+
 jobs:
+  # The whole pipeline: fmt, vet, golangci-lint and `go test -race`, as the root
+  # Dagger module defines them and as `dagger call ci` runs them on a
+  # contributor's machine. It is one call and it stays one — a step here that
+  # reran any of those stages would be a second definition of the standard, and
+  # the two would drift. See CONTRIBUTING.md and .dagger/main.go.
+  #
+  # Repo-specific verification lands in this workflow the same way: as another
+  # function on the root module invoked by another `dagger call`, never as raw
+  # Go steps beside it. Two things this file used to do are therefore not here:
+  #
+  #   - the example round-trip (build the four binaries, `avroc generate` in
+  #     example/, `git diff --exit-code -- example`). It stays in the local
+  #     verify list; it comes back to CI as a function on the root module once
+  #     the plugin-contract stories settle how generators are invoked at all,
+  #     because writing it against today's gRPC socket model would be writing it
+  #     twice.
+  #   - the ubuntu/macos/windows matrix. Dagger runs Linux containers, so a
+  #     matrix over runners buys nothing once the pipeline is a container; the
+  #     Windows half of it is being dropped deliberately regardless.
   build:
     name: Build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    permissions:
+      # Reading the source is all the pipeline does. No `packages: write`,
+      # because nothing is pushed; no `id-token: write`, because nothing is
+      # attested — the module produces no artifact to sign. Both grants belong
+      # to the change that gives it one, next to the stage that needs them,
+      # rather than being held here in advance against a job that would not
+      # notice them missing.
+      contents: read
     steps:
-        - name: Checkout
-          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # A shallow checkout on purpose. The module excludes .git from the source
+      # directory it checks, because none of fmt, vet, lint or test reads git
+      # metadata, so there is nothing here for the extra history to feed. That
+      # changes with the archetype: a GoApp stamps binaries from the refs at
+      # HEAD and needs real metadata, so `fetch-depth: 0` comes back in the same
+      # change that drops .git from the module's ignore list.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-        - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-          with:
-            go-version-file: go.mod
+      # Pinned to the engineVersion the module itself declares, read out of
+      # dagger.json rather than repeated here. The CLI provisions an engine of
+      # its own version, so a number typed into this file could drift from the
+      # module's and leave CI running the pipeline on an engine the module has
+      # never been run against — which is the difference between this repository
+      # and every other one that the module exists to prevent. It is the same
+      # command CONTRIBUTING.md gives contributors, for the same reason.
+      - name: Install the Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
+              BIN_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-        - name: Lint Go Code
-          if: matrix.os == 'ubuntu-latest'
-          uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-          with:
-            version: latest
-            skip-cache: false
-
-        - name: Build
-          run: go build ./...
-
-        - name: Test
-          run: go test -race -cover ./...
-
-        - name: Build example binaries
-          shell: bash
-          run: |
-            ext=""
-            if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
-            go build -o "./bin/avroc${ext}" ./cmd/avroc
-            go build -o "./bin/avroc-gen-go${ext}" ./cmd/avroc-gen-go
-            go build -o "./bin/avroc-gen-json${ext}" ./cmd/avroc-gen-json
-            go build -o "./bin/avroc-gen-pcf${ext}" ./cmd/avroc-gen-pcf
-            ls -la ./bin
-
-        - name: Add bin to PATH
-          shell: bash
-          run: echo "${{ github.workspace }}/bin" >> "$GITHUB_PATH"
-
-        - name: Run example
-          shell: bash
-          working-directory: example
-          run: avroc generate
-
-        - name: Verify example output is up to date
-          shell: bash
-          run: git diff --exit-code -- example
+      # No arguments, because the module's source defaults to the repository
+      # root and its lint configuration defaults to the .golangci.yml committed
+      # beside it. This is character-for-character what a contributor runs
+      # before pushing, so there is no arrangement of local commands that passes
+      # while CI fails.
+      - name: Run the pipeline
+        run: dagger call ci
