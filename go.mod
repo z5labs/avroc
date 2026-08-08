@@ -3,7 +3,7 @@ module github.com/z5labs/avroc
 go 1.25.0
 
 require (
-	github.com/google/go-containerregistry v0.21.8
+	github.com/google/go-containerregistry v0.21.9
 	github.com/sourcegraph/conc v0.3.0
 	github.com/z5labs/avro-go v0.5.0
 	google.golang.org/grpc v1.83.0
