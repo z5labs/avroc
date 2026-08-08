@@ -236,6 +236,20 @@ func TestMain_Dispatch(t *testing.T) {
 			t.Errorf("exit code = %d, want 1", code)
 		}
 	})
+
+	t.Run("inspect renders the descriptor it is given", func(t *testing.T) {
+		path, _ := writeInspectFixture(t)
+
+		if code := Main(context.Background(), newContext("inspect", path)); code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
+		}
+	})
+
+	t.Run("inspect requires a descriptor", func(t *testing.T) {
+		if code := Main(context.Background(), newContext("inspect")); code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+	})
 }
 
 // TestHelperGenerator is a test function that doubles as a real generator subprocess.

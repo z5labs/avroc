@@ -28,8 +28,8 @@ import (
 //
 // The .binpb suffix is protobuf's own for the binary wire encoding, which is
 // what the file holds. The JSON rendering a person reads is a separate artifact
-// (#112), and a plugin is never handed one — a plugin that accepted both would
-// have to sniff which it had.
+// — avroc inspect produces it on demand — and a plugin is never handed one; a
+// plugin that accepted both would have to sniff which it had.
 const descriptorFilename = "descriptor.binpb"
 
 // descriptorFileMode is the mode avroc creates a descriptor with.
