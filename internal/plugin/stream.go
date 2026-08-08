@@ -14,15 +14,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-// fileStream turns the chunk stream some of the generators in this repository
-// still emit into the whole files a FileWriter takes.
+// fileStream turns a chunk stream into the whole files a FileWriter takes.
 //
 // It exists because avroc no longer consumes those chunks: they used to cross a
 // socket and be written by avroc, and under docs/plugin/SPEC.md the generator
-// writes its own files. avroc-gen-go no longer needs it — it writes through
-// FileWriter directly (#121) — and #122 and #123 do the same for the other two,
-// after which #124 deletes the service the type comes from and this file with
-// it.
+// writes its own files. Every generator in this repository now writes through
+// FileWriter directly — avroc-gen-go with #121, avroc-gen-json with #122 and
+// avroc-gen-pcf with #123 — so nothing outside this package's own tests reaches
+// it, and #124 deletes the service the type comes from and this file with it.
 //
 // Chunks are accumulated per path and handed over whole once the terminating
 // chunk arrives, rather than written through as they come. That gives back the

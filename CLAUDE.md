@@ -29,6 +29,7 @@ go test -v ./...
 - **`internal/avroc/`** — Core CLI logic. Discovers generator plugins on `PATH`, registers `-<name>_out` flags for each, parses Avro IDL files, and orchestrates code generation.
 - **`internal/avroc-gen-go/`** — Go generator plugin. Reads the descriptor it is handed and writes Go source beneath `--out`.
 - **`internal/avroc-gen-json/`** — Avro JSON schema generator plugin. Reads the descriptor it is handed and writes one `.avsc` per schema beneath `--out`.
+- **`internal/avroc-gen-pcf/`** — Parsing Canonical Form generator plugin. Reads the descriptor it is handed and writes one canonical `.avsc` per schema beneath `--out`. Its files are `ir.CanonicalJSON`'s bytes verbatim — no trailing newline, no re-indentation — because they are fingerprint input rather than a rendering for a person.
 - **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it and produces its output through `plugin.FileWriter` — one call per file, path and whole content — with `plugin.OutputDir` the implementation that owns the path check, the directory creation and the record of what was written. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
@@ -51,7 +52,7 @@ A failed invocation is reported as one of three things, because they need differ
 
 Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
 
-What is not yet there, so that it is not mistaken for a gap: `avroc-gen-pcf` still emits chunks internally through the `Generator` service's stream type, reassembled by `plugin.MainStream`; #123 moves it onto `plugin.FileWriter` as #121 did for `avroc-gen-go` and #122 for `avroc-gen-json`, and #124 deletes the service.
+What is not yet there, so that it is not mistaken for a gap: every generator here now writes through `plugin.FileWriter` (#121, #122, #123), so nothing emits chunks and nothing calls `plugin.MainStream` any more — it and `internal/plugin/stream.go` survive only until #124 deletes the `Generator` service the stream type comes from. Nothing new is written against them.
 
 ### The output directory and the merge
 

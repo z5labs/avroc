@@ -44,8 +44,7 @@ func TestGenerate_Record(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err != nil {
@@ -88,8 +87,7 @@ func TestGenerate_Record(t *testing.T) {
 func TestGenerate_RecordWithNamedTypes(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{resolvedTestRecord()},
 	})
 	if err != nil {
@@ -199,8 +197,7 @@ func TestGenerate_UnresolvedReference(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	_, err := generateToDir(t, svc, t.TempDir(), &avrocpb.GenerateRequest{
+	_, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Schemas: []*avrocpb.Schema{schema},
 	})
 	if err == nil {

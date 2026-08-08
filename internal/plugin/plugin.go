@@ -236,10 +236,11 @@ type GenerateFunc func(*avrocpb.GenerateRequest, FileWriter) error
 // in, files out as chunks through the Generator service's stream type.
 //
 // Nothing in the contract this package implements requires it — avroc no longer
-// speaks to a generator over a socket, and the chunks never leave the process —
-// and it survives only because two generators here have not been ported yet.
-// #122 and #123 move them to GenerateFunc, after which #124 removes the service
-// the type comes from and this one with it.
+// speaks to a generator over a socket, and the chunks never leave the process.
+// No generator here emits chunks any more (#121, #122, #123), so it survives
+// only until #124 removes the service the type comes from, and this one with
+// it. Its own tests are what keep it honest in the meantime; nothing new should
+// be written against it.
 type StreamGenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error
 
 // Main runs one invocation from an argument vector and returns the process exit
