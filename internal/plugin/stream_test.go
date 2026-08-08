@@ -8,6 +8,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -26,7 +27,7 @@ func chunk(path, content string, last bool) *avrocpb.GenerateResponse {
 func TestFileStream(t *testing.T) {
 	t.Run("reassembles a file from its chunks", func(t *testing.T) {
 		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(out)}
 
 		for _, msg := range []*avrocpb.GenerateResponse{
 			chunk("pkg/user.go", "package pkg\n", false),
@@ -51,7 +52,7 @@ func TestFileStream(t *testing.T) {
 
 	t.Run("interleaves two files", func(t *testing.T) {
 		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(out)}
 
 		for _, msg := range []*avrocpb.GenerateResponse{
 			chunk("a.go", "a1", false),
@@ -80,7 +81,7 @@ func TestFileStream(t *testing.T) {
 
 	t.Run("an empty file is one terminating chunk", func(t *testing.T) {
 		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(out)}
 
 		if err := s.Send(chunk("empty.go", "", true)); err != nil {
 			t.Fatal(err)
@@ -99,14 +100,14 @@ func TestFileStream(t *testing.T) {
 	})
 
 	t.Run("rejects a chunk with no path", func(t *testing.T) {
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: t.TempDir()}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(t.TempDir())}
 		if err := s.Send(chunk("", "package pkg\n", true)); err == nil {
 			t.Error("Send accepted a chunk with no path")
 		}
 	})
 
 	t.Run("rejects a chunk after a file was terminated", func(t *testing.T) {
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: t.TempDir()}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(t.TempDir())}
 		if err := s.Send(chunk("user.go", "package pkg\n", true)); err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +118,7 @@ func TestFileStream(t *testing.T) {
 
 	t.Run("rejects a path outside the output directory", func(t *testing.T) {
 		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(out)}
 
 		if err := s.Send(chunk("../escape.go", "package pkg\n", true)); err == nil {
 			t.Error("Send accepted a path outside the output directory")
@@ -127,49 +128,68 @@ func TestFileStream(t *testing.T) {
 		}
 	})
 
-	t.Run("reports and discards a file left unterminated", func(t *testing.T) {
+	t.Run("reports a file left unterminated, and never writes it", func(t *testing.T) {
 		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(out)}
 
 		if err := s.Send(chunk("user.go", "package pkg\n", false)); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Send(chunk("done.go", "package pkg\n", true)); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.finish(); err == nil {
 			t.Error("finish accepted a stream that left a file unterminated")
 		}
 
-		// The partial must not survive: a half-written source file in the
-		// output tree is a compile error a user would have to trace back here.
+		// Chunks are held until the terminating one arrives, so a half-emitted
+		// file never reaches the filesystem: there is no partial source file for
+		// a compiler to find and no cleanup to get right.
 		if _, err := os.Stat(filepath.Join(out, "user.go")); !os.IsNotExist(err) {
-			t.Errorf("the partial file was not discarded: %v", err)
+			t.Errorf("an unterminated file reached the output directory: %v", err)
+		}
+		// A file that was terminated is output, and an unterminated one
+		// elsewhere in the stream does not take it back.
+		if _, err := os.Stat(filepath.Join(out, "done.go")); err != nil {
+			t.Errorf("a completed file was not written: %v", err)
 		}
 	})
 
-	t.Run("discard removes a partial file and is idempotent", func(t *testing.T) {
-		out := t.TempDir()
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: out}}
+	t.Run("names the first unterminated file", func(t *testing.T) {
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(t.TempDir())}
 
-		if err := s.Send(chunk("a.go", "package pkg\n", false)); err != nil {
-			t.Fatal(err)
-		}
-		if err := s.Send(chunk("b.go", "package pkg\n", true)); err != nil {
-			t.Fatal(err)
+		for _, msg := range []*avrocpb.GenerateResponse{
+			chunk("first.go", "a", false),
+			chunk("second.go", "b", false),
+		} {
+			if err := s.Send(msg); err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		s.discard()
-		s.discard()
-
-		if _, err := os.Stat(filepath.Join(out, "a.go")); !os.IsNotExist(err) {
-			t.Errorf("the partial file was not discarded: %v", err)
+		err := s.finish()
+		if err == nil {
+			t.Fatal("finish accepted a stream that left two files unterminated")
 		}
-		// A file that was terminated is output, and discard must not touch it.
-		if _, err := os.Stat(filepath.Join(out, "b.go")); err != nil {
-			t.Errorf("discard removed a completed file: %v", err)
+		// Emission order, not map order: the report has to be the same on every
+		// run or it is not a report a person can act on.
+		if want := `"first.go"`; !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %s", err.Error(), want)
+		}
+	})
+
+	t.Run("hands the generator the invocation's context", func(t *testing.T) {
+		// The only reason grpc.ServerStream's embedded nil does not panic on the
+		// one method a generator might plausibly call.
+		ctx := t.Context()
+		s := &fileStream{ctx: ctx, w: NewOutputDir(t.TempDir())}
+		if s.Context() != ctx {
+			t.Error("Context() did not return the invocation's context")
 		}
 	})
 
 	t.Run("nothing sent is not a failure", func(t *testing.T) {
-		s := &fileStream{ctx: t.Context(), inv: &Invocation{Out: t.TempDir()}}
+		s := &fileStream{ctx: t.Context(), w: NewOutputDir(t.TempDir())}
 		if err := s.finish(); err != nil {
 			t.Errorf("finish reported a failure for a generator that emitted nothing: %v", err)
 		}

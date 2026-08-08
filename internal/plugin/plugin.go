@@ -223,15 +223,24 @@ func OutputPath(out, p string) (string, error) {
 	return dst, nil
 }
 
-// GenerateFunc is the generation entry point every generator in this
-// repository exposes: a descriptor in, files out through the stream.
+// GenerateFunc is the generation entry point a generator in this repository
+// exposes: a descriptor in, files out through the writer.
 //
-// The streaming shape is the one the generators here still implement, and it is
-// transitional — #121, #122 and #123 replace it with a plain write into --out,
-// and #124 removes the service the type comes from. Nothing in the contract
-// this package implements requires it: avroc no longer speaks to a generator
-// over a socket, and the chunks never leave the process.
-type GenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error
+// It is the shape docs/plugin/SPEC.md describes — a generator writes whole
+// files beneath --out and exits — with the directory behind an interface so
+// that Main owns the path checking and the bookkeeping and a generator owns
+// only its bytes.
+type GenerateFunc func(*avrocpb.GenerateRequest, FileWriter) error
+
+// StreamGenerateFunc is the transitional generation entry point: a descriptor
+// in, files out as chunks through the Generator service's stream type.
+//
+// Nothing in the contract this package implements requires it — avroc no longer
+// speaks to a generator over a socket, and the chunks never leave the process —
+// and it survives only because two generators here have not been ported yet.
+// #122 and #123 move them to GenerateFunc, after which #124 removes the service
+// the type comes from and this one with it.
+type StreamGenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error
 
 // Main runs one invocation from an argument vector and returns the process exit
 // status.
@@ -239,7 +248,7 @@ type GenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServe
 // There are two vectors the contract defines. --plugin-info writes info to
 // standard output and exits zero, having read no descriptor and written no
 // file. Anything else is a generation: parse the vector, read the descriptor,
-// run generate, and write what it produced beneath --out.
+// and run generate against a writer rooted at --out.
 //
 // Diagnostics go to the logger, which every generator's main wires to standard
 // error. Standard output carries nothing during a generation invocation, which
@@ -247,6 +256,20 @@ type GenerateFunc func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServe
 // in a pipeline.
 func Main(ctx context.Context, c cli.Context, info Info, generate GenerateFunc) int {
 	return run(ctx, c, info, generate, os.Stdout)
+}
+
+// MainStream is Main for a generator that still emits chunks: the stream is
+// reassembled into whole files and written exactly as Main writes them.
+//
+// Transitional, with StreamGenerateFunc, and removed by #124.
+func MainStream(ctx context.Context, c cli.Context, info Info, generate StreamGenerateFunc) int {
+	return Main(ctx, c, info, func(req *avrocpb.GenerateRequest, w FileWriter) error {
+		s := &fileStream{ctx: ctx, w: w}
+		if err := generate(req, s); err != nil {
+			return err
+		}
+		return s.finish()
+	})
 }
 
 // run is Main with the declaration's destination passed in, so that a test can
@@ -291,20 +314,20 @@ func run(ctx context.Context, c cli.Context, info Info, generate GenerateFunc, s
 		return 1
 	}
 
-	sink := &fileStream{ctx: ctx, inv: inv}
-	// A file whose terminating chunk never arrived is discarded however this
-	// returns, so a failed generation leaves no half-written source behind.
-	defer sink.discard()
-
-	if err := generate(req, sink); err != nil {
+	out := NewOutputDir(inv.Out)
+	if err := generate(req, out); err != nil {
 		c.Log.ErrorContext(ctx, "failed to generate", slog.String("generator", name), slog.Any("error", err))
 		return 1
 	}
-	if err := sink.finish(); err != nil {
+	// Checked even though generate returned nothing: a generator that ignored
+	// a failed write would otherwise exit zero, and a zero exit is the whole of
+	// the success signal — avroc would adopt the directory as this run's output
+	// with the file missing from it.
+	if err := out.Err(); err != nil {
 		c.Log.ErrorContext(ctx, "failed to write generated output", slog.String("generator", name), slog.Any("error", err))
 		return 1
 	}
 
-	c.Log.DebugContext(ctx, "generated output", slog.String("generator", name), slog.Any("output_files", sink.written))
+	c.Log.DebugContext(ctx, "generated output", slog.String("generator", name), slog.Any("output_files", out.Written()))
 	return 0
 }

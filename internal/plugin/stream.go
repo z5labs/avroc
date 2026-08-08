@@ -8,28 +8,30 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/z5labs/avroc/avrocpb"
 
 	"google.golang.org/grpc"
 )
 
-// fileStream turns the chunk stream the generators in this repository still
-// emit into files beneath --out.
+// fileStream turns the chunk stream some of the generators in this repository
+// still emit into the whole files a FileWriter takes.
 //
 // It exists because avroc no longer consumes those chunks: they used to cross a
 // socket and be written by avroc, and under docs/plugin/SPEC.md the generator
-// writes its own files. Rather than rewrite three generators' emission paths in
-// the same change that moves the invocation — that is #121, #122 and #123, each
-// of which has more to do than this — the chunks are reassembled by the one
-// adapter here.
+// writes its own files. avroc-gen-go no longer needs it — it writes through
+// FileWriter directly (#121) — and #122 and #123 do the same for the other two,
+// after which #124 deletes the service the type comes from and this file with
+// it.
 //
-// Each chunk is written straight through to an open file rather than
-// accumulated in memory, so peak memory does not scale with the size of a
-// generated file. Chunking exists precisely to keep it bounded, and buffering
-// would give that back while keeping the cost.
+// Chunks are accumulated per path and handed over whole once the terminating
+// chunk arrives, rather than written through as they come. That gives back the
+// bounded peak memory chunking exists for, and it is the right trade here for
+// two reasons: every generator in this repository builds a whole file in memory
+// and then slices it into chunks, so the bound was never real, and buffering is
+// what lets a file be written once and completely, which is the property
+// FileWriter is built on. A half-emitted file now reaches the filesystem not at
+// all, rather than reaching it and being removed again.
 //
 // grpc.ServerStream is embedded to satisfy avrocpb.Generator_GenerateServer and
 // is deliberately nil: no gRPC call is in flight, nothing here reads it, and a
@@ -40,23 +42,24 @@ type fileStream struct {
 	grpc.ServerStream
 
 	ctx context.Context
-	inv *Invocation
+	w   FileWriter
 
-	// open holds the files whose terminating chunk has not arrived.
-	open map[string]*os.File
-	// finalized names the files already closed, so a chunk arriving after a
+	// open holds the accumulated content of every file whose terminating chunk
+	// has not arrived.
+	open map[string][]byte
+	// finalized names the files already written, so a chunk arriving after a
 	// file's terminating one is an error rather than a silent append.
 	finalized map[string]struct{}
 	// order preserves emission order, so a report about an unterminated file
 	// names the first one the generator started rather than whichever the map
 	// happens to yield.
-	order   []string
-	written []string
+	order []string
 }
 
 func (s *fileStream) Context() context.Context { return s.ctx }
 
-// Send writes one chunk, closing the file once its terminating chunk arrives.
+// Send takes one chunk, writing the file out once its terminating chunk
+// arrives.
 func (s *fileStream) Send(msg *avrocpb.GenerateResponse) error {
 	path := msg.GetPath()
 	if path == "" {
@@ -67,68 +70,34 @@ func (s *fileStream) Send(msg *avrocpb.GenerateResponse) error {
 	}
 
 	if s.open == nil {
-		s.open = make(map[string]*os.File)
+		s.open = make(map[string][]byte)
 		s.finalized = make(map[string]struct{})
 	}
 
-	f, ok := s.open[path]
-	if !ok {
-		dst, err := OutputPath(s.inv.Out, path)
-		if err != nil {
-			return fmt.Errorf("refusing to write %q: %w", path, err)
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return fmt.Errorf("failed to create output directory for %q: %w", dst, err)
-		}
-		f, err = os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("failed to create %q: %w", dst, err)
-		}
-		s.open[path] = f
+	if _, started := s.open[path]; !started {
 		s.order = append(s.order, path)
 	}
-
-	if _, err := f.Write(msg.GetContent()); err != nil {
-		return fmt.Errorf("failed to write %q: %w", f.Name(), err)
-	}
+	s.open[path] = append(s.open[path], msg.GetContent()...)
 
 	if !msg.GetLast() {
 		return nil
 	}
 
-	name := f.Name()
+	content := s.open[path]
 	delete(s.open, path)
 	s.finalized[path] = struct{}{}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close %q: %w", name, err)
-	}
-	s.written = append(s.written, path)
-	return nil
+	return s.w.WriteFile(path, content)
 }
 
-// discard closes and removes every file whose terminating chunk never arrived,
-// so a half-written file is not left behind for a compiler to find later. It is
-// idempotent, and is deferred by Main so that it also covers a generator that
-// returned an error partway through.
-func (s *fileStream) discard() {
-	for path, f := range s.open {
-		name := f.Name()
-		_ = f.Close()
-		_ = os.Remove(name)
-		delete(s.open, path)
-	}
-}
-
-// finish reports a generator that stopped with a file still unterminated, and
-// discards it. A half-emitted file is a bug in the generator, and reporting it
-// is what stops the missing bytes turning up later as a compile error in the
-// user's tree.
+// finish reports a generator that stopped with a file still unterminated. A
+// half-emitted file is a bug in the generator, and reporting it is what stops
+// the missing bytes turning up later as a compile error in the user's tree;
+// nothing was written for it, so there is nothing to clean up.
 func (s *fileStream) finish() error {
 	if len(s.open) == 0 {
 		return nil
 	}
 
-	n := len(s.open)
 	var first string
 	for _, path := range s.order {
 		if _, open := s.open[path]; open {
@@ -136,7 +105,6 @@ func (s *fileStream) finish() error {
 			break
 		}
 	}
-	s.discard()
 
-	return fmt.Errorf("generator finished with %d unterminated file(s), the first being %q", n, first)
+	return fmt.Errorf("generator finished with %d unterminated file(s), the first being %q", len(s.open), first)
 }

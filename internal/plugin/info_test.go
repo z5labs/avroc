@@ -147,7 +147,7 @@ func TestMain_PluginInfo(t *testing.T) {
 
 		var stdout bytes.Buffer
 		generated := false
-		record := func(*avrocpb.GenerateRequest, avrocpb.Generator_GenerateServer) error {
+		record := func(*avrocpb.GenerateRequest, FileWriter) error {
 			generated = true
 			return nil
 		}

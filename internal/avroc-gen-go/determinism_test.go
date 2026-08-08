@@ -7,7 +7,6 @@ package avrocgengo
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -16,16 +15,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// generatedFile is one reassembled file from a generation, in the order the
-// generator emitted it.
+// generatedFile is one file from a generation, in the order the generator wrote
+// it.
 type generatedFile struct {
 	path    string
 	content []byte
 }
 
-// generateFiles runs one generation and reassembles the chunk stream into whole
-// files, so that a difference in chunk boundaries — which is not a difference in
-// output — cannot be mistaken for one.
+// recordingWriter keeps what a generation wrote without touching the
+// filesystem. Determinism is a property of the bytes and their order, and
+// comparing sixteen runs in memory says nothing less about it than sixteen
+// directories would.
+type recordingWriter struct {
+	files []generatedFile
+}
+
+func (w *recordingWriter) WriteFile(path string, content []byte) error {
+	w.files = append(w.files, generatedFile{path: path, content: content})
+	return nil
+}
+
+// generateFiles runs one generation and returns the files it produced.
 func generateFiles(t *testing.T, req *avrocpb.GenerateRequest) []generatedFile {
 	t.Helper()
 
@@ -34,24 +44,11 @@ func generateFiles(t *testing.T, req *avrocpb.GenerateRequest) []generatedFile {
 		req.Version = proto.Int32(ir.Version)
 	}
 
-	cs := &captureStream{ctx: context.Background()}
-	if err := (&generatorService{}).Generate(req, cs); err != nil {
+	var w recordingWriter
+	if err := Generate(req, &w); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
-
-	var files []generatedFile
-	index := make(map[string]int)
-	for _, msg := range cs.msgs {
-		path := msg.GetPath()
-		i, ok := index[path]
-		if !ok {
-			i = len(files)
-			index[path] = i
-			files = append(files, generatedFile{path: path})
-		}
-		files[i].content = append(files[i].content, msg.GetContent()...)
-	}
-	return files
+	return w.files
 }
 
 // assertRepeatedGenerationsAreIdentical runs the same generation repeatedly and

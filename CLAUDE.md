@@ -28,7 +28,7 @@ go test -v ./...
 - **`cmd/avroc-gen-go/`** — Entry point for the Go code generator plugin.
 - **`internal/avroc/`** — Core CLI logic. Discovers generator plugins on `PATH`, registers `-<name>_out` flags for each, parses Avro IDL files, and orchestrates code generation.
 - **`internal/avroc-gen-go/`** — Go generator plugin. Reads the descriptor it is handed and writes Go source beneath `--out`.
-- **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
+- **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it and produces its output through `plugin.FileWriter` — one call per file, path and whole content — with `plugin.OutputDir` the implementation that owns the path check, the directory creation and the record of what was written. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
@@ -50,7 +50,7 @@ A failed invocation is reported as one of three things, because they need differ
 
 Discovery is a `PATH` search in order, and **the earliest match wins**, exactly as it does for a shell: prepending a directory is how an author shadows an installed generator with one under development. An empty `PATH` element is not the working directory.
 
-What is not yet there, so that it is not mistaken for a gap: the generators here still emit chunks internally through the `Generator` service's stream type, reassembled in `internal/plugin`; #121–#123 replace that with a plain write and #124 deletes the service.
+What is not yet there, so that it is not mistaken for a gap: `avroc-gen-json` and `avroc-gen-pcf` still emit chunks internally through the `Generator` service's stream type, reassembled by `plugin.MainStream`; #122 and #123 move them onto `plugin.FileWriter` as #121 did for `avroc-gen-go`, and #124 deletes the service.
 
 ### The output directory and the merge
 

@@ -44,8 +44,7 @@ func TestMarshal_Record(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -96,8 +95,7 @@ func TestMarshal_Fixed(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -147,8 +145,7 @@ func TestMarshal_Enum(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -210,8 +207,7 @@ func TestMarshal_Union(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -282,8 +278,7 @@ func TestMarshal_ArrayField(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -346,8 +341,7 @@ func TestMarshal_MapField(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -433,8 +427,7 @@ func TestMarshal_NestedRecord(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -526,8 +519,7 @@ func TestMarshal_AllPrimitiveTypes(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})
@@ -579,8 +571,7 @@ func TestMarshal_EmptyRecord(t *testing.T) {
 		},
 	}
 
-	svc := &generatorService{}
-	resp, err := generateToDir(t, svc, tmpDir, &avrocpb.GenerateRequest{
+	resp, err := generateToDir(t, tmpDir, &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
 		Schemas: []*avrocpb.Schema{schema},
 	})

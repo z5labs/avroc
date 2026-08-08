@@ -65,7 +65,7 @@ func options(pairs ...string) []*avrocpb.Option {
 func generateWith(t *testing.T, opts []*avrocpb.Option) []byte {
 	t.Helper()
 
-	res, err := generateToDir(t, &generatorService{}, t.TempDir(), &avrocpb.GenerateRequest{
+	res, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Options: opts,
 		Schemas: []*avrocpb.Schema{versionTestSchema()},
 	})
