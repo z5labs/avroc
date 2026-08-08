@@ -62,11 +62,15 @@ type mergedFile struct {
 // The merge is in two phases, and the split is the point of it. The first
 // resolves every file and creates every directory the second will need, so that
 // a path the generator should not have produced, or a directory that cannot be
-// created, fails the run with the project tree untouched. The second does
-// nothing but rename, which is atomic per file — so a run interrupted mid-merge
-// leaves whole files where it got to and never a half-written one, and the
-// window in which it can be interrupted at all is a sequence of metadata
-// operations rather than a copy of every byte the generator produced.
+// created, fails the run before a single file has been moved — nothing is
+// adopted as output, and no existing file in the tree is replaced. The directory
+// creation is part of that phase and is the one thing it does write, so a
+// refused merge can leave an empty directory behind; what it cannot leave is a
+// file. The second phase then does nothing but rename, which is atomic per file
+// — so a run interrupted mid-merge leaves whole files where it got to and never
+// a half-written one, and the window in which it can be interrupted at all is a
+// sequence of metadata operations rather than a copy of every byte the generator
+// produced.
 //
 // Detecting two generators that produced the same path is #118's and is not
 // done here; nor is removing a file an earlier run produced and this one did
@@ -185,7 +189,9 @@ func moveIntoPlace(src, dst string) error {
 }
 
 // copyIntoPlace is moveIntoPlace's cross-filesystem case: copy src into a
-// temporary file beside dst, then rename that into place.
+// temporary file beside dst, rename that into place, and remove src — so that a
+// merge is a move on both sides of a mount point and mergeOutput's scratch
+// directory is empty afterwards either way.
 func copyIntoPlace(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -215,6 +221,14 @@ func copyIntoPlace(src, dst string) error {
 		_ = os.Remove(staged)
 		return err
 	}
+
+	// Best effort, and deliberately not an error: dst is already the file the
+	// generator produced, so the merge of it has succeeded, and failing the run
+	// now over a leftover in a directory the caller removes wholesale would
+	// report a problem the user cannot act on. Closed first, because a source
+	// still open is a source some filesystems will not unlink.
+	_ = in.Close()
+	_ = os.Remove(src)
 	return nil
 }
 

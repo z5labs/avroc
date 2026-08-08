@@ -6,6 +6,8 @@
 package avroc
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -317,14 +319,21 @@ func TestCopyIntoPlace(t *testing.T) {
 		t.Errorf("dst mode = %v, want %v", got, os.FileMode(0o755))
 	}
 
-	// Nothing staged is left beside it, so a merge does not litter the project
-	// tree with temporary files.
+	// A move on both sides of a mount point: the source is gone, so the
+	// "everything moved out of the scratch directory" invariant does not depend
+	// on which branch moveIntoPlace took.
+	if _, err := os.Stat(src); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the copy left its source behind: %v", err)
+	}
+
+	// And nothing staged is left beside the destination, so a merge does not
+	// litter the project tree with temporary files.
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Errorf("directory holds %d entries, want just src and dst: %v", len(entries), entries)
+	if len(entries) != 1 || entries[0].Name() != "dst" {
+		t.Errorf("directory holds %v, want just dst", entries)
 	}
 }
 
