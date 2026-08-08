@@ -8,16 +8,37 @@ edition = "2023";
 option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
 
 import "sort_order.proto";
+import "type_ref_kind.proto";
 
-// Ident represents an identifier in the Avro IDL, such as a schema name,
-// field name, enum value name, or primitive type reference.
+// Ident represents a bare identifier that is not a type reference: an enum
+// symbol, or an enum's default symbol. Type references are Reference.
 message Ident {
     string value = 1;
+}
+
+// Reference is a resolved reference to a type. Resolution is complete before a
+// descriptor is written: `kind` states whether the reference names an Avro
+// primitive or a named type, and `name` is either the primitive's name or the
+// named type's fully-qualified name. A consumer never qualifies a name against
+// an enclosing namespace and never matches one against Avro's primitive list.
+//
+// A reference to a named type appears only where that type has already been
+// defined earlier in the same descriptor: the producer decides where each named
+// type is written out in full and where it is merely referenced, so the
+// first-use ordering Avro's schema declaration implies is carried in the
+// descriptor rather than re-derived by every consumer.
+message Reference {
+    string name = 1;
+    TypeRefKind kind = 2;
 }
 
 // Type represents a type in the Avro IDL. In Go, this is an interface;
 // in protobuf, it is represented as a oneof over all concrete types.
 message Type {
+    // 7 held `Ident ident`, an unresolved bare identifier, before references
+    // were resolved by the producer.
+    reserved 7;
+
     oneof type {
         Record record = 1;
         Enum enum_type = 2;
@@ -25,7 +46,7 @@ message Type {
         Map map_type = 4;
         Union union = 5;
         Fixed fixed = 6;
-        Ident ident = 7;
+        Reference reference = 8;
     }
 }
 
@@ -40,18 +61,36 @@ message Field {
 // Record represents a record in the Avro IDL.
 message Record {
     string name = 1;
+
+    // The namespace the record resolved to. Always the effective namespace,
+    // never left empty for a consumer to inherit from an enclosing scope.
     string namespace = 2;
+
+    // Aliases, fully qualified the same way as full_name.
     repeated string aliases = 3;
+
     repeated Field fields = 4;
+
+    // The fully-qualified name: namespace and name joined per the Avro
+    // specification's rules for full names.
+    string full_name = 5;
 }
 
 // Enum represents an enum in the Avro IDL.
 message Enum {
     string name = 1;
+
+    // The namespace the enum resolved to. Always the effective namespace.
     string namespace = 2;
+
+    // Aliases, fully qualified the same way as full_name.
     repeated string aliases = 3;
+
     repeated Ident values = 4;
     Ident default = 5;
+
+    // The fully-qualified name.
+    string full_name = 6;
 }
 
 // Array represents an array type in the Avro IDL.
@@ -62,7 +101,12 @@ message Array {
 // Map represents a map type in the Avro IDL.
 // Map keys are always strings in Avro; values is the value type.
 message Map {
-    Ident values = 1;
+    // 1 held `Ident values`, an unresolved bare identifier that could not carry
+    // a named type's definition — so a map whose values were a named type used
+    // nowhere else referred to a name the descriptor never defined.
+    reserved 1;
+
+    Type values = 2;
 }
 
 // Union represents a union type in the Avro IDL.
@@ -73,7 +117,15 @@ message Union {
 // Fixed represents a fixed type in the Avro IDL.
 message Fixed {
     string name = 1;
+
+    // The namespace the fixed resolved to. Always the effective namespace.
     string namespace = 2;
+
+    // Aliases, fully qualified the same way as full_name.
     repeated string aliases = 3;
+
     int32 size = 4;
+
+    // The fully-qualified name.
+    string full_name = 5;
 }

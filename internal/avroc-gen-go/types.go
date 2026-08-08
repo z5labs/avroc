@@ -46,21 +46,26 @@ var primitiveReadMethod = map[string]string{
 	"string":  "ReadString",
 }
 
-// goTypeForIdent returns the Go type string for an Avro Ident.
-// For primitives, it returns the Go equivalent.
-// For named types, it returns the PascalCase Go identifier.
-func goTypeForIdent(ident *avrocpb.Ident) string {
-	if ident == nil {
+// goTypeForReference returns the Go type string for a resolved reference.
+// The IR states which of the two a reference is, so the classification is read
+// rather than recovered by matching the name against Avro's primitive list.
+func goTypeForReference(ref *avrocpb.Reference) string {
+	if ref == nil {
 		return ""
 	}
 
-	name := ident.GetValue()
-	if goType, ok := primitiveGoTypes[name]; ok {
-		return goType
+	if ref.GetKind() == avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE {
+		return primitiveGoTypes[ref.GetName()]
 	}
 
 	// Named type reference - convert to Go identifier
-	return toPascalCase(name)
+	return toPascalCase(ref.GetName())
+}
+
+// isPrimitiveRef reports whether a type is a reference to an Avro primitive.
+func isPrimitiveRef(t *avrocpb.Type) bool {
+	ref := t.GetReference()
+	return ref != nil && ref.GetKind() == avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE
 }
 
 // goTypeForType returns the Go type string for an Avro Type.
@@ -70,8 +75,8 @@ func goTypeForType(t *avrocpb.Type, unionName string) string {
 	}
 
 	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		return goTypeForIdent(v.Ident)
+	case *avrocpb.Type_Reference:
+		return goTypeForReference(v.Reference)
 	case *avrocpb.Type_Record:
 		return toPascalCase(v.Record.GetName())
 	case *avrocpb.Type_EnumType:
@@ -82,7 +87,7 @@ func goTypeForType(t *avrocpb.Type, unionName string) string {
 		itemType := goTypeForType(v.Array.GetItems(), "")
 		return "[]" + itemType
 	case *avrocpb.Type_MapType:
-		valueType := goTypeForIdent(v.MapType.GetValues())
+		valueType := goTypeForType(v.MapType.GetValues(), "")
 		return "map[string]" + valueType
 	case *avrocpb.Type_Union:
 		// Union types are represented as interfaces. If no union name is
@@ -148,10 +153,7 @@ func isNullType(t *avrocpb.Type) bool {
 	if t == nil {
 		return false
 	}
-	if ident, ok := t.Type.(*avrocpb.Type_Ident); ok {
-		return ident.Ident.GetValue() == "null"
-	}
-	return false
+	return isPrimitiveRef(t) && t.GetReference().GetName() == "null"
 }
 
 // unionMemberName returns the Go type name for a union member wrapper.
@@ -161,8 +163,8 @@ func unionMemberName(unionName string, t *avrocpb.Type) string {
 	}
 
 	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		return unionName + toPascalCase(v.Ident.GetValue())
+	case *avrocpb.Type_Reference:
+		return unionName + toPascalCase(v.Reference.GetName())
 	case *avrocpb.Type_Record:
 		return unionName + toPascalCase(v.Record.GetName())
 	case *avrocpb.Type_EnumType:

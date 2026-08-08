@@ -100,39 +100,15 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject b
 	return cb.String()
 }
 
-// schemaRecordName returns the name of the schema's primary record type, or empty string.
+// schemaRecordName returns the name of the schema's primary record type, or the
+// empty string when it has none.
+//
+// The primary type is the definition itself: avroc writes a named type out in
+// full at its first use, and the schema's own type is the first use of whatever
+// it names. There is no reference here to chase back to a declaration.
 func schemaRecordName(schema *avrocpb.Schema) string {
-	if schema.Type == nil {
-		return ""
-	}
-	// Direct record type
-	if rec, ok := schema.Type.Type.(*avrocpb.Type_Record); ok {
+	if rec, ok := schema.GetType().GetType().(*avrocpb.Type_Record); ok {
 		return rec.Record.GetName()
-	}
-	// Ident reference to a record in schema.Types (e.g., "schema TestRecord;")
-	if ident, ok := schema.Type.Type.(*avrocpb.Type_Ident); ok {
-		refName := ident.Ident.GetValue()
-		for _, t := range schema.Types {
-			if rec, ok := t.Type.(*avrocpb.Type_Record); ok {
-				recName := rec.Record.GetName()
-				recNs := rec.Record.GetNamespace()
-				if recNs == "" {
-					recNs = schema.GetNamespace()
-				}
-				// Match bare name
-				if recName == refName {
-					return refName
-				}
-				// Match fully-qualified name (e.g., "com.example.Item")
-				fqName := recName
-				if recNs != "" {
-					fqName = recNs + "." + recName
-				}
-				if fqName == refName {
-					return recName
-				}
-			}
-		}
 	}
 	return ""
 }

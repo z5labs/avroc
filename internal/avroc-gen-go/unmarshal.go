@@ -9,6 +9,17 @@ import (
 	"github.com/z5labs/avroc/internal/avrocpb"
 )
 
+// readMethodFor returns the BinaryReader method for a reference to an Avro
+// primitive. A reference to a named type has none: it delegates to the named
+// type's own UnmarshalAvroBinary.
+func readMethodFor(ref *avrocpb.Reference) (string, bool) {
+	if ref == nil || ref.GetKind() != avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE {
+		return "", false
+	}
+	method, ok := primitiveReadMethod[ref.GetName()]
+	return method, ok
+}
+
 // generateUnmarshalMethod generates the UnmarshalAvroBinary method for a type.
 func generateUnmarshalMethod(cb *codeBuilder, ttg typeToGenerate) {
 	t := ttg.typ
@@ -60,8 +71,8 @@ func generateFieldRead(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 	}
 
 	switch v := fieldType.Type.(type) {
-	case *avrocpb.Type_Ident:
-		generateIdentRead(cb, v.Ident, fieldName)
+	case *avrocpb.Type_Reference:
+		generateReferenceRead(cb, v.Reference, fieldName)
 	case *avrocpb.Type_Array:
 		generateArrayFieldRead(cb, v.Array, fieldName)
 	case *avrocpb.Type_MapType:
@@ -80,11 +91,9 @@ func generateFieldRead(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 	}
 }
 
-// generateIdentRead generates read code for an identifier type.
-func generateIdentRead(cb *codeBuilder, ident *avrocpb.Ident, fieldName string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveReadMethod[typeName]; ok {
+// generateReferenceRead generates read code for a resolved reference.
+func generateReferenceRead(cb *codeBuilder, ref *avrocpb.Reference, fieldName string) {
+	if method, ok := readMethodFor(ref); ok {
 		cb.writef("\tx.%s, err = r.%s()\n", fieldName, method)
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
@@ -135,8 +144,8 @@ func generateArrayItemRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, i
 	}
 
 	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		generateArrayItemIdentRead(cb, v.Ident, fieldName, indent)
+	case *avrocpb.Type_Reference:
+		generateArrayItemReferenceRead(cb, v.Reference, fieldName, indent)
 	case *avrocpb.Type_Record:
 		goType := toPascalCase(v.Record.GetName())
 		cb.writef("%svar v %s\n", indent, goType)
@@ -164,19 +173,18 @@ func generateArrayItemRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, i
 	}
 }
 
-// generateArrayItemIdentRead generates read code for an array item with an ident type.
-func generateArrayItemIdentRead(cb *codeBuilder, ident *avrocpb.Ident, fieldName string, indent string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveReadMethod[typeName]; ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[typeName])
+// generateArrayItemReferenceRead generates read code for an array item that is
+// a resolved reference.
+func generateArrayItemReferenceRead(cb *codeBuilder, ref *avrocpb.Reference, fieldName string, indent string) {
+	if method, ok := readMethodFor(ref); ok {
+		cb.writef("%svar v %s\n", indent, primitiveGoTypes[ref.GetName()])
 		cb.writef("%sv, err = r.%s()\n", indent, method)
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
 		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
 	} else {
-		goType := toPascalCase(typeName)
+		goType := toPascalCase(ref.GetName())
 		cb.writef("%svar v %s\n", indent, goType)
 		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
 		cb.writef("%sif err != nil {\n", indent)
@@ -188,8 +196,8 @@ func generateArrayItemIdentRead(cb *codeBuilder, ident *avrocpb.Ident, fieldName
 
 // generateMapFieldRead generates read code for a map field.
 func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
-	valueIdent := m.GetValues()
-	valueGoType := goTypeForIdent(valueIdent)
+	valueType := m.GetValues()
+	valueGoType := goTypeForType(valueType, "")
 
 	cb.writef("\tx.%s = make(map[string]%s)\n", fieldName, valueGoType)
 	cb.writeln("\tfor {")
@@ -218,8 +226,8 @@ func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 	cb.writeln("\t\t\t}")
 
 	// Read value
-	if valueIdent != nil {
-		generateMapValueRead(cb, valueIdent, fieldName, "\t\t\t")
+	if valueType != nil {
+		generateMapValueRead(cb, valueType, fieldName, "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -227,18 +235,16 @@ func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 }
 
 // generateMapValueRead generates read code for a map value.
-func generateMapValueRead(cb *codeBuilder, ident *avrocpb.Ident, fieldName string, indent string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveReadMethod[typeName]; ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[typeName])
+func generateMapValueRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, indent string) {
+	if method, ok := readMethodFor(t.GetReference()); ok {
+		cb.writef("%svar v %s\n", indent, primitiveGoTypes[t.GetReference().GetName()])
 		cb.writef("%sv, err = r.%s()\n", indent, method)
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
 		cb.writef("%sx.%s[k] = v\n", indent, fieldName)
 	} else {
-		goType := toPascalCase(typeName)
+		goType := goTypeForType(t, "")
 		cb.writef("%svar v %s\n", indent, goType)
 		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
 		cb.writef("%sif err != nil {\n", indent)
@@ -313,10 +319,9 @@ func generateUnionMemberRead(cb *codeBuilder, unionName string, t *avrocpb.Type,
 	}
 
 	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		typeName := v.Ident.GetValue()
-		if method, ok := primitiveReadMethod[typeName]; ok {
-			cb.writef("\t\tvar v %s\n", primitiveGoTypes[typeName])
+	case *avrocpb.Type_Reference:
+		if method, ok := readMethodFor(v.Reference); ok {
+			cb.writef("\t\tvar v %s\n", primitiveGoTypes[v.Reference.GetName()])
 			cb.writef("\t\tv, err = r.%s()\n", method)
 			cb.writeln("\t\tif err != nil {")
 			cb.writeln("\t\t\treturn nil, err")
@@ -385,17 +390,16 @@ func generateUnionArrayItemRead(cb *codeBuilder, t *avrocpb.Type, indent string)
 	}
 
 	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		typeName := v.Ident.GetValue()
-		if method, ok := primitiveReadMethod[typeName]; ok {
-			cb.writef("%svar v %s\n", indent, primitiveGoTypes[typeName])
+	case *avrocpb.Type_Reference:
+		if method, ok := readMethodFor(v.Reference); ok {
+			cb.writef("%svar v %s\n", indent, primitiveGoTypes[v.Reference.GetName()])
 			cb.writef("%sv, err = r.%s()\n", indent, method)
 			cb.writef("%sif err != nil {\n", indent)
 			cb.writef("%s\treturn nil, err\n", indent)
 			cb.writef("%s}\n", indent)
 			cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
 		} else {
-			goType := toPascalCase(typeName)
+			goType := toPascalCase(v.Reference.GetName())
 			cb.writef("%svar v %s\n", indent, goType)
 			cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
 			cb.writef("%sif err != nil {\n", indent)
@@ -432,8 +436,7 @@ func generateUnionArrayItemRead(cb *codeBuilder, t *avrocpb.Type, indent string)
 
 // generateUnionMapReadInit generates the initialization for a union map member.
 func generateUnionMapReadInit(cb *codeBuilder, m *avrocpb.Map, memberName string) {
-	valueIdent := m.GetValues()
-	valueGoType := goTypeForIdent(valueIdent)
+	valueGoType := goTypeForType(m.GetValues(), "")
 	cb.writef("\t\tresult := %s{Value: make(map[string]%s)}\n", memberName, valueGoType)
 }
 
@@ -475,18 +478,16 @@ func generateUnionMapRead(cb *codeBuilder, m *avrocpb.Map) {
 }
 
 // generateUnionMapValueRead generates read code for a union map value.
-func generateUnionMapValueRead(cb *codeBuilder, ident *avrocpb.Ident, indent string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveReadMethod[typeName]; ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[typeName])
+func generateUnionMapValueRead(cb *codeBuilder, t *avrocpb.Type, indent string) {
+	if method, ok := readMethodFor(t.GetReference()); ok {
+		cb.writef("%svar v %s\n", indent, primitiveGoTypes[t.GetReference().GetName()])
 		cb.writef("%sv, err = r.%s()\n", indent, method)
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn nil, err\n", indent)
 		cb.writef("%s}\n", indent)
 		cb.writef("%sresult.Value[k] = v\n", indent)
 	} else {
-		goType := toPascalCase(typeName)
+		goType := goTypeForType(t, "")
 		cb.writef("%svar v %s\n", indent, goType)
 		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
 		cb.writef("%sif err != nil {\n", indent)

@@ -27,13 +27,13 @@ func TestUnmarshal_Record(t *testing.T) {
 						{
 							Name: proto.String("name"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 						{
 							Name: proto.String("age"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 							},
 						},
 					},
@@ -187,9 +187,9 @@ func TestUnmarshal_Union(t *testing.T) {
 								Type: &avrocpb.Type_Union{
 									Union: &avrocpb.Union{
 										Types: []*avrocpb.Type{
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("null")}}},
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}}},
-											{Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("null")}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("string")}},
+											{Type: &avrocpb.Type_Reference{Reference: primRef("int")}},
 										},
 									},
 								},
@@ -262,7 +262,7 @@ func TestUnmarshal_ArrayField(t *testing.T) {
 								Type: &avrocpb.Type_Array{
 									Array: &avrocpb.Array{
 										Items: &avrocpb.Type{
-											Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+											Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 										},
 									},
 								},
@@ -325,7 +325,7 @@ func TestUnmarshal_MapField(t *testing.T) {
 							Type: &avrocpb.Type{
 								Type: &avrocpb.Type_MapType{
 									MapType: &avrocpb.Map{
-										Values: &avrocpb.Ident{Value: proto.String("string")},
+										Values: primType("string"),
 									},
 								},
 							},
@@ -385,13 +385,13 @@ func TestUnmarshal_NestedRecord(t *testing.T) {
 						{
 							Name: proto.String("id"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 						{
 							Name: proto.String("customer"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("Customer")}},
+								Type: &avrocpb.Type_Reference{Reference: namedRef("Customer")},
 							},
 						},
 					},
@@ -407,7 +407,7 @@ func TestUnmarshal_NestedRecord(t *testing.T) {
 							{
 								Name: proto.String("name"),
 								Type: &avrocpb.Type{
-									Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+									Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 								},
 							},
 						},
@@ -461,43 +461,43 @@ func TestUnmarshal_AllPrimitiveTypes(t *testing.T) {
 						{
 							Name: proto.String("bool_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("boolean")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("boolean")},
 							},
 						},
 						{
 							Name: proto.String("int_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("int")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("int")},
 							},
 						},
 						{
 							Name: proto.String("long_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("long")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("long")},
 							},
 						},
 						{
 							Name: proto.String("float_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("float")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("float")},
 							},
 						},
 						{
 							Name: proto.String("double_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("double")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("double")},
 							},
 						},
 						{
 							Name: proto.String("bytes_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("bytes")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("bytes")},
 							},
 						},
 						{
 							Name: proto.String("string_field"),
 							Type: &avrocpb.Type{
-								Type: &avrocpb.Type_Ident{Ident: &avrocpb.Ident{Value: proto.String("string")}},
+								Type: &avrocpb.Type_Reference{Reference: primRef("string")},
 							},
 						},
 					},

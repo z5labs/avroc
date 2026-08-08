@@ -9,6 +9,17 @@ import (
 	"github.com/z5labs/avroc/internal/avrocpb"
 )
 
+// writeMethodFor returns the BinaryWriter method for a reference to an Avro
+// primitive. A reference to a named type has none: it delegates to the named
+// type's own MarshalAvroBinary.
+func writeMethodFor(ref *avrocpb.Reference) (string, bool) {
+	if ref == nil || ref.GetKind() != avrocpb.TypeRefKind_TYPE_REF_KIND_PRIMITIVE {
+		return "", false
+	}
+	method, ok := primitiveWriteMethod[ref.GetName()]
+	return method, ok
+}
+
 // generateMarshalMethod generates the MarshalAvroBinary method for a type.
 func generateMarshalMethod(cb *codeBuilder, ttg typeToGenerate) {
 	t := ttg.typ
@@ -60,8 +71,8 @@ func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 	}
 
 	switch v := fieldType.Type.(type) {
-	case *avrocpb.Type_Ident:
-		generateIdentWrite(cb, v.Ident, fieldName)
+	case *avrocpb.Type_Reference:
+		generateReferenceWrite(cb, v.Reference, fieldName)
 	case *avrocpb.Type_Array:
 		generateArrayFieldWrite(cb, v.Array, fieldName)
 	case *avrocpb.Type_MapType:
@@ -84,11 +95,9 @@ func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 	}
 }
 
-// generateIdentWrite generates write code for an identifier type.
-func generateIdentWrite(cb *codeBuilder, ident *avrocpb.Ident, fieldName string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveWriteMethod[typeName]; ok {
+// generateReferenceWrite generates write code for a resolved reference.
+func generateReferenceWrite(cb *codeBuilder, ref *avrocpb.Reference, fieldName string) {
+	if method, ok := writeMethodFor(ref); ok {
 		cb.writef("\terr = w.%s(x.%s)\n", method, fieldName)
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
@@ -141,7 +150,7 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 	// Generate write for map value using index access for addressability
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueIdentWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t")
+		generateValueWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -158,9 +167,9 @@ func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent 
 		return
 	}
 
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Ident:
-		generateValueIdentWrite(cb, v.Ident, varName, indent)
+	switch t.Type.(type) {
+	case *avrocpb.Type_Reference:
+		generateValueWrite(cb, t, varName, indent)
 	case *avrocpb.Type_Record, *avrocpb.Type_EnumType:
 		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
 		cb.writef("%sif err != nil {\n", indent)
@@ -174,13 +183,11 @@ func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent 
 	}
 }
 
-// generateValueIdentWrite generates write code for a value with an ident type.
-// The varName may be non-addressable (e.g., a map index), so for named types
-// with pointer receivers we copy to a local variable first.
-func generateValueIdentWrite(cb *codeBuilder, ident *avrocpb.Ident, varName string, indent string) {
-	typeName := ident.GetValue()
-
-	if method, ok := primitiveWriteMethod[typeName]; ok {
+// generateValueWrite generates write code for a value in a non-addressable
+// position (e.g. a map index), so for named types with pointer receivers we
+// copy to a local variable first.
+func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string) {
+	if method, ok := writeMethodFor(t.GetReference()); ok {
 		cb.writef("%serr = w.%s(%s)\n", indent, method, varName)
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn err\n", indent)
@@ -246,9 +253,8 @@ func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Ty
 
 		// Write the value based on type
 		switch v := t.Type.(type) {
-		case *avrocpb.Type_Ident:
-			typeName := v.Ident.GetValue()
-			if method, ok := primitiveWriteMethod[typeName]; ok {
+		case *avrocpb.Type_Reference:
+			if method, ok := writeMethodFor(v.Reference); ok {
 				cb.writef("\terr = w.%s(x.Value)\n", method)
 				cb.writeln("\tif err != nil {")
 				cb.writeln("\t\treturn err")
@@ -318,7 +324,7 @@ func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
 
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueIdentWrite(cb, valueType, "x.Value[k]", "\t\t\t")
+		generateValueWrite(cb, valueType, "x.Value[k]", "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
