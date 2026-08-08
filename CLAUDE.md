@@ -242,8 +242,10 @@ written as a literal so the check cannot move with the constant it is checking.
 Each published digest is then signed with `cosign`, keyless: the identity is the
 release workflow, certified per run by the public sigstore CA from the OIDC token
 `id-token: write` lets the run mint, so there is no avroc key for anybody to hold
-or trust. A SLSA v1 provenance statement and one SPDX SBOM per executable per
-platform are attached beside the signature — to the **digest**, never to a tag.
+or trust. Signing is recursive, so the published index and every per-platform
+manifest under it are signed; the attestations — a SLSA v1 provenance statement
+and one SPDX SBOM per executable per platform — go on the **index digest** and
+only there. Nothing is ever attached to a tag.
 The verifying commands are `docs/container/SPEC.md`'s "Verifying a signature",
 and cosign itself is built by `dag.Go().Install` at a module version pinned in
 `release.go`, so there is no tool image here to keep in step with an upstream tag.

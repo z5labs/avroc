@@ -392,9 +392,19 @@ would be repointing a moving tag on a coin toss.
 
 ### Verifying a signature
 
-Every published manifest is signed, and carries a
-[SLSA v1](https://slsa.dev/spec/v1.0/provenance) provenance statement and an
-SPDX SBOM per executable per platform (#128). Signing is **keyless**: there is no
+What a tag resolves to is a **multi-platform index**, and this section is precise
+about which of the two things a signature is on (#128):
+
+- **Signatures** cover the published index *and* each per-platform manifest
+  under it, so the manifest a consumer's runtime actually pulls is signed too,
+  not only the one their tag named.
+- **Attestations** — a [SLSA v1](https://slsa.dev/spec/v1.0/provenance)
+  provenance statement, and an SPDX SBOM per executable per platform — are
+  attached to the **published index digest**, and to that alone. They are
+  statements about the release, and the release is the index; a per-platform
+  manifest carries none of its own, and looking for one there finds nothing.
+
+Signing is **keyless**: there is no
 avroc public key to obtain or trust. The signing identity is the release workflow
 itself, certified for the length of one run by the public
 [sigstore](https://www.sigstore.dev/) CA from the OIDC token the CI provider
@@ -441,9 +451,9 @@ image](#avrocs-own-generators) — substitute `ghcr.io/z5labs/avroc-gen-go` — 
 against a digest, which is the reference to verify when the answer has to stay
 true afterwards.
 
-Signatures and attestations are attached to the **digest**, never to the tag. An
-attestation about a name that moves would say nothing, and this is why verifying
-a moving tag is verifying whatever it resolves to at that moment.
+Nothing is attached to a **tag**, only ever to a digest. An attestation about a
+name that moves would say nothing, and this is why verifying a moving tag is
+verifying whatever it resolves to at that moment.
 
 That this verification is *possible* is in scope here, because it is a thing a
 consumer performs. How the signature comes to exist is not, and is under [Out of
@@ -670,7 +680,7 @@ to any of them is a breaking change:
 | [No shell](#no-shell) | Absent; extension is `COPY`-only |
 | [The `FileDescriptorSet`](#the-ir-filedescriptorset) | `/usr/local/share/avroc/ir.binpb` |
 | [Tags](#tags-and-what-pinning-one-buys) | A published full-version tag never moves |
-| [Signatures](#verifying-a-signature) | Every published manifest is signed, and carries provenance and an SBOM |
+| [Signatures](#verifying-a-signature) | The published index and each manifest under it are signed; the index digest carries provenance and an SBOM |
 | [avroc's own generators](#avrocs-own-generators) | One image each, `FROM` the base, adding one executable and changing nothing else |
 
 Not covered, and explicitly implementation detail. Depending on any of it is

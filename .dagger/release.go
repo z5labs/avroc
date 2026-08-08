@@ -530,6 +530,13 @@ func (m *Avroc) cosign(
 // Everything names the digest rather than a tag, and the digest is the one
 // publishTags resolved — so what is signed is what was pushed, not whatever the
 // tag has come to mean by the time cosign resolves it.
+//
+// The signature reaches further than the attestations do, and deliberately:
+// signing is recursive over the index's per-platform manifests, while the
+// attestations go on the index digest alone. An attestation is a statement about
+// the release, and the release is the index; docs/container/SPEC.md says so
+// explicitly, so that nobody goes looking for a provenance statement on the
+// manifest their runtime happened to pull.
 func (m *Avroc) attest(
 	ctx context.Context,
 	signer *dagger.Container,
