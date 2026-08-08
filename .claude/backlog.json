@@ -1,0 +1,24 @@
+{
+  "select": {
+    "label": "story",
+    "milestone": "v0.2.0",
+    "limit": 200
+  },
+  "dependencies": {
+    "style": "native"
+  },
+  "verify": [
+    "go build ./...",
+    "go test -race -cover ./...",
+    "golangci-lint run",
+    "go build -o ./bin/avroc ./cmd/avroc && go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go && go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json && go build -o ./bin/avroc-gen-pcf ./cmd/avroc-gen-pcf && (export PATH=\"$PWD/bin:$PATH\"; cd example && avroc generate) && git diff --exit-code -- example"
+  ],
+  "merge": {
+    "label": "auto-merge",
+    "workflow": "auto-merge.yaml"
+  },
+  "review": {
+    "required": true
+  },
+  "worktreeDir": ".claude/worktrees"
+}

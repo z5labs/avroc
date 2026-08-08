@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Per-issue worktrees created by the backlog loop (.claude/backlog.json -> worktreeDir)
+.claude/worktrees/
+
+# Per-operator Claude Code overrides; .claude/settings.json is the shared config
+.claude/settings.local.json
