@@ -226,6 +226,27 @@ and as an overridden UID. CI runs both on every pull request;
 <name> --address <ref>` push one multi-platform index to the reference they are
 given, and are what a person calls to put an image on a test registry.
 
+`.dagger/worked_example.go` is the third of them, and its input is a document:
+`dagger call worked-example` extracts the multi-stage Dockerfile from
+`docs/container/SPEC.md`'s "Worked example: adding a generator", builds it, and
+runs the image over the example project's schema (#129). The worked example is
+the one thing here nothing else reads — the Go build, the tests and the two image
+checks all pass on an example that stopped building releases ago — and it is the
+first thing an adopter tries, so it is extracted rather than copied: a Dockerfile
+in a `testdata` directory would be the one that is checked while the one in the
+document is the one people read. The build stage goes to buildkit as committed,
+with an empty build context, so the heredocs and the `CGO_ENABLED=0` are
+exercised as written; the final stage is *interpreted* — its `COPY` read for the
+flags and paths the document actually wrote and replayed against the base image
+the pipeline just built — for `generator_image.go`'s reason, that a `FROM
+ghcr.io/z5labs/avroc:v0` line names a published image and a pull request has to
+check the base it built. Interpreting cannot be allowed to diverge silently, so
+an instruction in that stage other than `COPY` is an error naming it rather than
+a line with no effect, and `workedExample.rules` re-runs every one of those
+requirements over a copy of the document broken in exactly that way — the same
+shape as `tag-scheme`, and for the same reason: a check whose failure path has
+never run is a check nobody knows the state of.
+
 ### Releasing the images
 
 `.dagger/release.go` is the whole of a release, and `dagger call release` is the

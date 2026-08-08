@@ -566,6 +566,19 @@ func (e imageEntry) String() string {
 // for the base image, and the CLI plus whatever was copied in for an image built
 // FROM it.
 func (m *Avroc) checkImageFilesystem(ctx context.Context, image *dagger.Container, executables []string) []error {
+	return m.checkImageContents(ctx, image, imageContents(executables))
+}
+
+// checkImageContents is checkImageFilesystem against a listing given outright
+// rather than derived from a set of executables in the plugin directory.
+//
+// It exists because docs/container/SPEC.md's worked example states the owner and
+// the mode of the file it copies in, and the check that builds that example
+// (worked_example.go) reads both out of the committed Dockerfile rather than
+// assuming them: the SPEC permits a world-executable root-owned file as well as
+// the chowned one the example uses, so the expected entry is a function of the
+// document and not a constant here.
+func (m *Avroc) checkImageContents(ctx context.Context, image *dagger.Container, want map[string]imageEntry) []error {
 	const mountedAt = "/image"
 
 	// Numeric %U and %G rather than %u and %g: the listing container has no
@@ -582,7 +595,6 @@ func (m *Avroc) checkImageFilesystem(ctx context.Context, image *dagger.Containe
 		return []error{fmt.Errorf("listing the image filesystem: %w", err)}
 	}
 
-	want := imageContents(executables)
 	got := make(map[string]imageEntry, len(want))
 
 	var errs []error
