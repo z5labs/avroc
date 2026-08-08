@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"google.golang.org/protobuf/proto"
 )
 

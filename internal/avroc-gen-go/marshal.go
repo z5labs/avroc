@@ -6,7 +6,7 @@
 package avrocgengo
 
 import (
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 )
 
 // writeMethodFor returns the BinaryWriter method for a reference to an Avro

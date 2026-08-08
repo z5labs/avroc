@@ -8,7 +8,7 @@ package ir
 import (
 	"fmt"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 )
 
 // avroPrimitives is Avro's closed list of primitive type names.

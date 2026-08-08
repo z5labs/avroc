@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
 
 	"google.golang.org/protobuf/proto"

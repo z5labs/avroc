@@ -30,7 +30,7 @@ go test -v ./...
 - **`internal/avroc-gen-go/`** — Go generator plugin. Implements the `Generator` gRPC service, listens on a Unix socket, and handles `GenerateRequest`s.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list.
-- **`internal/avrocpb/`** — Generated Go code from the protobuf definitions. Do not edit directly.
+- **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
 - **`proto/`** — Protobuf definitions (edition 2023) for the `Generator` gRPC service.
 
 ### Plugin Communication

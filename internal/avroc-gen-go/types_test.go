@@ -8,7 +8,7 @@ package avrocgengo
 import (
 	"testing"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 )
 
 func TestToPascalCase(t *testing.T) {

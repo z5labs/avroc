@@ -5,7 +5,7 @@
 
 edition = "2023";
 
-option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
+option go_package = "github.com/z5labs/avroc/avrocpb;avrocpb";
 
 // TypeRefKind states whether a Reference names an Avro primitive or a named
 // type the same descriptor defines. It is a closed set: a consumer MUST switch

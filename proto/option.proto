@@ -5,7 +5,7 @@
 
 edition = "2023";
 
-option go_package = "github.com/z5labs/avroc/internal/avrocpb;avrocpb";
+option go_package = "github.com/z5labs/avroc/avrocpb;avrocpb";
 
 // The Option message represents a key-value pair for customizing the code generation process.
 message Option {

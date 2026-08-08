@@ -8,7 +8,7 @@ package avrocgengo
 import (
 	"encoding/binary"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
 
 	avro "github.com/z5labs/avro-go"

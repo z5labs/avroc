@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"go/format"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
 )
 

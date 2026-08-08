@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/z5labs/avroc/internal/avrocpb"
+	"github.com/z5labs/avroc/avrocpb"
 
 	avro "github.com/z5labs/avro-go"
 	"google.golang.org/protobuf/proto"
