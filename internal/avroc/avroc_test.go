@@ -274,6 +274,57 @@ type testGeneratorServer struct {
 	path string
 }
 
+// testDescriptorGlob matches the descriptor files avroc writes for the
+// stand-in generator these tests drive. It leans on the generator's name being
+// part of the per-invocation directory, so a leftover from some other test —
+// or from another package's temporary files — is not mistaken for this one's.
+const testDescriptorGlob = "avroc-gen-test-descriptor-*/" + descriptorFilename
+
+// findDescriptorMatching reports whether a descriptor file holding exactly req
+// is readable right now. A leftover from an earlier crashed run may sit beside
+// it, so the test is "at least one decodes and equals req" rather than "exactly
+// one file exists": a stale file cannot make this pass, and cannot make it fail
+// either.
+//
+// Making good on the second half is why a match that cannot be read or decoded
+// is skipped rather than returned as an error. A file that vanished between the
+// glob and the read, or that some earlier run left half-written, is not evidence
+// about the descriptor this invocation wrote — but it would sit ahead of it in
+// the glob's sorted order often enough to make the failure look real. The last
+// such error is kept only to be quoted when nothing matched, so a genuinely
+// unreadable descriptor still says why rather than reporting a bare miss.
+func findDescriptorMatching(req *avrocpb.GenerateRequest) error {
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), testDescriptorGlob))
+	if err != nil {
+		return fmt.Errorf("failed to search for the descriptor file: %w", err)
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("no descriptor file under %q while the generator is running", os.TempDir())
+	}
+
+	var skipped error
+	for _, m := range matches {
+		b, err := os.ReadFile(m)
+		if err != nil {
+			skipped = fmt.Errorf("failed to read descriptor %q: %w", m, err)
+			continue
+		}
+		var onDisk avrocpb.GenerateRequest
+		if err := proto.Unmarshal(b, &onDisk); err != nil {
+			skipped = fmt.Errorf("descriptor %q does not decode: %w", m, err)
+			continue
+		}
+		if proto.Equal(&onDisk, req) {
+			return nil
+		}
+	}
+
+	if skipped != nil {
+		return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received; last unusable one: %w", len(matches), skipped)
+	}
+	return fmt.Errorf("none of the %d descriptor file(s) on disk match what this generator received", len(matches))
+}
+
 func (s *testGeneratorServer) Generate(req *avrocpb.GenerateRequest, stream avrocpb.Generator_GenerateServer) error {
 	// This stand-in generator holds avroc to the producer half of
 	// docs/ir/SPEC.md's version rule, on the real client path rather than on a
@@ -282,6 +333,15 @@ func (s *testGeneratorServer) Generate(req *avrocpb.GenerateRequest, stream avro
 	// somewhere downstream with a missing file.
 	if err := ir.CheckVersion(req.GetVersion()); err != nil {
 		return fmt.Errorf("avroc emitted a descriptor this generator will not read: %w", err)
+	}
+
+	// And to the other half docs/plugin/SPEC.md adds: while a generator is
+	// running, a complete descriptor carrying exactly what it received is on
+	// disk. Checked from inside the subprocess because that is the only vantage
+	// point from which "before the generator started, and not yet deleted" is
+	// observable at all.
+	if err := findDescriptorMatching(req); err != nil {
+		return err
 	}
 
 	path := s.path
@@ -338,6 +398,12 @@ func TestGeneratorGenerate(t *testing.T) {
 		},
 	}
 
+	// The descriptor's lifetime ends when the generator exits, so the set of
+	// descriptor directories on disk must not grow across an invocation. Taken
+	// before rather than asserted as "none afterwards", because a crashed
+	// earlier run may have left one and that is not this test's failure.
+	before := descriptorDirs(t)
+
 	outputDir := t.TempDir()
 	err := g.generate(ctx, outputDir, nil, schema)
 	if err != nil {
@@ -350,6 +416,28 @@ func TestGeneratorGenerate(t *testing.T) {
 	if _, err := os.Stat(written); err != nil {
 		t.Errorf("expected generated file at %q: %v", written, err)
 	}
+
+	for dir := range descriptorDirs(t) {
+		if _, ok := before[dir]; !ok {
+			t.Errorf("descriptor directory %q survived the invocation that created it", dir)
+		}
+	}
+}
+
+// descriptorDirs is the set of per-invocation descriptor directories currently
+// on disk for the stand-in generator.
+func descriptorDirs(t *testing.T) map[string]struct{} {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), "avroc-gen-test-descriptor-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs := make(map[string]struct{}, len(matches))
+	for _, m := range matches {
+		dirs[m] = struct{}{}
+	}
+	return dirs
 }
 
 // fakeClientStream replays a fixed sequence of GenerateResponse messages,

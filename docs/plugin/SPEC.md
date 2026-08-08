@@ -210,8 +210,39 @@ both would have to sniff which one it had been handed.
 A plugin **MUST** read the descriptor and **MUST NOT** write to it, rename it,
 or delete it. It **MUST NOT** derive anything from the file's name or its
 directory — the path is a temporary location avroc chose, not a place a plugin
-may hang meaning on. avroc **MAY** delete the file as soon as the plugin exits,
-so a plugin **MUST NOT** retain the path for later use.
+may hang meaning on. The file is gone once the plugin exits, as [Location and
+lifetime](#location-and-lifetime) requires, so a plugin **MUST NOT** retain the
+path for later use.
+
+#### Location and lifetime
+
+avroc **MUST** write the descriptor into a directory it creates for that one
+invocation and nothing else, and **MUST NOT** share a descriptor file between two
+generators, or between two runs. One file per invocation is what makes the bytes
+attributable: a descriptor on disk belongs to exactly one generator and one run,
+and cannot have been overwritten by whichever invocation happened to finish last.
+
+The file **MUST** be written in full and closed before the generator is started.
+A plugin therefore never observes a partial descriptor, and needs no protocol —
+no lock, no sentinel, no retry — to find out whether the bytes it can see are all
+of them.
+
+avroc **MUST** remove the file, and the directory holding it, once the generator
+has exited, whether it exited zero or not. That is the whole of the file's
+lifetime. A plugin that wants the descriptor to outlive the invocation **MUST**
+copy the bytes, and **MUST NOT** expect the path to resolve to anything
+afterwards; what it will find there instead is unspecified, because avroc creates
+the next invocation's directory by the same means.
+
+avroc **SHOULD** create the file read-only. The prohibition above is on the
+plugin and a mode bit does not enforce it — a plugin running as the user that
+created the file can change the mode back — but it turns the accidental case, a
+plugin opening the path for writing, into an error where the mistake is rather
+than into a descriptor quietly different from the one avroc wrote.
+
+Nothing here is a promise about the *path*. The directory avroc picks, the name
+it gives the file and the suffix on that name are all implementation, and a
+plugin reading any of them has broken the rule above rather than found a feature.
 
 `--descriptor -` means the descriptor arrives on standard input, and a plugin
 **MUST** accept it. avroc itself always passes a path, which is the point: a
@@ -581,6 +612,7 @@ model is that avroc has no opinion about the code that comes out.
 | [Host platform](#host-platform) | [#104](https://github.com/z5labs/avroc/issues/104) |
 | [Discovery](#discovery) | [#114](https://github.com/z5labs/avroc/issues/114) |
 | [Invocation](#invocation) | [#114](https://github.com/z5labs/avroc/issues/114), [#115](https://github.com/z5labs/avroc/issues/115) |
+| [The descriptor](#the-descriptor), [Location and lifetime](#location-and-lifetime) | [#111](https://github.com/z5labs/avroc/issues/111), [#114](https://github.com/z5labs/avroc/issues/114) |
 | [The output directory](#the-output-directory) | [#117](https://github.com/z5labs/avroc/issues/117), [#118](https://github.com/z5labs/avroc/issues/118), [#119](https://github.com/z5labs/avroc/issues/119) |
 | [Exit codes and diagnostics](#exit-codes-and-diagnostics) | [#115](https://github.com/z5labs/avroc/issues/115) |
 | [Determinism](#determinism) | [#120](https://github.com/z5labs/avroc/issues/120) |
