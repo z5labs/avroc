@@ -138,6 +138,22 @@ func TestUnmarshalDescriptor(t *testing.T) {
 			t.Error("expected an error decoding non-descriptor bytes")
 		}
 	})
+
+	t.Run("rejects empty input", func(t *testing.T) {
+		// Zero bytes are a valid encoding of an empty message, so this is the
+		// one malformed input protobuf accepts: an empty file, a truncated
+		// write or the wrong path would otherwise decode successfully and
+		// render as {}. Both spellings of empty are checked, because a caller
+		// reading a file gets one and a caller reading an empty stream the
+		// other.
+		for name, b := range map[string][]byte{"nil": nil, "empty": {}} {
+			t.Run(name, func(t *testing.T) {
+				if _, err := UnmarshalDescriptor(b); err == nil {
+					t.Error("expected an error decoding empty input")
+				}
+			})
+		}
+	})
 }
 
 func TestMarshalDescriptorJSON(t *testing.T) {

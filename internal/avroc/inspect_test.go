@@ -170,6 +170,26 @@ func TestInspectDescriptor(t *testing.T) {
 		}
 	})
 
+	t.Run("fails on an empty file", func(t *testing.T) {
+		// An empty file decodes as a descriptor carrying nothing, so without a
+		// check it would render as {} and exit 0 — sending whoever ran it
+		// looking for a producer bug that is really a truncated write or the
+		// wrong path.
+		dir := t.TempDir()
+		path := filepath.Join(dir, "empty.binpb")
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var out bytes.Buffer
+		if code := inspectDescriptor(context.Background(), inspectContext(), path, nil, &out); code == 0 {
+			t.Error("exit code = 0, want non-zero for an empty descriptor file")
+		}
+		if out.Len() != 0 {
+			t.Errorf("wrote output for an empty descriptor file:\n%s", out.String())
+		}
+	})
+
 	t.Run("renders a descriptor from an unknown IR version", func(t *testing.T) {
 		// The case the subcommand exists for: a descriptor this build would
 		// refuse to generate from is still one a person can read.

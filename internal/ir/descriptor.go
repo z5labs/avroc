@@ -54,7 +54,20 @@ func MarshalDescriptor(desc *avrocpb.GenerateRequest) ([]byte, error) {
 // is *not* checked here is the version or the closed sets — CheckVersion and
 // Validate own those, in that order, and a caller that only wants to look at a
 // descriptor is entitled to skip both.
+//
+// Emptiness is the one exception, and it is not a version check in disguise.
+// Zero bytes are a valid encoding of an empty message, so proto.Unmarshal
+// accepts them and hands back a descriptor carrying nothing — which is how a
+// truncated write, an empty file or a path that was never a descriptor at all
+// turns into a successful read and an empty rendering. No conforming producer
+// emits one, because every descriptor carries at least a version, so refusing
+// here puts the diagnostic where the mistake is instead of leaving somebody to
+// wonder why their schemas vanished.
 func UnmarshalDescriptor(b []byte) (*avrocpb.GenerateRequest, error) {
+	if len(b) == 0 {
+		return nil, fmt.Errorf("failed to decode descriptor: no bytes to decode")
+	}
+
 	var desc avrocpb.GenerateRequest
 	if err := proto.Unmarshal(b, &desc); err != nil {
 		return nil, fmt.Errorf("failed to decode descriptor: %w", err)
