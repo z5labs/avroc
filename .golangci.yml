@@ -1,0 +1,32 @@
+# The lint policy for this repository, and the one CI enforces.
+#
+# It is not consulted by a `golangci-lint` you happen to have on PATH — it is
+# passed explicitly to the Z5Labs standard pipeline by .dagger/main.go, so that
+# the configuration committed here is the configuration the lint stage runs
+# against. A .golangci.yml that CI ignored would be a file contributors read and
+# trusted while the pipeline enforced something else.
+#
+# Written in the golangci-lint **v2** dialect, because that is the major the
+# standard pipeline runs. The majors are not interchangeable: a v2 binary refuses
+# a v1 file outright, before any linter runs, and v1 refuses a v2 one. The
+# `version: "2"` below is the config schema's version, required by v2 and absent
+# from v1; it is not the tool pin. The tool pin lives in
+# github.com/z5labs/devex/daggerverse/go, which is where a bump belongs, and
+# nothing here restates it.
+#
+# The enabled set is v2's own "standard" set, spelled out rather than inherited
+# so that a change to golangci-lint's defaults is a change this repository has to
+# make deliberately.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
