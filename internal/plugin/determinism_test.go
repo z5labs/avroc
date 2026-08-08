@@ -33,15 +33,21 @@ func generatorPackages() []string {
 	}
 }
 
-// forbiddenCalls maps an import path to the functions in it whose result
+// forbiddenFuncs maps an import path to the functions in it whose result
 // differs between two runs of the same executable over the same descriptor.
 // docs/plugin/SPEC.md's "Determinism" forbids their results reaching a
-// generator's output; forbidding the calls outright is the checkable form of
-// that, and costs nothing, because no generator here has a use for one.
+// generator's output; forbidding them outright is the checkable form of that,
+// and costs nothing, because no generator here has a use for one.
+//
+// What is forbidden is naming one of them at all, not calling one: the check
+// below matches any reference, so `at := time.Now` is a finding as much as
+// `time.Now()` is. That is deliberate. A function value is the same clock read
+// one level of indirection away, and it is exactly what somebody reaches for
+// when they want the call to be hard to see.
 //
 // SourceDateEpoch is the sanctioned way to get a timestamp and it reads the
 // environment rather than the clock, which is why time.Unix is not here.
-func forbiddenCalls() map[string]map[string]string {
+func forbiddenFuncs() map[string]map[string]string {
 	const (
 		clock   = "reads the wall clock; use plugin.SourceDateEpoch, which does not"
 		ambient = "reads the machine rather than the descriptor"
@@ -142,15 +148,17 @@ func nonTestSources(t *testing.T, dir string) []string {
 	return sources
 }
 
-// nondeterminismIn reports every forbidden import and call in one file, each as
-// a finished sentence naming the position. It returns findings rather than
-// failing a test so that the check can be tested against source that must fail
-// it.
+// nondeterminismIn reports every forbidden import and every reference to a
+// forbidden function in one file, each as a finished sentence naming the
+// position. It returns findings rather than failing a test so that the check
+// can be tested against source that must fail it.
 //
-// Local import names are resolved rather than assumed, so an aliased import
-// cannot smuggle a forbidden call past the selector check.
+// It matches selectors, not call expressions, so a forbidden function is
+// reported wherever it is named — passed, assigned or called. Local import
+// names are resolved rather than assumed, so an aliased import cannot smuggle
+// one past either.
 func nondeterminismIn(fset *token.FileSet, file *ast.File) []string {
-	calls, imports := forbiddenCalls(), forbiddenImports()
+	funcs, imports := forbiddenFuncs(), forbiddenImports()
 	var findings []string
 
 	// Local name to import path, for the packages this check has an opinion
@@ -170,7 +178,7 @@ func nondeterminismIn(fset *token.FileSet, file *ast.File) []string {
 			findings = append(findings, fmt.Sprintf("%s imports %q: %s", at, path, why))
 			continue
 		}
-		if _, ok := calls[path]; !ok {
+		if _, ok := funcs[path]; !ok {
 			continue
 		}
 		local := path[strings.LastIndex(path, "/")+1:]
@@ -201,11 +209,11 @@ func nondeterminismIn(fset *token.FileSet, file *ast.File) []string {
 		if !ok {
 			return true
 		}
-		why, forbidden := calls[path][sel.Sel.Name]
+		why, forbidden := funcs[path][sel.Sel.Name]
 		if !forbidden {
 			return true
 		}
-		findings = append(findings, fmt.Sprintf("%s calls %s.%s: %s",
+		findings = append(findings, fmt.Sprintf("%s references %s.%s, which %s",
 			fset.Position(sel.Pos()), path, sel.Sel.Name, why))
 		return true
 	})
@@ -213,11 +221,11 @@ func nondeterminismIn(fset *token.FileSet, file *ast.File) []string {
 	return findings
 }
 
-// TestDeterminismCheckSeesAForbiddenCall guards the check against its own worst
-// failure. A scan that reports nothing because it resolves no import, or looks
-// at the wrong identifier, passes silently and forever; feeding it source that
-// must fail is the only way to know it can fail at all.
-func TestDeterminismCheckSeesAForbiddenCall(t *testing.T) {
+// TestDeterminismCheckSeesAForbiddenReference guards the check against its own
+// worst failure. A scan that reports nothing because it resolves no import, or
+// looks at the wrong identifier, passes silently and forever; feeding it source
+// that must fail is the only way to know it can fail at all.
+func TestDeterminismCheckSeesAForbiddenReference(t *testing.T) {
 	testCases := []struct {
 		name string
 		src  string
@@ -237,6 +245,16 @@ func TestDeterminismCheckSeesAForbiddenCall(t *testing.T) {
 		{
 			name: "a forbidden import",
 			src:  "package p\n\nimport \"os/user\"\n\nfunc f() any { u, _ := user.Current(); return u }\n",
+		},
+		{
+			// Named but not called: the function value is the same clock read
+			// with one more step in front of it.
+			name: "assigned rather than called",
+			src:  "package p\n\nimport \"time\"\n\nfunc f() any { at := time.Now; return at }\n",
+		},
+		{
+			name: "passed as an argument",
+			src:  "package p\n\nimport \"time\"\n\nfunc g(any) {}\n\nfunc f() { g(time.Now) }\n",
 		},
 		{
 			name: "a dot import of a watched package",

@@ -171,9 +171,10 @@ Three checks, because no one of them sees all of it:
   order, which is the usual way the rule gets broken and the one that breaks
   intermittently.
 - **`internal/plugin.TestNoGeneratorReadsTheClock`** parses every generator's
-  source and fails on a call that could not give the same answer twice —
-  `time.Now`, `os.Hostname`, `os.Getenv`, `os/user`, either random. Repetition
-  cannot catch a clock read, because two runs a moment apart agree on the date.
+  source and fails on any *reference* — called, assigned or passed — to
+  something that could not give the same answer twice: `time.Now`,
+  `os.Hostname`, `os.Getenv`, `os/user`, either random. Repetition cannot catch
+  a clock read, because two runs a moment apart agree on the date.
 
 `internal/plugin.SourceDateEpoch` is the only sanctioned way to get a timestamp:
 it reads `SOURCE_DATE_EPOCH`, returns UTC, and reports a malformed value rather
