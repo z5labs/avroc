@@ -111,14 +111,14 @@ func TestMergeOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	merged, err := mergeOutput(scratch, output)
+	merged, err := mergeOne(scratch, output)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := []string{"pkg/nested/order.go", "user.go"}
 	if !slices.Equal(merged, want) {
-		t.Errorf("mergeOutput reported %q, want %q", merged, want)
+		t.Errorf("the merge reported %q, want %q", merged, want)
 	}
 
 	for path, contents := range map[string]string{
@@ -162,7 +162,7 @@ func TestMergeOutputReplacesAnExistingFile(t *testing.T) {
 	}
 	writeScratch(t, scratch, "user.go", "package avro // new\n")
 
-	if _, err := mergeOutput(scratch, output); err != nil {
+	if _, err := mergeOne(scratch, output); err != nil {
 		t.Fatal(err)
 	}
 
@@ -238,9 +238,9 @@ func TestMergeOutputRefusesToEscape(t *testing.T) {
 func assertRefused(t *testing.T, output, scratch, name string) {
 	t.Helper()
 
-	merged, err := mergeOutput(scratch, output)
+	merged, err := mergeOne(scratch, output)
 	if err == nil {
-		t.Fatalf("mergeOutput accepted %q and merged %q", name, merged)
+		t.Fatalf("the merge accepted %q and merged %q", name, merged)
 	}
 	if !strings.Contains(err.Error(), name) {
 		t.Errorf("error %q does not name the entry it refused", err)
@@ -275,14 +275,183 @@ func TestMergeOutputCreatesNothingWhenItRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := mergeOutput(scratch, output); err == nil {
-		t.Fatal("mergeOutput accepted a scratch directory holding a symbolic link")
+	if _, err := mergeOne(scratch, output); err == nil {
+		t.Fatal("the merge accepted a scratch directory holding a symbolic link")
 	}
 
 	for _, name := range []string{"aaa.go", "zzz.go"} {
 		if _, err := os.Stat(filepath.Join(output, name)); err == nil {
 			t.Errorf("%q was merged even though the merge failed", name)
 		}
+	}
+}
+
+// TestCheckCollisions is the report #118 asks for: two generators producing one
+// file is an error naming both of them and the path, and it is the same error
+// whichever of them avroc heard from first.
+func TestCheckCollisions(t *testing.T) {
+	root := t.TempDir()
+	pkg := filepath.Join(root, "pkg")
+	collision := filepath.Join(pkg, "user.avsc")
+
+	t.Run("two generators producing one file", func(t *testing.T) {
+		// A different relative path under a different output directory, resolving
+		// to the same file: this is the collision that is only visible in the
+		// destination, and it is the one the example manifest is a single edit
+		// away from — json at "." and pcf at "pcf/", both emitting .avsc.
+		json := &generatorOutput{generator: "avroc-gen-json", output: root, files: []mergedFile{
+			{rel: "pkg/user.avsc", dst: collision},
+		}}
+		pcf := &generatorOutput{generator: "avroc-gen-pcf", output: pkg, files: []mergedFile{
+			{rel: "user.avsc", dst: collision},
+		}}
+
+		err := checkCollisions([]*generatorOutput{json, pcf})
+		if err == nil {
+			t.Fatal("checkCollisions accepted two generators producing the same file")
+		}
+		for _, want := range []string{"avroc-gen-json", "avroc-gen-pcf", collision} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not name %q", err, want)
+			}
+		}
+
+		// The report is a function of the plans and not of the schedule: the
+		// generator that finished first is the one that arrives first here, and it
+		// must not change a character of what the user is told.
+		reversed := checkCollisions([]*generatorOutput{pcf, json})
+		if reversed == nil {
+			t.Fatal("checkCollisions accepted the same collision in the other order")
+		}
+		if reversed.Error() != err.Error() {
+			t.Errorf("report = %q in one order and %q in the other", err, reversed)
+		}
+	})
+
+	t.Run("the same relative path under different output directories does not collide", func(t *testing.T) {
+		a := &generatorOutput{generator: "avroc-gen-go", output: root, files: []mergedFile{
+			{rel: "user.go", dst: filepath.Join(root, "user.go")},
+		}}
+		b := &generatorOutput{generator: "avroc-gen-json", output: pkg, files: []mergedFile{
+			{rel: "user.go", dst: filepath.Join(pkg, "user.go")},
+		}}
+
+		if err := checkCollisions([]*generatorOutput{a, b}); err != nil {
+			t.Errorf("two generators writing to separate output directories were refused: %v", err)
+		}
+	})
+
+	t.Run("every colliding path is reported once, in a fixed order", func(t *testing.T) {
+		user := filepath.Join(root, "user.avsc")
+		order := filepath.Join(root, "order.avsc")
+		plan := func(name string, dsts ...string) *generatorOutput {
+			out := &generatorOutput{generator: name, output: root}
+			for _, dst := range dsts {
+				out.files = append(out.files, mergedFile{rel: filepath.Base(dst), dst: dst})
+			}
+			return out
+		}
+
+		err := checkCollisions([]*generatorOutput{
+			plan("avroc-gen-json", order, user),
+			plan("avroc-gen-pcf", user),
+			plan("avroc-gen-avsc", order, user),
+		})
+		if err == nil {
+			t.Fatal("checkCollisions accepted three generators producing the same files")
+		}
+
+		// A third claimant does not report the path a second time.
+		if got := strings.Count(err.Error(), user); got != 1 {
+			t.Errorf("%q is reported %d times, want 1: %v", user, got, err)
+		}
+		for _, want := range []string{"avroc-gen-avsc", "avroc-gen-json", "avroc-gen-pcf"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not name %q", err, want)
+			}
+		}
+		// Sorted by path, so that a run reporting more than one collision reports
+		// them in an order the file set fixes.
+		if strings.Index(err.Error(), order) > strings.Index(err.Error(), user) {
+			t.Errorf("collisions are not reported in path order: %v", err)
+		}
+	})
+
+	t.Run("nothing to merge is not a collision", func(t *testing.T) {
+		if err := checkCollisions(nil); err != nil {
+			t.Errorf("checkCollisions(nil) = %v, want nil", err)
+		}
+	})
+}
+
+// TestMergeOutputsRefusesACollision is why the merge is split into phases at all:
+// two generators producing the same path fail the run at merge time, with
+// neither generator's output written into the project tree.
+func TestMergeOutputsRefusesACollision(t *testing.T) {
+	output := t.TempDir()
+
+	first := scratchPlan(t, output, "avroc-gen-json", map[string]string{
+		"user.avsc":      `{"produced_by":"json"}`,
+		"only-json.avsc": `{"produced_by":"json"}`,
+		"pkg/order.avsc": `{"produced_by":"json"}`,
+	})
+	second := scratchPlan(t, output, "avroc-gen-pcf", map[string]string{
+		"user.avsc": `{"produced_by":"pcf"}`,
+	})
+
+	err := mergeOutputs([]*generatorOutput{first, second})
+	if err == nil {
+		t.Fatal("the merge accepted two generators producing the same file")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(output, "user.avsc")) {
+		t.Errorf("error %q does not name the path they collided on", err)
+	}
+
+	// Not one file of either generator reached the tree — including the ones only
+	// one of them produced, because a run that collided is a failed run.
+	entries, readErr := os.ReadDir(output)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, e := range entries {
+		if path := filepath.Join(output, e.Name()); path != first.scratch && path != second.scratch {
+			t.Errorf("a refused merge left %q in the output tree", e.Name())
+		}
+	}
+
+	// And both generators' files are still where they left them, so a caller that
+	// wanted to report on them could.
+	for _, out := range []*generatorOutput{first, second} {
+		for _, f := range out.files {
+			if _, err := os.Stat(f.src); err != nil {
+				t.Errorf("generator %q: %q left its scratch directory: %v", out.generator, f.rel, err)
+			}
+		}
+	}
+}
+
+// scratchPlan is one generator that has already run: a scratch directory holding
+// the files it wrote, resolved into the plan run would have returned.
+func scratchPlan(t *testing.T, output, generatorName string, files map[string]string) *generatorOutput {
+	t.Helper()
+
+	scratch, err := newScratchDir(output, generatorName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, contents := range files {
+		writeScratch(t, scratch, name, contents)
+	}
+
+	planned, err := planMerge(scratch, output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &generatorOutput{
+		generator: generatorName,
+		output:    output,
+		scratch:   scratch,
+		files:     planned,
 	}
 }
 
@@ -335,6 +504,27 @@ func TestCopyIntoPlace(t *testing.T) {
 	if len(entries) != 1 || entries[0].Name() != "dst" {
 		t.Errorf("directory holds %v, want just dst", entries)
 	}
+}
+
+// mergeOne is what one generator's output goes through: its scratch directory
+// resolved into a plan, and that plan merged. It is the pair of calls generateAll
+// makes with a single generator in the manifest, and it reports the files the
+// merge moved.
+func mergeOne(scratch, output string) ([]string, error) {
+	files, err := planMerge(scratch, output)
+	if err != nil {
+		return nil, err
+	}
+	out := &generatorOutput{
+		generator: testGeneratorName,
+		output:    output,
+		scratch:   scratch,
+		files:     files,
+	}
+	if err := mergeOutputs([]*generatorOutput{out}); err != nil {
+		return nil, err
+	}
+	return relPaths(files), nil
 }
 
 func writeScratch(t *testing.T, scratch, name, contents string) {

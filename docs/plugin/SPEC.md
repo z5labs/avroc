@@ -318,6 +318,19 @@ leaves — how avroc records a previous run's file set, so that a file from an
 earlier run can be told from a file a person wrote by hand in the same
 directory — is decided by #119 and specified here when it lands.
 
+Collision detection is what fixes when a merge happens, so it is stated as a
+requirement on avroc rather than left to an implementation: avroc **MUST** have
+resolved every generator's output before it writes any of it into the project
+tree, and a collision **MUST** fail the run with nothing merged (#118). A check
+made as each generator finished would let the first one's files land before the
+second was known about, and the report would then name whichever generator lost
+a race — so the same unchanged inputs would fail differently on different runs,
+which is the one thing generated output cannot do.
+
+The consequence for a plugin is only the one [Scheduling](#also-out-of-scope)
+already states: its files appear when the whole run's do, not when it exits, and
+it **MUST NOT** depend on being run or merged before, after or alongside another.
+
 ### A plugin does not read its own past output
 
 A plugin **MUST NOT** read the project's existing output, and **MUST NOT**
@@ -333,12 +346,21 @@ positively.
 
 A **zero** exit status means every file the plugin intended to produce is
 written and closed beneath `--out`, and the invocation succeeded. avroc merges
-the directory (#117).
+the directory (#117), once every other generator in the run has succeeded too
+(#118).
 
 A **non-zero** exit status means the invocation failed. avroc **MUST** fail the
 run and **MUST** discard the scratch directory rather than merging it (#115).
 Because it is discarded, a plugin **MAY** exit non-zero with partial output on
 disk, and **SHOULD NOT** spend effort cleaning up after itself before failing.
+
+One generator's failure fails the whole run, and since nothing is merged until
+every generator has produced its output (#118), a failed run leaves the project
+tree as it found it. So a plugin **MUST NOT** read its own zero exit as a promise
+that its files are in the tree: another generator failing, or colliding with it,
+discards them too. That is the point rather than a side effect — a half-generated
+tree is worse than an ungenerated one, because a person then has to work out
+which half is which.
 
 avroc **MUST NOT** attach meaning to a particular non-zero value beyond
 failure, and a plugin **MUST NOT** expect it to. The small integers are already

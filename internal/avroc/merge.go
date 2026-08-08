@@ -50,55 +50,155 @@ type mergedFile struct {
 	dst string
 }
 
-// mergeOutput moves everything a generator left in its scratch directory into
-// the project's output tree and reports what it moved, each path relative to
-// that tree and slash-separated.
+// generatorOutput is what one generator produced, after a zero exit and before
+// anything of it has moved: every file resolved to its destination, still in the
+// scratch directory the generator wrote it into.
 //
-// It is called only after a zero exit, which is the whole of the success signal
-// (docs/plugin/SPEC.md, "Exit codes and diagnostics"): a failed invocation's
-// scratch directory is discarded instead, so nothing a failing generator left
-// behind reaches the project.
+// It is the value a merge is decided from. A plan is cheap to hold and has
+// touched nothing in the project tree, which is what lets avroc collect one per
+// generator and check them against each other before the first rename (#118).
+type generatorOutput struct {
+	// generator is the executable name, avroc-gen-<name>, that a report names.
+	generator string
+	// output is the project output tree this generator's files merge into,
+	// absolute. Two generators may or may not share one.
+	output string
+	// scratch is the private directory the generator wrote into. It still holds
+	// every file in files, and removing it belongs to whoever holds this plan.
+	scratch string
+	files   []mergedFile
+}
+
+// mergeOutputs moves everything every generator left in its scratch directory
+// into the project's output tree.
 //
-// The merge is in two phases, and the split is the point of it. The first
-// resolves every file and creates every directory the second will need, so that
-// a path the generator should not have produced, or a directory that cannot be
-// created, fails the run before a single file has been moved — nothing is
-// adopted as output, and no existing file in the tree is replaced. The directory
-// creation is part of that phase and is the one thing it does write, so a
+// It is called only for generators that exited zero, which is the whole of the
+// success signal (docs/plugin/SPEC.md, "Exit codes and diagnostics"): a failed
+// invocation's scratch directory is discarded instead, so nothing a failing
+// generator left behind reaches the project.
+//
+// The merge is in phases, and the split is the point of it. Nothing is written
+// into the project tree until every file of every generator has been resolved
+// (planMerge) and checked against every other generator's (checkCollisions), so
+// a path a generator should not have produced, a path two of them both produced,
+// or a directory that cannot be created fails the run before a single file has
+// been moved — nothing is adopted as output, and no existing file in the tree is
+// replaced. The directory creation is the one thing those phases write, so a
 // refused merge can leave an empty directory behind; what it cannot leave is a
-// file. The second phase then does nothing but rename, which is atomic per file
-// — so a run interrupted mid-merge leaves whole files where it got to and never
-// a half-written one, and the window in which it can be interrupted at all is a
-// sequence of metadata operations rather than a copy of every byte the generator
-// produced.
+// file. The last phase then does nothing but rename, which is atomic per file —
+// so a run interrupted mid-merge leaves whole files where it got to and never a
+// half-written one, and the window in which it can be interrupted at all is a
+// sequence of metadata operations rather than a copy of every byte the
+// generators produced.
 //
-// Detecting two generators that produced the same path is #118's and is not
-// done here; nor is removing a file an earlier run produced and this one did
-// not, which is #119's.
-func mergeOutput(scratch, output string) ([]string, error) {
-	files, err := planMerge(scratch, output)
-	if err != nil {
-		return nil, err
+// The plans are merged in the order they are given, which is the manifest's
+// rather than the order the generators finished in. Removing a file an earlier
+// run produced and this one did not is not done here; that is #119's.
+func mergeOutputs(outs []*generatorOutput) error {
+	if err := checkCollisions(outs); err != nil {
+		return err
 	}
 
-	for _, f := range files {
-		if err := os.MkdirAll(filepath.Dir(f.dst), 0o755); err != nil {
-			return nil, fmt.Errorf("failed to create the output directory for %q: %w", f.rel, err)
+	for _, out := range outs {
+		for _, f := range out.files {
+			if err := os.MkdirAll(filepath.Dir(f.dst), 0o755); err != nil {
+				return fmt.Errorf("generator %q: failed to create the output directory for %q: %w", out.generator, f.rel, err)
+			}
 		}
 	}
 
-	merged := make([]string, 0, len(files))
-	for _, f := range files {
-		if err := moveIntoPlace(f.src, f.dst); err != nil {
-			return nil, fmt.Errorf("failed to merge %q into the output directory: %w", f.rel, err)
+	for _, out := range outs {
+		for _, f := range out.files {
+			if err := moveIntoPlace(f.src, f.dst); err != nil {
+				return fmt.Errorf("generator %q: failed to merge %q into the output directory: %w", out.generator, f.rel, err)
+			}
 		}
-		merged = append(merged, f.rel)
 	}
-	return merged, nil
+	return nil
+}
+
+// checkCollisions refuses a run in which two generators produce the same file.
+//
+// avroc owns the project's output tree, so this is avroc's to detect: the
+// generators cannot see each other's directories, they are told not to try
+// (docs/plugin/SPEC.md, "What a plugin does not own"), and without the check the
+// tree would hold whichever of the two was renamed last — a last-writer-wins
+// whose winner is the order two concurrent processes happened to finish in, so
+// the same unchanged inputs would produce different output on different runs.
+//
+// A collision is decided from the destination path rather than from the path
+// relative to a generator's own output directory, because two generators need
+// not share one: a generator writing "pkg/user.avsc" under the project root and
+// one writing "user.avsc" under "pkg/" collide, and only the resolved
+// destination says so. That is also why the report names the absolute path — it
+// is the one name both generators' output is described by.
+//
+// The report is a function of the plans and of nothing else. Every claim is
+// collected before anything is reported, the colliding paths are sorted, and the
+// generators claiming each one are sorted by name, so two runs over unchanged
+// inputs produce the identical message however the generators were ordered in
+// the manifest and whichever of them finished first.
+func checkCollisions(outs []*generatorOutput) error {
+	claimants := make(map[string][]string)
+	var collided []string
+	for _, out := range outs {
+		for _, f := range out.files {
+			claimants[f.dst] = append(claimants[f.dst], out.generator)
+			// Recorded as the path stops being claimed by one generator alone, so
+			// that a third claimant does not record it a second time.
+			if len(claimants[f.dst]) == 2 {
+				collided = append(collided, f.dst)
+			}
+		}
+	}
+	if len(collided) == 0 {
+		return nil
+	}
+
+	slices.Sort(collided)
+	reports := make([]string, 0, len(collided))
+	for _, dst := range collided {
+		names := slices.Clone(claimants[dst])
+		slices.Sort(names)
+		reports = append(reports, fmt.Sprintf("%q is produced by generators %s", dst, quotedList(names)))
+	}
+	return fmt.Errorf("refusing to merge: %s", strings.Join(reports, "; "))
+}
+
+// quotedList renders names as a quoted list: "a" and "b" for two, "a", "b" and
+// "c" for more.
+func quotedList(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = fmt.Sprintf("%q", n)
+	}
+	switch len(quoted) {
+	case 0:
+		return ""
+	case 1:
+		return quoted[0]
+	default:
+		return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+	}
+}
+
+// relPaths names every file a plan holds, relative to the output tree and
+// slash-separated: what a successful merge of it moved, in the order it moved
+// them.
+func relPaths(files []mergedFile) []string {
+	rel := make([]string, 0, len(files))
+	for _, f := range files {
+		rel = append(rel, f.rel)
+	}
+	return rel
 }
 
 // planMerge resolves every file in a scratch directory to its destination in the
 // output tree, refusing anything a generator is not allowed to have produced.
+//
+// It writes nothing: a plan can be built for every generator and then thrown
+// away — which is what a collision between two of them does (#118) — with the
+// project tree exactly as the run found it.
 //
 // A directory that holds no files contributes nothing: a generator that made one
 // produced no output there, and materializing it in the project tree would leave

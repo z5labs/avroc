@@ -7,8 +7,10 @@ package avroc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -65,24 +67,89 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
-	genPool := pool.New().WithContext(ctx)
-	for _, task := range tasks {
-		genPool.Go(func(ctx context.Context) error {
-			g := generator{
-				log:            cli.Log,
-				name:           task.name,
-				executablePath: task.executablePath,
-			}
-			return g.generate(ctx, task.output, task.options, task.schemas...)
-		})
-	}
-
-	if err := genPool.Wait(); err != nil {
+	if err := generateAll(ctx, cli.Log, tasks); err != nil {
 		cli.Log.ErrorContext(ctx, "failed to run generators", slog.Any("error", err))
 		return 1
 	}
 
 	return 0
+}
+
+// generateAll runs every planned generator and merges what they produced into
+// the project's output tree.
+//
+// It is in two stages, and the boundary between them is #118's. Every generator
+// runs concurrently, each into a private scratch directory, and its output is
+// resolved there; only once all of them have finished does anything move into
+// the project tree. That is what makes two generators producing the same path an
+// error rather than a race: the collision is decided from the full set of plans,
+// so the run fails with the same report whichever generator finished first, and
+// it fails before either file has been written where a person would find it.
+//
+// The price is that a generator's output is not visible until the slowest
+// generator has finished, which is the trade docs/plugin/SPEC.md already makes
+// under "Scheduling" — a plugin sees a single invocation and depends on nothing
+// about the others.
+//
+// It also makes the run all or nothing: one generator failing, or colliding with
+// another, now discards what every other generator produced rather than leaving
+// it in the tree. That is deliberate and is the same reason the capability
+// handshake runs before the pool — a half-generated tree is worse than an
+// ungenerated one, because a person then has to work out which half is which.
+func generateAll(ctx context.Context, log *slog.Logger, tasks []genTask) (err error) {
+	outs := make([]*generatorOutput, len(tasks))
+
+	genPool := pool.New().WithContext(ctx)
+	for i, task := range tasks {
+		genPool.Go(func(ctx context.Context) error {
+			g := generator{
+				log:            log,
+				name:           task.name,
+				executablePath: task.executablePath,
+			}
+			out, runErr := g.run(ctx, task.output, task.options, task.schemas...)
+			if runErr != nil {
+				return runErr
+			}
+			// Stored at this generator's own index rather than appended, so that
+			// the order the plans are merged and reported in is the manifest's and
+			// not the order the generators happened to finish in.
+			outs[i] = out
+			return nil
+		})
+	}
+	waitErr := genPool.Wait()
+
+	// Every scratch directory that outlived its invocation, removed however this
+	// returns: emptied by a successful merge, or still holding the output of a run
+	// that failed or collided elsewhere. Registered after the wait, so that no
+	// generator can still be writing into one.
+	defer func() {
+		for _, out := range outs {
+			if out == nil {
+				continue
+			}
+			err = errors.Join(err, os.RemoveAll(out.scratch))
+		}
+	}()
+
+	if waitErr != nil {
+		return waitErr
+	}
+
+	if err := mergeOutputs(outs); err != nil {
+		log.ErrorContext(ctx, "failed to merge generated output", slog.Any("error", err))
+		return err
+	}
+
+	for _, out := range outs {
+		log.InfoContext(ctx, "generated output",
+			slog.String("generator", out.generator),
+			slog.String("out", out.output),
+			slog.Any("output_files", relPaths(out.files)),
+		)
+	}
+	return nil
 }
 
 // planGenerators resolves every manifest generator into a runnable genTask. It
