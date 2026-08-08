@@ -399,7 +399,7 @@ func TestMergeOutputsRefusesACollision(t *testing.T) {
 		"user.avsc": `{"produced_by":"pcf"}`,
 	})
 
-	err := mergeOutputs([]*generatorOutput{first, second})
+	err := mergeOutputs(output, []*generatorOutput{first, second})
 	if err == nil {
 		t.Fatal("the merge accepted two generators producing the same file")
 	}
@@ -521,7 +521,7 @@ func mergeOne(scratch, output string) ([]string, error) {
 		scratch:   scratch,
 		files:     files,
 	}
-	if err := mergeOutputs([]*generatorOutput{out}); err != nil {
+	if err := mergeOutputs(output, []*generatorOutput{out}); err != nil {
 		return nil, err
 	}
 	return relPaths(files), nil

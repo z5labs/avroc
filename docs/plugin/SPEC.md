@@ -313,10 +313,11 @@ directory:
 
 The empty scratch directory is what makes the first two mechanical: the set of
 files a run produced is exactly the set found in the directory afterwards, with
-no marker inside a file and no bookkeeping asked of the plugin. What that
-leaves — how avroc records a previous run's file set, so that a file from an
+no marker inside a file and no bookkeeping asked of the plugin. Pruning needs one
+thing more — a record of the *previous* run's file set, so that a file from an
 earlier run can be told from a file a person wrote by hand in the same
-directory — is decided by #119 and specified here when it lands.
+directory — and [The record of a previous run](#the-record-of-a-previous-run)
+specifies it (#119).
 
 Collision detection is what fixes when a merge happens, so it is stated as a
 requirement on avroc rather than left to an implementation: avroc **MUST** have
@@ -330,6 +331,69 @@ which is the one thing generated output cannot do.
 The consequence for a plugin is only the one [Scheduling](#also-out-of-scope)
 already states: its files appear when the whole run's do, not when it exits, and
 it **MUST NOT** depend on being run or merged before, after or alongside another.
+
+### The record of a previous run
+
+avroc **MUST** record the set of files a successful run generated, and **MUST**
+remove every file that record names which the current run did not produce (#119).
+Nothing else is removed: a file no record names is not avroc's, whatever
+directory it sits in and whatever it is called.
+
+The record is `avroc.gen.json` in the project directory — beside `avroc.json`, at
+the root the manifest's output directories are relative to. It names every file
+the last successful run merged, relative to that root and slash-separated, sorted
+and rendered so that two runs producing the same file set produce byte-identical
+bytes:
+
+```json
+{
+  "version": 1,
+  "files": [
+    "gen/test_record.go",
+    "pcf/test_record.avsc",
+    "test_record.avsc"
+  ]
+}
+```
+
+It is a project file a person commits, and **SHOULD** be committed alongside the
+generated output it describes: the record is what a clean checkout's first
+regeneration prunes against. A run that finds no record prunes nothing rather
+than deciding for itself which files in the tree look generated, so a missing
+record costs one stale file one more run and can never cost a file a person
+wrote.
+
+Four consequences worth stating rather than deriving:
+
+- **An output directory shared with hand-written source is supported.** A
+  hand-written file is in no record, so it is never a candidate for removal.
+  This is why `avroc.json` may name `.` as a generator's output directory, as the
+  worked example does for `avroc-gen-json`.
+- **`avroc.gen.json` in the project directory is avroc's.** A generator that
+  produces it fails the run, refused in the same phase as two generators claiming
+  one path and before anything has been written where a person would find it.
+  Every other name is a plugin's to use.
+- **avroc removes regular files.** A recorded path that is now a directory, a
+  symbolic link or anything else is left alone and reported: a person who
+  replaced a generated file has taken it over.
+- **A directory that pruning empties is removed**, up to but never including the
+  project directory, because a merge does not create an empty directory either.
+
+A plugin's obligations do not change: it writes into the scratch directory it was
+given, and pruning happens outside it, after the merge. In particular a plugin
+**MUST NOT** write or maintain a record of its own — the one avroc keeps spans
+every generator's output and outlives the manifest entry that produced any of it,
+which is what lets a generator *removed* from the manifest have its output
+pruned.
+
+The record is a committed file rather than a marker inside each generated file —
+a `DO NOT EDIT` header — and that is a decision, not an omission. A marker cannot
+be the mechanism here: not every format a generator emits has a comment syntax to
+carry one, and Avro's own JSON schema output has none; it would ask every plugin
+for exactly the bookkeeping this contract refuses to ask for; and it makes
+ownership a property of a file's contents, which a person copies into a
+hand-written file by accident the first time they start one from a generated
+example.
 
 ### A plugin does not read its own past output
 
@@ -670,6 +734,7 @@ model is that avroc has no opinion about the code that comes out.
 | [Invocation](#invocation) | [#114](https://github.com/z5labs/avroc/issues/114), [#115](https://github.com/z5labs/avroc/issues/115) |
 | [The descriptor](#the-descriptor), [Location and lifetime](#location-and-lifetime) | [#111](https://github.com/z5labs/avroc/issues/111), [#114](https://github.com/z5labs/avroc/issues/114) |
 | [The output directory](#the-output-directory) | [#117](https://github.com/z5labs/avroc/issues/117), [#118](https://github.com/z5labs/avroc/issues/118), [#119](https://github.com/z5labs/avroc/issues/119) |
+| [The record of a previous run](#the-record-of-a-previous-run) | [#119](https://github.com/z5labs/avroc/issues/119) |
 | [Exit codes and diagnostics](#exit-codes-and-diagnostics) | [#115](https://github.com/z5labs/avroc/issues/115) |
 | [Determinism](#determinism) | [#120](https://github.com/z5labs/avroc/issues/120) |
 | [Capability negotiation](#capability-negotiation) | [#116](https://github.com/z5labs/avroc/issues/116) |

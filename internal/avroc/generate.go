@@ -67,7 +67,7 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 		return 1
 	}
 
-	if err := generateAll(ctx, cli.Log, tasks); err != nil {
+	if err := generateAll(ctx, cli.Log, cli.WorkingDir, tasks); err != nil {
 		cli.Log.ErrorContext(ctx, "failed to run generators", slog.Any("error", err))
 		return 1
 	}
@@ -96,7 +96,23 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 // it in the tree. That is deliberate and is the same reason the capability
 // handshake runs before the pool — a half-generated tree is worse than an
 // ungenerated one, because a person then has to work out which half is which.
-func generateAll(ctx context.Context, log *slog.Logger, tasks []genTask) (err error) {
+//
+// The last stage is #119's: what the previous run recorded having generated and
+// this one did not produce is removed, and the record is rewritten. Both are
+// relative to projectRoot — the directory the manifest was read from — because
+// the record spans every generator's output directory and outlives the manifest
+// entry that produced any of them.
+func generateAll(ctx context.Context, log *slog.Logger, projectRoot string, tasks []genTask) (err error) {
+	// Read before the first generator starts, so a record avroc cannot make sense
+	// of fails the run with nothing generated — the same reason the capability
+	// handshake runs before the pool. Read afterwards, the only choices left would
+	// be to leave the stale files behind forever or to remove paths avroc cannot
+	// vouch for.
+	previous, err := loadOutputRecord(projectRoot)
+	if err != nil {
+		return err
+	}
+
 	outs := make([]*generatorOutput, len(tasks))
 
 	genPool := pool.New().WithContext(ctx)
@@ -137,8 +153,28 @@ func generateAll(ctx context.Context, log *slog.Logger, tasks []genTask) (err er
 		return waitErr
 	}
 
-	if err := mergeOutputs(outs); err != nil {
+	if err := mergeOutputs(projectRoot, outs); err != nil {
 		log.ErrorContext(ctx, "failed to merge generated output", slog.Any("error", err))
+		return err
+	}
+
+	produced, err := producedFiles(projectRoot, outs)
+	if err != nil {
+		log.ErrorContext(ctx, "failed to record generated output", slog.Any("error", err))
+		return err
+	}
+
+	// Pruned before the record is rewritten, so that a removal that fails leaves a
+	// record still naming the file: the run fails loudly, and the next one tries
+	// again. Rewriting first would forget the stale file, which is the bug this
+	// stage exists to fix.
+	if err := pruneStale(ctx, log, projectRoot, previous.Files, produced); err != nil {
+		log.ErrorContext(ctx, "failed to remove stale generated output", slog.Any("error", err))
+		return err
+	}
+
+	if err := writeOutputRecord(ctx, log, projectRoot, produced); err != nil {
+		log.ErrorContext(ctx, "failed to record generated output", slog.Any("error", err))
 		return err
 	}
 

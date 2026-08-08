@@ -29,6 +29,13 @@ avroc generate
 This reads `avroc.json` and produces Go types (`gen/`), an Avro JSON schema
 (`test_record.avsc`), and a Parsing Canonical Form file (`pcf/test_record.avsc`).
 
+It also writes [`avroc.gen.json`](avroc.gen.json), the committed record of every file
+the run generated. That record is what the next run prunes against: rename `TestRecord`
+and the file the old name produced is removed rather than left behind. Note that the
+`json` generator's output directory here is the example root, which it shares with
+`schema.avdl`, `avroc.json` and this README — that is safe because a file avroc never
+recorded generating is never a candidate for removal.
+
 ## Generated Output
 
 ### Go (`gen/`)
