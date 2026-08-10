@@ -34,6 +34,25 @@ jobs:
       # else on this workflow needs either, which is why the grant is on the job
       # rather than at the top of the file.
       contents: write
+    # The `dagger call` below publishes its trace to Dagger Cloud, because the
+    # CLI uploads whenever a Cloud token is in its environment — the same one
+    # line as build.yaml's, on the run where finding out afterwards is worst. A
+    # release happens once and the tag is never repointed, so the run that
+    # produced it is the one whose trace is worth having.
+    #
+    # Per job rather than at the top of the file, so the token's scope is what
+    # uses it: it reaches the CLI and stops there, and nothing the module builds
+    # is given it.
+    #
+    # One-time setup: sign in to Dagger Cloud, open the organisation's Settings
+    # -> Tokens (https://dagger.cloud/<org>/settings?tab=Tokens), and add the
+    # value as a repository secret named DAGGER_CLOUD_TOKEN. It is an ingest
+    # credential for that organisation's traces and grants nothing in this
+    # repository. DAGGER_CLOUD_TOKEN is the name the pinned engineVersion reads
+    # — _EXPERIMENTAL_DAGGER_CLOUD_TOKEN is the name it replaced, and v0.21.8
+    # does not look at it.
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
     steps:
       # At the release's tag, not at whatever main has moved to since. The
       # artifact is a function of the source, so an asset built from a different
@@ -52,6 +71,17 @@ jobs:
             | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
               BIN_DIR="$HOME/.local/bin" sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Degrade loudly, not silently: without the secret the release still runs
+      # and simply publishes no trace. There is no fork case to exclude here as
+      # there is in build.yaml — a release event only ever fires in this
+      # repository, so a missing token is always something an operator can fix.
+      - name: Warn when no trace will be published
+        if: env.DAGGER_CLOUD_TOKEN == ''
+        run: |
+          echo "::warning title=No Dagger Cloud trace::DAGGER_CLOUD_TOKEN is unset, so \
+          this release publishes no trace. See the comment on this job for where an \
+          operator gets one."
 
       # The same function CI builds on every pull request and a contributor runs
       # locally, so the released asset is produced by the recipe that has already
@@ -104,6 +134,18 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    # The three `dagger call`s below publish their traces, for the reason the
+    # job above gives and with the same one-time setup — the account of what
+    # this secret is and where an operator gets one is on that job, a screen up
+    # in this file. It is repeated per job rather than hoisted to the workflow
+    # because the scope of the token should be what reads it.
+    #
+    # It is not passed to `dagger call release` and must not be. That call
+    # already carries the registry password and the identity token; the Cloud
+    # token is the CLI's own and has no business inside anything the module
+    # builds.
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
     steps:
       # At the release's tag, for the same reason the asset above is built
       # there: the image is a function of the source, and an image built from a
@@ -126,6 +168,15 @@ jobs:
             | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
               BIN_DIR="$HOME/.local/bin" sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # As on the job above, and for the same reason: the publish is the run
+      # where reading a failure out of the log by eye costs the most.
+      - name: Warn when no trace will be published
+        if: env.DAGGER_CLOUD_TOKEN == ''
+        run: |
+          echo "::warning title=No Dagger Cloud trace::DAGGER_CLOUD_TOKEN is unset, so \
+          this release publishes no trace. See the comment on this job for where an \
+          operator gets one."
 
       # The same contract check CI runs on every pull request, run once more
       # against the tag before anything is pushed. A tag is published once and

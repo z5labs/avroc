@@ -182,6 +182,26 @@ The version comes out of `dagger.json` rather than being typed in, because the
 provisions a different engine is a difference between your machine and CI, which
 is the one thing this module exists to prevent.
 
+### Reading a run's trace
+
+Every `dagger call` CI makes publishes its trace to [Dagger
+Cloud](https://dagger.cloud), and the link to it is printed in the log of the
+step that made the call. Start there when a check goes red: most of those calls
+fan out over `linux/amd64` and `linux/arm64` and build containers inside
+containers, so the Actions log is interleaved output from all of it, while the
+trace says which platform, which stage inside the module and where the time
+went.
+
+**Your own `dagger call` publishes nothing unless you have set your own token.**
+The CLI uploads only when `DAGGER_CLOUD_TOKEN` is in its environment; with no
+token it runs entirely on your machine and sends nothing anywhere. If you want
+traces for your local runs, get a token from your own Dagger Cloud
+organisation's Settings → Tokens and export it — it is yours, unrelated to this
+repository's secret, and nothing here asks you to have one.
+
+A pull request from a fork publishes no trace either: GitHub does not give a
+fork's run access to secrets. That is expected and the run still passes.
+
 ### After changing a module
 
 `.dagger/dagger.gen.go` and `.dagger/internal/` are generated **and committed**,
