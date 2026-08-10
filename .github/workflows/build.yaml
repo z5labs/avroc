@@ -46,6 +46,43 @@ jobs:
       # below — but this job only builds it and throws it away; the grant that
       # publishes it lives on the job that publishes it, in release.yaml.
       contents: read
+    # Every `dagger call` below publishes its trace to Dagger Cloud, and this is
+    # the whole of the mechanism: the CLI uploads whenever a Cloud token is in
+    # its environment. There is nothing to install and no flag to pass.
+    #
+    # It answers the questions this log cannot. Most of these calls fan out over
+    # linux/amd64 and linux/arm64 and build containers inside containers, so a
+    # red step here is a wall of interleaved output, and *which platform*,
+    # *which stage inside the module* and *why it took eleven minutes* are
+    # things you would otherwise read by eye. The trace already records all
+    # three; before this it was recorded and thrown away.
+    #
+    # Deliberately not `dagger/dagger-for-github`. Its `version` input takes a
+    # literal semver or `latest`, and both workflows here install the CLI at the
+    # `engineVersion` read out of dagger.json specifically so that no Dagger
+    # version is ever typed into a workflow file — the same argument as
+    # .golangci.yml and the --platform matrix living in the module. The action
+    # buys one environment variable and costs that.
+    #
+    # The scope is this job rather than the workflow, and the value is never
+    # given to the module: it reaches the CLI and stops there. Nothing the
+    # module builds sees it, because Dagger puts host environment inside a
+    # container only where the module asks for it, and none of these functions
+    # ask.
+    #
+    # This is Dagger's own telemetry. `OTEL_EXPORTER_OTLP_*` is a different
+    # lever pointing at a different backend; setting one has nothing to do with
+    # the other.
+    #
+    # One-time setup: sign in to Dagger Cloud, open the organisation's Settings
+    # -> Tokens (https://dagger.cloud/<org>/settings?tab=Tokens), and add the
+    # value as a repository secret named DAGGER_CLOUD_TOKEN. It is an ingest
+    # credential for that organisation's traces and grants nothing in this
+    # repository. DAGGER_CLOUD_TOKEN is the name the pinned engineVersion reads
+    # — _EXPERIMENTAL_DAGGER_CLOUD_TOKEN is the name it replaced, and v0.21.8
+    # does not look at it.
+    env:
+      DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
     steps:
       # A shallow checkout on purpose. The module excludes .git from the source
       # directory it checks, because none of fmt, vet, lint or test reads git
@@ -69,6 +106,27 @@ jobs:
             | DAGGER_VERSION="$(jq -r .engineVersion dagger.json | tr -d v)" \
               BIN_DIR="$HOME/.local/bin" sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Degrade loudly, not silently, and only where somebody can act on it. A
+      # run without the token still passes and simply publishes nothing — which
+      # is the permanent state of a pull request from a fork, because GitHub
+      # denies forks secrets by design and nothing on that side could fix it.
+      # Warning there would put a defect on every outside contributor's first
+      # pull request that is not one.
+      #
+      # Every other run — a branch in this repository, main, the merge queue —
+      # is missing the token only because nobody has added the secret yet, and
+      # what is lost is the trace of the run being read. So that case says so,
+      # the way auto-merge.yaml warns when BACKLOG_APP_ID is unset.
+      - name: Warn when no trace will be published
+        if: >-
+          env.DAGGER_CLOUD_TOKEN == '' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          echo "::warning title=No Dagger Cloud trace::DAGGER_CLOUD_TOKEN is unset, so \
+          this run publishes no trace and every failure below has to be read out of this \
+          log by eye. See the comment on this job for where an operator gets one."
 
       # No arguments, because the module's source defaults to the repository
       # root and its lint configuration defaults to the .golangci.yml committed
