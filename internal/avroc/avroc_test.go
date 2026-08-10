@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -762,6 +763,415 @@ exit 1
 	}
 	if len(entries) != 0 {
 		t.Errorf("a failed run left %v in the output directory", entries)
+	}
+}
+
+// tracedTask is a generator that records when it started and when it finished
+// into a log every generator in the run appends to, holds that window open for
+// pause seconds, and writes one file of its own.
+//
+// The pause is what makes the fan-out observable. Two generators that did
+// nothing but append two lines each could run at the same moment and still not
+// interleave, so a log of them would say nothing either way; a window every
+// generator holds open for the same length of time turns "how many ran at once"
+// into something the log records rather than something a test hopes for.
+func tracedTask(t *testing.T, name, output, logPath, pause string) genTask {
+	t.Helper()
+
+	body := fmt.Sprintf(`set -e
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) out=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%%s start\n' '%s' >> '%s'
+sleep %s
+printf '%%s end\n' '%s' >> '%s'
+printf '%%s\n' 'produced by avroc-gen-%s' > "$out/%s.txt"
+`, name, logPath, pause, name, logPath, name, name)
+
+	return genTask{
+		name:           "avroc-gen-" + name,
+		executablePath: writeNamedShellGenerator(t, name, body),
+		output:         output,
+		schemas:        []*avrocpb.Schema{testSchema("User")},
+	}
+}
+
+// traceEvent is one line a tracedTask wrote: a generator's name and whether it
+// was starting or finishing.
+type traceEvent struct {
+	generator string
+	event     string
+}
+
+// readTrace reads back what the generators of a run recorded, in the order the
+// appends landed. A trace no generator wrote to is not there at all, which is
+// itself an answer — none of them ran.
+func readTrace(t *testing.T, path string) []traceEvent {
+	t.Helper()
+
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var events []traceEvent
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+		if line == "" {
+			continue
+		}
+		name, event, ok := strings.Cut(line, " ")
+		if !ok {
+			t.Fatalf("trace line %q is not %q", line, "<generator> <event>")
+		}
+		events = append(events, traceEvent{generator: name, event: event})
+	}
+	return events
+}
+
+// peakConcurrency is the most generators a trace ever had running at once.
+func peakConcurrency(t *testing.T, path string) int {
+	t.Helper()
+
+	var running, peak int
+	for _, e := range readTrace(t, path) {
+		switch e.event {
+		case "start":
+			running++
+			peak = max(peak, running)
+		case "end":
+			running--
+		default:
+			t.Fatalf("trace holds the unknown event %q", e.event)
+		}
+	}
+	return peak
+}
+
+// generatorsThatStarted is every generator a trace saw begin, in the order they
+// began.
+func generatorsThatStarted(t *testing.T, path string) []string {
+	t.Helper()
+
+	var started []string
+	for _, e := range readTrace(t, path) {
+		if e.event == "start" {
+			started = append(started, e.generator)
+		}
+	}
+	return started
+}
+
+// generatorsReported is every generator the run logged output for, in the order
+// it reported them.
+func generatorsReported(records []recordedLine) []string {
+	var reported []string
+	for _, r := range records {
+		if r.message == "generated output" {
+			reported = append(reported, r.attrs["generator"])
+		}
+	}
+	return reported
+}
+
+// TestGenerateAllBoundsHowManyGeneratorsRunAtOnce is #184: the fan-out is the
+// machine's rather than the manifest's, and a manifest larger than the bound
+// still runs every generator in it.
+//
+// The bound is forced to one, which is the smallest there is and the one a
+// manifest of four is unambiguously larger than. GOMAXPROCS alone would not
+// produce this: the unit being bounded is a process, and the Go scheduler does
+// not bound those — an unbounded pool forks every generator the moment it is
+// submitted however few processors the runtime was given.
+func TestGenerateAllBoundsHowManyGeneratorsRunAtOnce(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	bound := maxConcurrentGenerators()
+
+	log, records := recordingLogger()
+	projectRoot, output := newProject(t)
+	trace := filepath.Join(t.TempDir(), "trace")
+
+	names := []string{"a", "b", "c", "d"}
+	tasks := make([]genTask, 0, len(names))
+	for _, name := range names {
+		tasks = append(tasks, tracedTask(t, name, output, trace, "0.2"))
+	}
+
+	if err := generateAll(ctx, log, projectRoot, tasks); err != nil {
+		t.Fatal(err)
+	}
+
+	if peak := peakConcurrency(t, trace); peak > bound {
+		t.Errorf("%d generators ran at once, want at most the bound of %d", peak, bound)
+	}
+
+	// Bounded is not skipped: every generator the manifest declared ran to
+	// completion and its file is in the tree.
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(output, name+".txt")); err != nil {
+			t.Errorf("generator %q did not reach the output tree: %v", name, err)
+		}
+	}
+
+	// And the outcome is the manifest's order, which is the invariant a limiter
+	// is the obvious way to break: results are stored at each task's own index
+	// rather than appended as they finish.
+	want := []string{"avroc-gen-a", "avroc-gen-b", "avroc-gen-c", "avroc-gen-d"}
+	if got := generatorsReported(records()); !slices.Equal(got, want) {
+		t.Errorf("generators reported in the order %q, want the manifest's %q", got, want)
+	}
+}
+
+// TestGenerateAllIsTheManifestsOrderWhateverTheBound runs one manifest twice —
+// once bounded to a single generator, once at the bound the machine gives it —
+// and requires the two runs to be the same run.
+//
+// The generators finish in the reverse of the manifest's order when they are
+// allowed to overlap and in the manifest's order when they are not, so the two
+// runs genuinely differ in who finished when. What must not differ is anything
+// the user sees: the files merged, the record of them, and the order the run is
+// reported in.
+func TestGenerateAllIsTheManifestsOrderWhateverTheBound(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	names := []string{"a", "b", "c", "d"}
+	// Reverse of the manifest's order: the first generator declared is the last
+	// to finish whenever they run together.
+	pauses := []string{"0.4", "0.3", "0.2", "0.1"}
+
+	run := func(t *testing.T) (record []byte, reported []string, finished []string) {
+		t.Helper()
+
+		log, records := recordingLogger()
+		projectRoot, output := newProject(t)
+		trace := filepath.Join(t.TempDir(), "trace")
+
+		tasks := make([]genTask, 0, len(names))
+		for i, name := range names {
+			tasks = append(tasks, tracedTask(t, name, output, trace, pauses[i]))
+		}
+		if err := generateAll(ctx, log, projectRoot, tasks); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, name := range names {
+			if _, err := os.Stat(filepath.Join(output, name+".txt")); err != nil {
+				t.Errorf("generator %q did not reach the output tree: %v", name, err)
+			}
+		}
+
+		b, err := os.ReadFile(filepath.Join(projectRoot, outputRecordFilename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range readTrace(t, trace) {
+			if e.event == "end" {
+				finished = append(finished, e.generator)
+			}
+		}
+		return b, generatorsReported(records()), finished
+	}
+
+	unboundedRecord, unboundedReport, unboundedFinish := run(t)
+
+	boundedRecord, boundedReport, boundedFinish := func() ([]byte, []string, []string) {
+		defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+		return run(t)
+	}()
+
+	want := []string{"avroc-gen-a", "avroc-gen-b", "avroc-gen-c", "avroc-gen-d"}
+	if !slices.Equal(unboundedReport, want) {
+		t.Errorf("unbounded run reported %q, want the manifest's %q", unboundedReport, want)
+	}
+	if !slices.Equal(boundedReport, want) {
+		t.Errorf("bounded run reported %q, want the manifest's %q", boundedReport, want)
+	}
+	if !bytes.Equal(unboundedRecord, boundedRecord) {
+		t.Errorf("the record depends on the bound:\n%s\n%s", unboundedRecord, boundedRecord)
+	}
+
+	// Not an assertion about the bound so much as evidence that the assertions
+	// above were worth making: if the two runs finished in the same order, the
+	// pauses stopped separating them and this test has been checking nothing.
+	if slices.Equal(unboundedFinish, boundedFinish) {
+		t.Logf("both runs finished in the order %q; the bound made no observable difference", boundedFinish)
+	}
+}
+
+// TestGenerateAllUnderTheBoundStillFailsAsAWhole is the failure path with a
+// manifest larger than the bound: a generator queued behind the failing one is
+// still run, the run still fails, and nothing any of them produced is adopted.
+func TestGenerateAllUnderTheBoundStillFailsAsAWhole(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	projectRoot, output := newProject(t)
+	trace := filepath.Join(t.TempDir(), "trace")
+
+	failing := genTask{
+		name: "avroc-gen-failing",
+		executablePath: writeNamedShellGenerator(t, "failing", `echo 'error: com.example.User: nope' >&2
+exit 1
+`),
+		output:  output,
+		schemas: []*avrocpb.Schema{testSchema("User")},
+	}
+	tasks := []genTask{
+		tracedTask(t, "first", output, trace, "0.1"),
+		failing,
+		tracedTask(t, "last", output, trace, "0.1"),
+	}
+
+	if err := generateAll(ctx, log, projectRoot, tasks); err == nil {
+		t.Fatal("generation succeeded with a generator that exited non-zero")
+	}
+
+	// The sibling behind the failure in the queue still ran: a failing generator
+	// is not a reason to abandon the ones that have not started, because the run
+	// has to be able to report every generator's diagnostics and not just the
+	// first one's.
+	want := []string{"first", "last"}
+	if got := generatorsThatStarted(t, trace); !slices.Equal(got, want) {
+		t.Errorf("generators that ran = %q, want %q", got, want)
+	}
+
+	// Nothing adopted, and no scratch directory left behind: the tree a failed
+	// run leaves is the one it started with.
+	entries, err := os.ReadDir(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed run left %v in the output directory", entries)
+	}
+}
+
+// TestGenerateAllUnderTheBoundIsCancellable is cancellation with a manifest
+// larger than the bound: the generator that was running is waited on, the
+// generators still queued behind it never start, and none of them leaves
+// anything in the project's tree.
+func TestGenerateAllUnderTheBoundIsCancellable(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	projectRoot, output := newProject(t)
+	trace := filepath.Join(t.TempDir(), "trace")
+
+	// exec, so that the process avroc kills is the one that sleeps; a shell that
+	// forked it would leave it orphaned holding the streams avroc reads.
+	blocking := genTask{
+		name: "avroc-gen-blocking",
+		executablePath: writeNamedShellGenerator(t, "blocking", fmt.Sprintf(`printf '%%s start\n' 'blocking' >> '%s'
+exec sleep 300
+`, trace)),
+		output:  output,
+		schemas: []*avrocpb.Schema{testSchema("User")},
+	}
+	tasks := []genTask{
+		blocking,
+		tracedTask(t, "queued", output, trace, "0.1"),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- generateAll(ctx, log, projectRoot, tasks)
+	}()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for len(generatorsThatStarted(t, trace)) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the first generator never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("generation reported success for a cancelled run")
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("generation did not return after its context was cancelled")
+	}
+
+	// The queued generator was submitted, so it is waited on either way; what it
+	// must not do is fork a process for a run that has been cancelled.
+	if got := generatorsThatStarted(t, trace); !slices.Equal(got, []string{"blocking"}) {
+		t.Errorf("generators that ran = %q, want just the one that was running when the run was cancelled", got)
+	}
+
+	// And neither of them left a scratch directory in a tree a person is about to
+	// look at.
+	entries, err := os.ReadDir(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a cancelled run left %v in the output directory", entries)
+	}
+}
+
+// TestGenerateAllRefusesACollisionUnderTheBound is #118 with a manifest larger
+// than the bound: the generators can no longer all be in flight together, and
+// the report is the same report — every colliding path, naming every generator
+// that claimed it, in an order that is the plans' and not the scheduler's.
+func TestGenerateAllRefusesACollisionUnderTheBound(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	defer cancel()
+
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	projectRoot, output := newProject(t)
+
+	var reports []string
+	for _, order := range [][]string{{"json", "pcf"}, {"pcf", "json"}} {
+		// Four generators against a bound of one, two of which claim user.avsc.
+		tasks := []genTask{
+			collidingTask(t, "first", output, "only-first.avsc"),
+			collidingTask(t, order[0], output, "user.avsc", "only-"+order[0]+".avsc"),
+			collidingTask(t, "third", output, "only-third.avsc"),
+			collidingTask(t, order[1], output, "user.avsc", "only-"+order[1]+".avsc"),
+		}
+
+		err := generateAll(ctx, log, projectRoot, tasks)
+		if err == nil {
+			t.Fatalf("generation accepted %q and %q both producing user.avsc", order[0], order[1])
+		}
+		for _, want := range []string{"avroc-gen-json", "avroc-gen-pcf", filepath.Join(output, "user.avsc")} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not name %q", err, want)
+			}
+		}
+		reports = append(reports, err.Error())
+
+		entries, readErr := os.ReadDir(output)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("a collision left %v in the output directory", entries)
+		}
+	}
+
+	if reports[0] != reports[1] {
+		t.Errorf("the report depends on the order the generators ran:\n%s\n%s", reports[0], reports[1])
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -432,6 +433,39 @@ func TestCheckGenerators(t *testing.T) {
 			if !strings.Contains(err.Error(), "avroc-gen-a") {
 				t.Fatalf("failure %q is not about the first generator", err.Error())
 			}
+		}
+	})
+
+	t.Run("runs one generator at a time", func(t *testing.T) {
+		// Sequential on purpose, and stated here rather than left to be inferred
+		// from the test above: #184 bounded the generation pool, and a story about
+		// concurrency is exactly where someone would think to parallelise the
+		// handshake too. It is a few short-lived execs, and what it buys is a
+		// manifest with two broken generators failing on the same one every time
+		// rather than on whichever process lost the race.
+		trace := filepath.Join(t.TempDir(), "trace")
+		tasks := make([]genTask, 0, 3)
+		for _, name := range []string{"a", "b", "c"} {
+			body := fmt.Sprintf(`printf '%%s start\n' '%s' >> '%s'
+sleep 0.2
+printf '%%s end\n' '%s' >> '%s'
+`, name, trace, name, trace) + conformingHandshake(name, ir.Version)
+			tasks = append(tasks, genTask{
+				name:           "avroc-gen-" + name,
+				executablePath: writeNamedShellGenerator(t, name, body),
+			})
+		}
+
+		if err := checkGenerators(t.Context(), discard, tasks); err != nil {
+			t.Fatal(err)
+		}
+
+		if peak := peakConcurrency(t, trace); peak != 1 {
+			t.Errorf("%d generators answered the handshake at once, want one at a time", peak)
+		}
+		want := []string{"a", "b", "c"}
+		if got := generatorsThatStarted(t, trace); !slices.Equal(got, want) {
+			t.Errorf("the handshake ran the generators in the order %q, want the manifest's %q", got, want)
 		}
 	})
 
