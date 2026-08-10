@@ -282,10 +282,24 @@ are checked against the same expected tree, which is what makes them
 interchangeable rather than merely both present.
 
 Its generated code is committed for the same reason the root module's is, and
-`dagger develop -m ./daggerverse/avroc` regenerates it. Note that `dagger
-develop` rewrites `go.mod` from the SDK's template and will lower dependency
-versions Renovate has raised for a security advisory; both modules pin the same
-set, and `git diff -- '*/go.mod'` after a regeneration is what catches it.
+`dagger develop -m ./daggerverse/avroc` regenerates it. `go.mod` is part of that
+output rather than a dependency declaration: `dagger develop` rewrites it whole
+from the Go SDK's template for `dagger.json`'s `engineVersion`, which is why both
+modules pin byte-identical sets and why neither has ever added a require of its
+own — `.dagger` reaches the devex `go` and `z5labs` modules through
+`dagger.json`'s `dependencies`, not through `go.mod`. **Renovate is disabled on
+those files** for that reason (#200), by a `packageRules` entry matching
+`.dagger/go.mod` and `daggerverse/**/go.mod`: a version it raised there survived
+only until the next regeneration lowered it again, so the exclusion removes a
+hazard rather than a protection, and `osvVulnerabilityAlerts` no longer reaching
+them is the intended outcome and not its cost. `engineVersion` is the lever that
+moves those requires, and the `pin` SHAs beside it are the lever that moves the
+devex dependencies; neither is Renovate-managed today. The rule names the
+generated files rather than the directories holding them, because
+`.dagger/release.go` carries a custom regex manager — the cosign module version —
+that a directory-wide `ignorePaths` entry would silently switch off, and it is
+last in `packageRules` because the `indirect` rule above it would otherwise
+re-enable exactly the requires it excludes.
 
 ### Releasing the images
 

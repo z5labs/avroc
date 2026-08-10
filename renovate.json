@@ -80,6 +80,14 @@
                 "minor",
                 "major"
             ]
+        },
+        {
+            "description": "The dagger modules' go.mod files are codegen output, not dependency declarations: `dagger develop` rewrites them wholesale from the Go SDK's template for dagger.json's engineVersion, so anything Renovate raises here is lowered again by the next regeneration. The engine version is the lever that actually moves these requires. Scoped to the generated go.mod files by name, not to the directories holding them, so the custom regex manager on .dagger/release.go keeps running.",
+            "matchFileNames": [
+                ".dagger/go.mod",
+                "daggerverse/**/go.mod"
+            ],
+            "enabled": false
         }
     ],
     "postUpdateOptions": [
