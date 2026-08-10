@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -135,6 +136,36 @@ func TestPlanGenerators(t *testing.T) {
 
 		if _, err := planGenerators(m, generators, t.TempDir()); err == nil {
 			t.Fatal("expected an error for missing inputs, got nil")
+		}
+	})
+}
+
+// TestMaxConcurrentGenerators is where the bound comes from: the machine avroc
+// is running on, not the manifest it was handed.
+func TestMaxConcurrentGenerators(t *testing.T) {
+	t.Run("is the processors the runtime gives avroc", func(t *testing.T) {
+		// GOMAXPROCS rather than NumCPU is what makes the bound cgroup-aware: the
+		// runtime derives it from the CPU limit when a quota is lower than the
+		// host's core count, and an operator can override it from the environment.
+		// Setting it here is the only vantage point from which "the bound follows
+		// it" is observable at all.
+		defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+
+		if got := maxConcurrentGenerators(); got != 1 {
+			t.Errorf("bound = %d with GOMAXPROCS(1), want 1", got)
+		}
+
+		runtime.GOMAXPROCS(2)
+		if got := maxConcurrentGenerators(); got != 2 {
+			t.Errorf("bound = %d with GOMAXPROCS(2), want 2", got)
+		}
+	})
+
+	t.Run("is never less than one", func(t *testing.T) {
+		// A bound of zero would run no generator at all, and conc panics on one, so
+		// the clamp holds whatever the runtime reports.
+		if got := maxConcurrentGenerators(); got < 1 {
+			t.Errorf("bound = %d, want at least 1", got)
 		}
 	})
 }
