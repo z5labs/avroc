@@ -78,7 +78,7 @@ const (
 	// the binary this release signs with the binary the pin names.
 	//
 	// renovate: datasource=go depName=github.com/sigstore/cosign/v2
-	cosignPackage = "github.com/sigstore/cosign/v2/cmd/cosign@v2.6.5"
+	cosignPackage = "github.com/sigstore/cosign/v2/cmd/cosign@v3.1.3"
 
 	// rollingTag is docs/container/SPEC.md's rolling tag, the one that moves on
 	// every release.
