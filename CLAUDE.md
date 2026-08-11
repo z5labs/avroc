@@ -34,6 +34,7 @@ go test -v ./...
 - **`internal/avroc-gen-pcf/`** — Parsing Canonical Form generator plugin. Reads the descriptor it is handed and writes one canonical `.avsc` per schema beneath `--out`. Its files are `ir.CanonicalJSON`'s bytes verbatim — no trailing newline, no re-indentation — because they are fingerprint input rather than a rendering for a person.
 - **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it and produces its output through `plugin.FileWriter` — one call per file, path and whole content — with `plugin.OutputDir` the implementation that owns the path check, the directory creation and the record of what was written. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
+- **`internal/telemetry/`** — avroc's tracer provider, and nothing that uses it (#191). See "Tracing" below.
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list. `ir.SchemaBaseName` is the one every generator's filename comes from, and it names the schema after what its **root type** is about: a named type is about itself, an array and a map are about what they contain (so `schema array<Event>;` is `event.go`, not the namespace's last component, #172), and anything else — a primitive, a union with no single subject — falls through to the additional types, then the namespace, then `schema`.
 - **`internal/docs/`** — No implementation; it is where the published documentation is checked from. `TestEveryRelativeLinkInTheDocumentationResolves` walks every Markdown file in the repository and requires each relative link to resolve *from the file it is written in*, fragment included, because a link is the one part of a document that breaks silently — renaming a heading breaks every reference to it without touching the files carrying them. Links inside fenced blocks are skipped: `docs/CONVENTIONS.md` quotes the conformance-language template, whose `../CONVENTIONS.md` is a path for the *quoting* document to write and not one to resolve from there. Nothing external is fetched, so the check is the same offline.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
@@ -156,6 +157,63 @@ is how the pipeline builds `ir.binpb`, `.github/workflows/release.yaml` attaches
 it to each release, and `docs/container/SPEC.md` fixes the path it ships at
 inside the image. `avrocpb/descriptor_set_test.go` is the staleness gate: a new
 `.proto` that nothing in the descriptor's import graph reaches fails there.
+
+### Tracing
+
+`internal/telemetry` is the tracer provider and nothing that uses it (#191). It
+is configured from the OpenTelemetry environment variable specification —
+`OTEL_SDK_DISABLED`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`,
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`,
+`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and its
+`OTEL_TRACES_SAMPLER_ARG` — because those are the names an operator already sets,
+and because standard error is now the generator's own to write and avroc's to get
+out of the way (#190), which leaves a span as the only thing a CI pipeline can
+put a build's code generation inside. Every one of them is read through
+`cli.Context.Env` and never through `os`: the SDK reads the process environment
+itself if given the chance, and a configuration half injected and half real is
+one no test can describe. The signal-specific forms
+(`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and friends) are deliberately absent rather
+than half-present — honouring one of a set and not the others is the
+configuration that looks like it worked.
+
+Four things are decisions rather than mechanics.
+
+- **Off is the default and off costs nothing.** With no endpoint, or with
+  `OTEL_SDK_DISABLED=true`, `Start` constructs no exporter, starts no goroutine,
+  attempts no connection, writes nothing to either stream and touches not one of
+  OpenTelemetry's globals — the last being what makes "off" a property of the
+  process rather than of the package. A **misconfiguration is treated the same
+  way**: an endpoint that is not a URL, a protocol this build cannot speak, a
+  sampler it does not know are each one warning and an untraced run. avroc does
+  not guess at a telemetry configuration it cannot read, and it does not fail a
+  build over one either.
+- **The flush is the part that gets skipped**, so it is not deferred in `main`.
+  `cmd/avroc/main.go` calls `os.Exit` the moment `avroc.Main` returns and
+  `os.Exit` runs no deferred function — the `defer cancel()` up there has never
+  run. `Main` therefore starts tracing and defers `Provider.Shutdown` itself, so
+  every path out of the command, the failing ones included, reaches the flush;
+  and `Shutdown` derives its own context with `context.WithoutCancel` plus a
+  timeout, because the run somebody pressed Ctrl-C on is the run whose trace is
+  worth having and is exactly the one whose context is already cancelled.
+- **A failed export is a log record.** `otel.SetErrorHandler` is replaced with one
+  logging through `cli.Context.Log`, so a broken collector never reaches a
+  standard stream directly. It is installed only when tracing is on, for the
+  reason above.
+- **The OTLP exporter is written here** (`exporter.go`, `transform.go`) rather
+  than imported. `otlptracehttp` was tried first: it pulls
+  `go.opentelemetry.io/proto/otlp/collector/trace/v1` in for one message type, and
+  that package carries the generated gRPC service and grpc-gateway stubs with it,
+  so an HTTP-only exporter would link grpc-go into executables that ship inside a
+  `scratch` image — the cost OTLP over HTTP was chosen to avoid. What is left once
+  that package is out of the way is small: the OTLP *data* messages carry no
+  service definition, the transform is mechanical, and
+  `ExportTraceServiceRequest` is one repeated field written with `protowire`.
+  `TestTheTracingStackCarriesNoGRPCTransport` reads `go.mod` and is what notices
+  the day somebody imports the convenient thing instead.
+
+Tracing is an observation of a run and never an input to it:
+`TestGeneratedBytesAreTheSameTracedOrNot` requires a traced run and an untraced
+one to leave the same tree behind, byte for byte.
 
 ### Determinism
 
@@ -334,6 +392,7 @@ and cosign itself is built by `dag.Go().Install` at a module version pinned in
 - `github.com/z5labs/avro-go` — Avro IDL parser
 - `google.golang.org/protobuf` — the IR's schema language, and the descriptor's wire encoding
 - `github.com/sourcegraph/conc` — Structured concurrency for parallel generator execution
+- `go.opentelemetry.io/otel`, `.../otel/sdk`, `.../proto/otlp` — the tracer provider, and the OTLP data messages its exporter encodes. Deliberately **not** an OTLP exporter module; see "Tracing"
 
 ## Conventions
 
