@@ -56,7 +56,7 @@ func TestPlanGenerators(t *testing.T) {
 		}
 		generators := map[string]string{"avroc-gen-go": "/fake/avroc-gen-go"}
 
-		tasks, err := planGenerators(m, generators, dir)
+		tasks, err := planGenerators(t.Context(), m, generators, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +99,7 @@ func TestPlanGenerators(t *testing.T) {
 			"avroc-gen-json": "/fake/avroc-gen-json",
 		}
 
-		tasks, err := planGenerators(m, generators, dir)
+		tasks, err := planGenerators(t.Context(), m, generators, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +119,7 @@ func TestPlanGenerators(t *testing.T) {
 			},
 		}
 
-		_, err := planGenerators(m, map[string]string{}, t.TempDir())
+		_, err := planGenerators(t.Context(), m, map[string]string{}, t.TempDir())
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -134,7 +134,7 @@ func TestPlanGenerators(t *testing.T) {
 		}
 		generators := map[string]string{"avroc-gen-go": "/fake/avroc-gen-go"}
 
-		if _, err := planGenerators(m, generators, t.TempDir()); err == nil {
+		if _, err := planGenerators(t.Context(), m, generators, t.TempDir()); err == nil {
 			t.Fatal("expected an error for missing inputs, got nil")
 		}
 	})
@@ -183,7 +183,7 @@ func TestRunGenerate_MissingManifest(t *testing.T) {
 		WorkingDir: t.TempDir(), // empty dir: no avroc.json
 	}
 
-	if code := runGenerate(context.Background(), ctx); code != 1 {
+	if code := runGenerate(context.Background(), ctx, noopTracer()); code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
 }
@@ -195,7 +195,7 @@ func TestRunGenerate_PathNotSet(t *testing.T) {
 		OpenDir: staticOpenDir(fstest.MapFS{}),
 	}
 
-	if code := runGenerate(context.Background(), ctx); code != 1 {
+	if code := runGenerate(context.Background(), ctx, noopTracer()); code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
 }

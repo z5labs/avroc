@@ -18,6 +18,9 @@ import (
 	"github.com/z5labs/avroc/internal/cli"
 
 	"github.com/sourcegraph/conc/pool"
+	"github.com/z5labs/avro-go/idl"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // genTask is a single resolved unit of work: one generator to run with its
@@ -34,29 +37,59 @@ type genTask struct {
 // generator against the PATH-discovered executables, parses the declared input
 // IDL files, and runs the generators concurrently, writing their streamed
 // output under each generator's output directory.
-func runGenerate(ctx context.Context, cli cli.Context) int {
+//
+// It is also where the run's root span starts and ends, which is the one place
+// the tracer is handed in rather than taken from the context: every phase below
+// inherits its provider from this span (see startSpan). The exit status and the
+// span's status say the same thing about the same run — a run that returns 1
+// leaves a span marked with the error that produced it, and a run somebody
+// interrupted leaves one marked cancelled.
+func runGenerate(ctx context.Context, cli cli.Context, tracer trace.Tracer) int {
+	ctx, span := tracer.Start(ctx, spanRun)
+
+	var err error
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
+	if err = generate(ctx, cli); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// generate is the run itself, phase by phase, each of them reported as it fails
+// and returned to runGenerate to become the exit status and the root span's.
+func generate(ctx context.Context, cli cli.Context) error {
 	path, ok := cli.Env.LookupEnv("PATH")
 	if !ok {
-		cli.Log.ErrorContext(ctx, "unable to lookup generators", slog.Any("error", "PATH environment variable not set"))
-		return 1
+		err := errors.New("PATH environment variable not set")
+		cli.Log.ErrorContext(ctx, "unable to lookup generators", slog.Any("error", err))
+		return err
 	}
 
 	generators, err := lookupGenerators(ctx, cli.Log, cli.OpenDir, filepath.SplitList(path)...)
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to lookup generators", slog.Any("error", err))
-		return 1
+		return err
 	}
 
+	// The span is started and ended around the call rather than inside
+	// loadManifest, which takes no context and does one filesystem read: a phase
+	// that cannot be cancelled has no business growing a context parameter for a
+	// span's sake.
+	_, manifestSpan := startSpan(ctx, spanManifestLoad)
 	manifest, err := loadManifest(cli, cli.WorkingDir)
+	endSpan(ctx, manifestSpan, err)
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to load manifest", slog.Any("error", err))
-		return 1
+		return err
 	}
 
-	tasks, err := planGenerators(manifest, generators, cli.WorkingDir)
+	tasks, err := planGenerators(ctx, manifest, generators, cli.WorkingDir)
 	if err != nil {
 		cli.Log.ErrorContext(ctx, "failed to plan generation", slog.Any("error", err))
-		return 1
+		return err
 	}
 
 	// docs/plugin/SPEC.md's capability handshake, and it runs before the pool
@@ -65,15 +98,15 @@ func runGenerate(ctx context.Context, cli cli.Context) int {
 	// produced output the user now has to work out whether to keep.
 	if err := checkGenerators(ctx, cli.Log, tasks); err != nil {
 		cli.Log.ErrorContext(ctx, "generator capability handshake failed", slog.Any("error", err))
-		return 1
+		return err
 	}
 
 	if err := generateAll(ctx, cli.Log, cli.WorkingDir, tasks); err != nil {
 		cli.Log.ErrorContext(ctx, "failed to run generators", slog.Any("error", err))
-		return 1
+		return err
 	}
 
-	return 0
+	return nil
 }
 
 // generateAll runs every planned generator and merges what they produced into
@@ -159,7 +192,7 @@ func generateAll(ctx context.Context, log *slog.Logger, projectRoot string, task
 		return waitErr
 	}
 
-	if err := mergeOutputs(projectRoot, outs); err != nil {
+	if err := mergeOutputs(ctx, projectRoot, outs); err != nil {
 		log.ErrorContext(ctx, "failed to merge generated output", slog.Any("error", err))
 		return err
 	}
@@ -228,8 +261,9 @@ func maxConcurrentGenerators() int {
 // working directory — no generator subprocesses are spawned — so it can be
 // unit-tested in isolation. It does read and parse the declared input IDL files
 // from disk; each input is parsed at most once even when shared across
-// generators.
-func planGenerators(m *Manifest, generators map[string]string, workingDir string) ([]genTask, error) {
+// generators — and so is traced at most once, because the cache is what decides
+// whether there was any work to observe.
+func planGenerators(ctx context.Context, m *Manifest, generators map[string]string, workingDir string) ([]genTask, error) {
 	schemaCache := make(map[string]*avrocpb.Schema)
 
 	tasks := make([]genTask, 0, len(m.Generators))
@@ -250,7 +284,7 @@ func planGenerators(m *Manifest, generators map[string]string, workingDir string
 			resolved := filepath.Join(workingDir, in)
 			schema, ok := schemaCache[resolved]
 			if !ok {
-				loaded, err := loadSchema(resolved)
+				loaded, err := loadSchema(ctx, in, resolved)
 				if err != nil {
 					return nil, fmt.Errorf("generator %q input %q: %w", g.Name, in, err)
 				}
@@ -289,16 +323,52 @@ func dedupInputs(shared, own []string) []string {
 
 // loadSchema parses, validates, and resolves a single IDL file into the
 // protobuf schema sent to a generator.
-func loadSchema(path string) (*avrocpb.Schema, error) {
+//
+// The two halves carry a span each, because they are the two phases the story
+// names: reading an IDL file and resolving the IR it describes are different
+// work over the same input, and a project that is slow in one is not slow in the
+// other. Both name the input as the manifest wrote it rather than as it resolved
+// on this machine, so a trace reads like avroc.json.
+func loadSchema(ctx context.Context, input, path string) (*avrocpb.Schema, error) {
+	schema, err := parseInput(ctx, input, path)
+	if err != nil {
+		return nil, err
+	}
+	return resolveInput(ctx, input, schema)
+}
+
+// parseInput is loadSchema's first phase: the IDL file read off disk and parsed.
+func parseInput(ctx context.Context, input, path string) (_ *idl.Schema, err error) {
+	_, span := startSpan(ctx, spanIDLParse, trace.WithAttributes(attribute.String(attrInput, input)))
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
 	f, err := parseIDL(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IDL file: %w", err)
 	}
 	if f.Schema == nil {
-		return nil, fmt.Errorf("IDL file does not contain a schema")
+		return nil, errors.New("IDL file does not contain a schema")
 	}
-	if err := validateSchema(f.Schema); err != nil {
+	return f.Schema, nil
+}
+
+// resolveInput is loadSchema's second phase: the parsed schema validated and
+// resolved into the IR a generator is handed.
+//
+// Validation is inside this span rather than beside it. It is the first half of
+// resolving — the questions resolve.go would otherwise have to ask again — and a
+// third span for it would be a boundary in the trace that is not a boundary in
+// the code.
+func resolveInput(ctx context.Context, input string, schema *idl.Schema) (_ *avrocpb.Schema, err error) {
+	_, span := startSpan(ctx, spanIRResolve, trace.WithAttributes(attribute.String(attrInput, input)))
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
+	if err := validateSchema(schema); err != nil {
 		return nil, fmt.Errorf("schema validation failed: %w", err)
 	}
-	return resolveSchema(f.Schema)
+	return resolveSchema(schema)
 }

@@ -555,7 +555,7 @@ func TestRunGenerateRenamingARecordRemovesTheStaleFile(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(projectRoot, "schema.avdl"), []byte(recordIDL(record)), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if code := runGenerate(ctx, c); code != 0 {
+		if code := runGenerate(ctx, c, noopTracer()); code != 0 {
 			t.Fatalf("avroc generate over record %q exited %d", record, code)
 		}
 	}

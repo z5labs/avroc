@@ -218,7 +218,7 @@ func TestPlanGenerators_DescriptorsAreReproducible(t *testing.T) {
 
 	encode := func() [][]byte {
 		t.Helper()
-		tasks, err := planGenerators(m, generators, dir)
+		tasks, err := planGenerators(t.Context(), m, generators, dir)
 		if err != nil {
 			t.Fatal(err)
 		}

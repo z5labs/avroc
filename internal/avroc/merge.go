@@ -6,6 +6,7 @@
 package avroc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,9 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // newScratchDir creates the private, empty directory one generator invocation
@@ -96,9 +100,26 @@ type generatorOutput struct {
 // run produced and this one did not is pruneStale's, and it runs after this
 // returns: nothing is removed from the tree until everything this run produced
 // is in it (#119).
-func mergeOutputs(projectRoot string, outs []*generatorOutput) error {
-	if err := checkCollisions(outs); err != nil {
-		return err
+func mergeOutputs(ctx context.Context, projectRoot string, outs []*generatorOutput) (err error) {
+	ctx, span := startSpan(ctx, spanMerge)
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
+	// Recorded on this span rather than on any generator's, because a collision
+	// is a fact about the whole set of plans: the generators that claimed a path
+	// each did nothing wrong on their own, and neither of their spans is where a
+	// person would look for what the two of them did together. The events are
+	// added in the order the refusal reports them, so the trace and the message a
+	// user sees name the same paths in the same order.
+	if collisions := findCollisions(outs); len(collisions) > 0 {
+		for _, c := range collisions {
+			span.AddEvent(eventCollision, trace.WithAttributes(
+				attribute.String(attrPath, c.path),
+				attribute.StringSlice(attrGenerators, c.generators),
+			))
+		}
+		return collisionError(collisions)
 	}
 	if err := checkReservedPaths(projectRoot, outs); err != nil {
 		return err
@@ -122,7 +143,19 @@ func mergeOutputs(projectRoot string, outs []*generatorOutput) error {
 	return nil
 }
 
-// checkCollisions refuses a run in which two generators produce the same file.
+// collision is one destination path more than one generator produced: the path,
+// and every generator that claimed it, sorted by name.
+//
+// It is a value rather than a formatted string because the same fact is said
+// twice — once to the person whose run was refused and once on the merge span —
+// and two renderings computed from one value cannot disagree about which
+// generators collided or in what order.
+type collision struct {
+	path       string
+	generators []string
+}
+
+// findCollisions reports every destination path two or more generators produced.
 //
 // avroc owns the project's output tree, so this is avroc's to detect: the
 // generators cannot see each other's directories, they are told not to try
@@ -138,12 +171,13 @@ func mergeOutputs(projectRoot string, outs []*generatorOutput) error {
 // destination says so. That is also why the report names the absolute path — it
 // is the one name both generators' output is described by.
 //
-// The report is a function of the plans and of nothing else. Every claim is
-// collected before anything is reported, the colliding paths are sorted, and the
+// The result is a function of the plans and of nothing else. Every claim is
+// collected before anything is decided, the colliding paths are sorted, and the
 // generators claiming each one are sorted by name, so two runs over unchanged
-// inputs produce the identical message however the generators were ordered in
-// the manifest and whichever of them finished first.
-func checkCollisions(outs []*generatorOutput) error {
+// inputs produce the identical report — and the identical events on the merge
+// span — however the generators were ordered in the manifest and whichever of
+// them finished first.
+func findCollisions(outs []*generatorOutput) []collision {
 	claimants := make(map[string][]string)
 	var collided []string
 	for _, out := range outs {
@@ -161,11 +195,27 @@ func checkCollisions(outs []*generatorOutput) error {
 	}
 
 	slices.Sort(collided)
-	reports := make([]string, 0, len(collided))
+	collisions := make([]collision, 0, len(collided))
 	for _, dst := range collided {
 		names := slices.Clone(claimants[dst])
 		slices.Sort(names)
-		reports = append(reports, fmt.Sprintf("%q is produced by generators %s", dst, quotedList(names)))
+		collisions = append(collisions, collision{path: dst, generators: names})
+	}
+	return collisions
+}
+
+// collisionError is what a run refused for a collision fails with: every
+// colliding path, in the order findCollisions fixed, naming every generator that
+// claimed it.
+//
+// The path it names is the absolute destination rather than either generator's
+// relative one, because two generators need not share an output directory: one
+// writing "pkg/user.avsc" under the project root and one writing "user.avsc"
+// under "pkg/" collide, and only the resolved destination says so.
+func collisionError(collisions []collision) error {
+	reports := make([]string, 0, len(collisions))
+	for _, c := range collisions {
+		reports = append(reports, fmt.Sprintf("%q is produced by generators %s", c.path, quotedList(c.generators)))
 	}
 	return fmt.Errorf("refusing to merge: %s", strings.Join(reports, "; "))
 }

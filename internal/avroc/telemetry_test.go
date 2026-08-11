@@ -161,8 +161,13 @@ func TestAMisconfiguredExporterDoesNotFailTheRun(t *testing.T) {
 // traced run leaves behind is the tree an untraced one leaves behind, byte for
 // byte. Nothing in the generated output may reach for a trace id, a timestamp or
 // an endpoint.
+//
+// The collector is a decoding one rather than somewhere to discard an export,
+// because the comparison is only worth anything if the traced run was traced:
+// with the spans of #192 on it, a run that exported nothing would pass this test
+// while proving that tracing changes nothing about a run it never observed.
 func TestGeneratedBytesAreTheSameTracedOrNot(t *testing.T) {
-	endpoint := otlpEndpoint(t)
+	collector := newSpanCollector(t)
 
 	generate := func(t *testing.T, traced bool) map[string]string {
 		t.Helper()
@@ -183,7 +188,7 @@ func TestGeneratedBytesAreTheSameTracedOrNot(t *testing.T) {
 
 		env := map[string]string{"PATH": filepath.Dir(generatorPath)}
 		if traced {
-			env["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+			env["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint()
 			env["OTEL_SERVICE_NAME"] = "avroc-under-test"
 		}
 
@@ -210,6 +215,9 @@ func TestGeneratedBytesAreTheSameTracedOrNot(t *testing.T) {
 
 	if len(untraced) == 0 {
 		t.Fatal("the untraced run generated nothing, so the comparison is vacuous")
+	}
+	if names := collector.spanNames(t); len(names) == 0 {
+		t.Fatal("the traced run exported no spans, so the comparison is vacuous")
 	}
 	if len(untraced) != len(traced) {
 		t.Fatalf("the traced run produced %d files and the untraced one %d", len(traced), len(untraced))

@@ -6,6 +6,7 @@
 package avroc
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -111,7 +112,7 @@ func TestMergeOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	merged, err := mergeOne(scratch, output)
+	merged, err := mergeOne(t.Context(), scratch, output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +163,7 @@ func TestMergeOutputReplacesAnExistingFile(t *testing.T) {
 	}
 	writeScratch(t, scratch, "user.go", "package avro // new\n")
 
-	if _, err := mergeOne(scratch, output); err != nil {
+	if _, err := mergeOne(t.Context(), scratch, output); err != nil {
 		t.Fatal(err)
 	}
 
@@ -238,7 +239,7 @@ func TestMergeOutputRefusesToEscape(t *testing.T) {
 func assertRefused(t *testing.T, output, scratch, name string) {
 	t.Helper()
 
-	merged, err := mergeOne(scratch, output)
+	merged, err := mergeOne(t.Context(), scratch, output)
 	if err == nil {
 		t.Fatalf("the merge accepted %q and merged %q", name, merged)
 	}
@@ -275,7 +276,7 @@ func TestMergeOutputCreatesNothingWhenItRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := mergeOne(scratch, output); err == nil {
+	if _, err := mergeOne(t.Context(), scratch, output); err == nil {
 		t.Fatal("the merge accepted a scratch directory holding a symbolic link")
 	}
 
@@ -289,10 +290,21 @@ func TestMergeOutputCreatesNothingWhenItRefuses(t *testing.T) {
 // TestCheckCollisions is the report #118 asks for: two generators producing one
 // file is an error naming both of them and the path, and it is the same error
 // whichever of them avroc heard from first.
-func TestCheckCollisions(t *testing.T) {
+func TestFindCollisions(t *testing.T) {
 	root := t.TempDir()
 	pkg := filepath.Join(root, "pkg")
-	collision := filepath.Join(pkg, "user.avsc")
+	collided := filepath.Join(pkg, "user.avsc")
+
+	// The two halves the merge uses together: what collided, and what the run is
+	// refused with. Asserting on the second is asserting on both, because the
+	// message is computed from nothing but the first.
+	checkCollisions := func(outs []*generatorOutput) error {
+		collisions := findCollisions(outs)
+		if len(collisions) == 0 {
+			return nil
+		}
+		return collisionError(collisions)
+	}
 
 	t.Run("two generators producing one file", func(t *testing.T) {
 		// A different relative path under a different output directory, resolving
@@ -300,17 +312,17 @@ func TestCheckCollisions(t *testing.T) {
 		// destination, and it is the one the example manifest is a single edit
 		// away from — json at "." and pcf at "pcf/", both emitting .avsc.
 		json := &generatorOutput{generator: "avroc-gen-json", output: root, files: []mergedFile{
-			{rel: "pkg/user.avsc", dst: collision},
+			{rel: "pkg/user.avsc", dst: collided},
 		}}
 		pcf := &generatorOutput{generator: "avroc-gen-pcf", output: pkg, files: []mergedFile{
-			{rel: "user.avsc", dst: collision},
+			{rel: "user.avsc", dst: collided},
 		}}
 
 		err := checkCollisions([]*generatorOutput{json, pcf})
 		if err == nil {
 			t.Fatal("checkCollisions accepted two generators producing the same file")
 		}
-		for _, want := range []string{"avroc-gen-json", "avroc-gen-pcf", collision} {
+		for _, want := range []string{"avroc-gen-json", "avroc-gen-pcf", collided} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q does not name %q", err, want)
 			}
@@ -399,7 +411,7 @@ func TestMergeOutputsRefusesACollision(t *testing.T) {
 		"user.avsc": `{"produced_by":"pcf"}`,
 	})
 
-	err := mergeOutputs(output, []*generatorOutput{first, second})
+	err := mergeOutputs(t.Context(), output, []*generatorOutput{first, second})
 	if err == nil {
 		t.Fatal("the merge accepted two generators producing the same file")
 	}
@@ -510,7 +522,7 @@ func TestCopyIntoPlace(t *testing.T) {
 // resolved into a plan, and that plan merged. It is the pair of calls generateAll
 // makes with a single generator in the manifest, and it reports the files the
 // merge moved.
-func mergeOne(scratch, output string) ([]string, error) {
+func mergeOne(ctx context.Context, scratch, output string) ([]string, error) {
 	files, err := planMerge(scratch, output)
 	if err != nil {
 		return nil, err
@@ -521,7 +533,7 @@ func mergeOne(scratch, output string) ([]string, error) {
 		scratch:   scratch,
 		files:     files,
 	}
-	if err := mergeOutputs(output, []*generatorOutput{out}); err != nil {
+	if err := mergeOutputs(ctx, output, []*generatorOutput{out}); err != nil {
 		return nil, err
 	}
 	return relPaths(files), nil

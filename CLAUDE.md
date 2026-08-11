@@ -211,9 +211,45 @@ Four things are decisions rather than mechanics.
   `TestTheTracingStackCarriesNoGRPCTransport` reads `go.mod` and is what notices
   the day somebody imports the convenient thing instead.
 
+**`avroc generate` is the trace** (#192, `internal/avroc/trace.go`). One root span,
+`avroc.generate`, with a child for each phase that already existed as a function:
+`avroc.manifest.load`, `avroc.idl.parse` and `avroc.ir.resolve` (one of each per
+declared input, named as `avroc.json` wrote it, and skipped for an input the
+schema cache already parsed), `avroc.handshake` with an
+`avroc.generator.handshake` inside it per generator, an `avroc.generator.run` per
+invocation, then `avroc.merge`, `avroc.prune` and `avroc.record`. Nothing else is
+a phase — the trace is the decomposition the code already had, not a second one.
+`init` and `inspect` are untraced by construction rather than by omission: `Main`
+hands the tracer to `runGenerate` and to nothing else.
+
+Four things there are decisions.
+
+- **The provider travels in the context, not in a parameter and not in a global.**
+  `startSpan` takes the tracer from `trace.SpanFromContext(ctx).TracerProvider()`,
+  so every phase inherits the provider the run was configured with, a phase
+  called on its own in a test gets the no-op one rather than whatever
+  `otel.GetTracerProvider` is holding, and nothing below `Main` grew a
+  `trace.Tracer` argument to thread through untouched. It is the same reasoning
+  that has `internal/telemetry` read its environment through `cli.Context`.
+- **`endSpan` is the only place a status is set**, so a phase records failure
+  once. `reportFailure` contributes the classification it had already made for
+  the log — `exit_code`, or `signal` and `signal_number`, or neither for a
+  generator that never ran — as *attributes*, spelled exactly as the log spells
+  them; the status is set where the span ends, which is what lets a generator
+  killed by the kill `exec.CommandContext` sends be marked `cancelled` rather
+  than described twice.
+- **A collision is an event on the merge span**, not on either generator's, and
+  `findCollisions`/`collisionError` are one value rendered twice so the trace and
+  the refusal cannot disagree about which paths collided or in what order.
+- **Instrumentation must not become the reason iteration follows completion
+  order.** The merge, the record and the report are the manifest's (#184), and
+  `TestInstrumentationDidNotChangeTheIteration` runs generators that finish in the
+  reverse of the manifest's order with the spans recording.
+
 Tracing is an observation of a run and never an input to it:
 `TestGeneratedBytesAreTheSameTracedOrNot` requires a traced run and an untraced
-one to leave the same tree behind, byte for byte.
+one to leave the same tree behind, byte for byte — with a decoding collector on
+the traced side, so a run that exported nothing cannot pass it.
 
 ### Determinism
 

@@ -103,22 +103,44 @@ type pluginInfoJSON struct {
 //
 // Sequential, in task order, so that a manifest with two broken generators
 // reports the same one every time rather than whichever process lost the race.
-func checkGenerators(ctx context.Context, log *slog.Logger, tasks []genTask) error {
-	for _, task := range tasks {
-		info, err := queryPluginInfo(ctx, task.name, task.executablePath)
-		if err != nil {
-			return err
-		}
-		if err := checkPluginInfo(task.name, task.options, info); err != nil {
-			return err
-		}
+// The phase carries a span and so does each generator's handshake within it: the
+// phase is where the sequence is visible, and the child is where the generator
+// that was slow, or the generator that refused, is named.
+func checkGenerators(ctx context.Context, log *slog.Logger, tasks []genTask) (err error) {
+	ctx, span := startSpan(ctx, spanHandshake)
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
 
-		log.DebugContext(ctx, "generator declared its capabilities",
-			slog.String("generator", task.name),
-			slog.String("version", *info.Version),
-			slog.Int("ir_version", int(*info.IRVersion)),
-		)
+	for _, task := range tasks {
+		if err := checkGenerator(ctx, log, task); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// checkGenerator is one generator's half of the handshake: it answers, and what
+// it answered is one avroc accepts.
+func checkGenerator(ctx context.Context, log *slog.Logger, task genTask) (err error) {
+	ctx, span := startSpan(ctx, spanGeneratorHandshake, generatorAttr(task.name))
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
+	info, err := queryPluginInfo(ctx, task.name, task.executablePath)
+	if err != nil {
+		return err
+	}
+	if err := checkPluginInfo(task.name, task.options, info); err != nil {
+		return err
+	}
+
+	log.DebugContext(ctx, "generator declared its capabilities",
+		slog.String("generator", task.name),
+		slog.String("version", *info.Version),
+		slog.Int("ir_version", int(*info.IRVersion)),
+	)
 	return nil
 }
 
