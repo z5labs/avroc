@@ -148,13 +148,26 @@ func WithDefaultServiceName(name string) Option {
 // rather than being cut off by it — the relationship [ExportTimeout] and
 // [ShutdownTimeout] already have, written as a division so that shortening one
 // cannot leave the other behind.
+//
+// A budget too small to halve — under two nanoseconds, which is nobody's
+// intention and every division's edge — keeps the whole of it rather than
+// rounding to zero. Zero is the one value that must not reach the exporter,
+// because it is not "no time" there but "no timeout", and it would be answered
+// with [ExportTimeout]: a bound longer than the budget it was meant to fit
+// inside, which is the invariant inverted rather than merely relaxed.
 func WithFlushBudget(d time.Duration) Option {
 	return func(s *settings) {
 		if d <= 0 {
 			return
 		}
+
+		export := d / 2
+		if export <= 0 {
+			export = d
+		}
+
 		s.shutdownTimeout = d
-		s.exportTimeout = d / 2
+		s.exportTimeout = export
 	}
 }
 

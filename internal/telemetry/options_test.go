@@ -109,6 +109,26 @@ func TestTheFlushBudgetBoundsBothWaits(t *testing.T) {
 	if got, want := unbudgeted.exportTimeout, ExportTimeout; got != want {
 		t.Errorf("exportTimeout = %s for a zero budget, want the default %s", got, want)
 	}
+
+	// A budget too small to halve is nobody's intention and is still not allowed
+	// to invert the invariant: zero reaching the exporter is not "no time" but
+	// "no timeout", and it would be answered with a bound longer than the whole
+	// budget.
+	tiny, err := configFromEnv(
+		environ(map[string]string{envOTLPEndpoint: "http://localhost:4318"}),
+		"v0.0.0",
+		WithFlushBudget(time.Nanosecond),
+	)
+	if err != nil {
+		t.Fatalf("configFromEnv returned %v, want nil", err)
+	}
+	if tiny.exportTimeout <= 0 {
+		t.Errorf("exportTimeout = %s for a %s budget, which net/http reads as no timeout at all",
+			tiny.exportTimeout, time.Nanosecond)
+	}
+	if tiny.exportTimeout > tiny.shutdownTimeout {
+		t.Errorf("exportTimeout (%s) outlasts the whole flush budget (%s)", tiny.exportTimeout, tiny.shutdownTimeout)
+	}
 }
 
 // TestShutdownHonoursTheBudgetItWasGiven: the bound is on the Provider, so a
