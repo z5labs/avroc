@@ -6,6 +6,7 @@
 package avrocgenjson
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -26,7 +27,13 @@ import (
 // failure rather than a gap: the exit is non-zero, and avroc discards the whole
 // scratch directory instead of merging it, so no half a set of schemas reaches
 // the user's tree.
-func Generate(req *avrocpb.GenerateRequest, w plugin.FileWriter) error {
+//
+// One span per schema and nothing finer (#197). This generator writes one file
+// per schema and has no rendering to speak of, so a span for the descriptor
+// check or for the write would be more instrumentation than there is work, and a
+// trace carrying it would be harder to read rather than easier — avroc-gen-go is
+// where the finer phases are.
+func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWriter) error {
 	// The version comes first, before a single schema is looked at. A descriptor
 	// written against a contract this generator does not know is not one to read
 	// the recognisable parts of.
@@ -34,12 +41,19 @@ func Generate(req *avrocpb.GenerateRequest, w plugin.FileWriter) error {
 		return err
 	}
 
-	for _, schema := range req.Schemas {
-		filename, content, err := buildSchemaFile(schema)
+	for _, schema := range req.GetSchemas() {
+		// Once, and before the span: it is the name the file is built from as
+		// well as the name the span carries.
+		base := ir.SchemaBaseName(schema)
+
+		_, span := plugin.StartSchemaGenerate(ctx, base)
+		content, err := buildSchemaFile(schema)
+		plugin.EndPhase(span, err)
 		if err != nil {
 			return fmt.Errorf("failed to generate schema: %w", err)
 		}
-		if err := w.WriteFile(filename, content); err != nil {
+
+		if err := w.WriteFile(ir.SnakeCase(base)+".avsc", content); err != nil {
 			return err
 		}
 	}
@@ -48,23 +62,24 @@ func Generate(req *avrocpb.GenerateRequest, w plugin.FileWriter) error {
 }
 
 // buildSchemaFile generates the Avro JSON schema for a single schema, returning
-// its relative filename and content.
-func buildSchemaFile(schema *avrocpb.Schema) (string, []byte, error) {
+// its content. The filename is the caller's, built from the base name the span
+// it opened is named by.
+func buildSchemaFile(schema *avrocpb.Schema) ([]byte, error) {
 	if err := ir.Validate(schema); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	jsonSchema, err := schemaToJSON(schema)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	data, err := json.MarshalIndent(jsonSchema, "", "  ")
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal JSON schema: %w", err)
+		return nil, fmt.Errorf("failed to marshal JSON schema: %w", err)
 	}
 
-	return ir.SnakeCase(ir.SchemaBaseName(schema)) + ".avsc", append(data, '\n'), nil
+	return append(data, '\n'), nil
 }
 
 // avroRecord represents an Avro record type in JSON schema format.

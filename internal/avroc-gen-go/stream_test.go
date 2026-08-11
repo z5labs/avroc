@@ -18,10 +18,7 @@ import (
 // says the file it describes is a stream of Event, and what this generator used
 // to emit for it was Event and nothing else.
 func TestAnArrayRootGeneratesAStreamingReader(t *testing.T) {
-	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
+	content := renderSchema(t, "stream", arrayRootSchema())
 	code := string(content)
 	validateGoSyntax(t, code)
 
@@ -57,10 +54,7 @@ func TestAnArrayRootGeneratesAStreamingReader(t *testing.T) {
 // or a generated test of it for a negative one, would be a second
 // implementation of the framing to keep correct — one copy per schema.
 func TestTheStreamingReaderReimplementsNoBlockFraming(t *testing.T) {
-	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
+	content := renderSchema(t, "stream", arrayRootSchema())
 
 	// Everything the reader does with the stream, it does through these.
 	stream := streamSection(t, string(content), "type EventReader struct", "type EventWriter struct")
@@ -105,10 +99,7 @@ func streamSection(t *testing.T, code, marker, end string) string {
 // stream nothing can produce is a stream, and what this generator used to emit
 // for an array root took a []Event that already existed.
 func TestAnArrayRootGeneratesAStreamingWriter(t *testing.T) {
-	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
+	content := renderSchema(t, "stream", arrayRootSchema())
 	code := string(content)
 	validateGoSyntax(t, code)
 
@@ -141,10 +132,7 @@ func TestAnArrayRootGeneratesAStreamingWriter(t *testing.T) {
 // forces, and the zero-count block that terminates the array are all
 // type-independent, so all of them stay in avro-go.
 func TestTheStreamingWriterReimplementsNoBlockFraming(t *testing.T) {
-	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
+	content := renderSchema(t, "stream", arrayRootSchema())
 
 	writer := streamSection(t, string(content), "type EventWriter struct", "")
 	for _, allowed := range []string{
@@ -176,10 +164,7 @@ func TestTheStreamingWriterReimplementsNoBlockFraming(t *testing.T) {
 // avro-go's options through, which is what keeps the default unsized and the
 // buffer bound the caller's to set.
 func TestTheStreamingWriterDoesNotChooseTheBlockMode(t *testing.T) {
-	_, content, err := buildSchemaFile("stream", arrayRootSchema(), false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
+	content := renderSchema(t, "stream", arrayRootSchema())
 
 	writer := streamSection(t, string(content), "type EventWriter struct", "")
 	if !strings.Contains(writer, "opts ...avro.ArrayWriterOption") {
@@ -308,10 +293,7 @@ func TestOnlyAnArrayRootGeneratesAStreamingReader(t *testing.T) {
 				t.Errorf("streamReaderFor produced a reader: %t, want %t", got, tc.want)
 			}
 
-			_, content, err := buildSchemaFile("stream", tc.schema, false)
-			if err != nil {
-				t.Fatalf("buildSchemaFile failed: %v", err)
-			}
+			content := renderSchema(t, "stream", tc.schema)
 			code := string(content)
 			validateGoSyntax(t, code)
 

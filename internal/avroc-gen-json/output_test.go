@@ -49,7 +49,7 @@ func generateToDir(t *testing.T, dir string, req *avrocpb.GenerateRequest) (*gen
 	}
 
 	w := plugin.NewOutputDir(dir)
-	if err := Generate(req, w); err != nil {
+	if err := Generate(t.Context(), req, w); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ var errWriteRefused = errors.New("refused")
 // carry on, because a zero exit is the whole of the success signal and avroc
 // would adopt the output directory with the file missing from it.
 func TestGenerateReportsAFailedWrite(t *testing.T) {
-	err := Generate(&avrocpb.GenerateRequest{
+	err := Generate(t.Context(), &avrocpb.GenerateRequest{
 		Version: proto.Int32(ir.Version),
 		Schemas: []*avrocpb.Schema{versionTestSchema()},
 	}, failingWriter{})

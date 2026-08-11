@@ -7,11 +7,13 @@ package avrocgenjson
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
 
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,17 +42,37 @@ func (w *recordingWriter) WriteFile(path string, content []byte) error {
 func generateFiles(t *testing.T, req *avrocpb.GenerateRequest) []generatedFile {
 	t.Helper()
 
+	return generateFilesIn(t.Context(), t, req)
+}
+
+// generateFilesIn is generateFiles with the context the generation runs under,
+// which is the whole of the difference between a traced run and an untraced one.
+//
+// Tracing is an observation of a generation and never an input to it (#197), so
+// the two have to produce the same bytes; making the context the only variable
+// is what lets one assertion cover both.
+func generateFilesIn(ctx context.Context, t *testing.T, req *avrocpb.GenerateRequest) []generatedFile {
+	t.Helper()
+
 	if req.Version == nil {
 		req = proto.CloneOf(req)
 		req.Version = proto.Int32(ir.Version)
 	}
 
 	w := &recordingWriter{}
-	if err := Generate(req, w); err != nil {
+	if err := Generate(ctx, req, w); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	return w.files
 }
+
+// tracedRun reports whether run number n is one of the traced ones.
+//
+// Half of them are, so that every repetition below compares a traced run's bytes
+// against an untraced run's: the failure this is aimed at is a span opened
+// between two writes changing what gets written, which no number of untraced
+// repetitions would ever show.
+func tracedRun(n int) bool { return n%2 == 1 }
 
 // TestGenerateIsDeterministic is #120's dynamic half for this generator: the
 // same descriptor produces the same set of paths with byte-identical contents,
@@ -80,7 +102,16 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	}
 
 	for run := 1; run < runs; run++ {
-		again := generateFiles(t, req)
+		ctx := t.Context()
+		var recorder *tracetest.SpanRecorder
+		if tracedRun(run) {
+			ctx, recorder = recordingContext(t)
+		}
+
+		again := generateFilesIn(ctx, t, req)
+		if recorder != nil && len(recorder.Ended()) == 0 {
+			t.Fatal("a traced run recorded no spans, so the comparison against an untraced one is vacuous")
+		}
 		if len(again) != len(first) {
 			t.Fatalf("run %d produced %d file(s), run 0 produced %d", run, len(again), len(first))
 		}

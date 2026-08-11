@@ -7,6 +7,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"io"
 	"log/slog"
@@ -25,6 +26,9 @@ import (
 	"github.com/z5labs/avroc/internal/telemetry"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/embedded"
+	"go.opentelemetry.io/otel/trace/noop"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -319,6 +323,93 @@ func TestMalformedTraceContextIsNotAnError(t *testing.T) {
 		t.Errorf("parent span id = %s, want none: the span should be the root of its own trace", got)
 	}
 }
+
+// TestAnUntracedPhaseStartsNothingAndEndsNothing is the gate every generator's
+// phases go through, asserted where it is written rather than three times over
+// (#197).
+//
+// Two properties, and the second is the one that would be a bug rather than a
+// cost. A phase reached on an untraced invocation must start nothing — no tracer
+// requested, no span opened — which is what makes the instrumentation free on
+// the invocation almost every generator actually gets. And the span it hands
+// back must not be the *invocation's*: the caller ends what it is given, so
+// returning the parent would end the whole invocation somewhere in the middle of
+// the first schema, and every span after it would be an orphan.
+func TestAnUntracedPhaseStartsNothingAndEndsNothing(t *testing.T) {
+	phases := map[string]func(context.Context) (context.Context, trace.Span){
+		spanDescriptorValidate: StartDescriptorValidate,
+		spanOptionsParse:       StartOptionsParse,
+		spanFingerprint:        StartFingerprint,
+		spanSchemaGenerate: func(ctx context.Context) (context.Context, trace.Span) {
+			return StartSchemaGenerate(ctx, "event")
+		},
+		spanFileWrite: func(ctx context.Context) (context.Context, trace.Span) {
+			return StartFileWrite(ctx, "event.go")
+		},
+	}
+
+	for name, start := range phases {
+		t.Run(name, func(t *testing.T) {
+			counter := &spanCounter{}
+			invocation := &untracedSpan{provider: counter}
+
+			ctx, span := start(trace.ContextWithSpan(t.Context(), invocation))
+			EndPhase(span, nil)
+			EndPhase(span, io.ErrUnexpectedEOF)
+
+			if counter.tracers != 0 || counter.starts != 0 {
+				t.Errorf("an untraced %s asked for %d tracers and started %d spans, want 0 and 0",
+					name, counter.tracers, counter.starts)
+			}
+			if invocation.ended {
+				t.Errorf("ending an untraced %s ended the invocation's own span", name)
+			}
+			if trace.SpanFromContext(ctx) != trace.Span(invocation) {
+				t.Errorf("an untraced %s replaced the span in the context, so the phase after it would be parented wrongly", name)
+			}
+		})
+	}
+}
+
+// spanCounter is a tracer provider that starts no spans and counts every request
+// for one, so that "nothing was started" is an assertion rather than an absence.
+type spanCounter struct {
+	embedded.TracerProvider
+
+	tracers int
+	starts  int
+}
+
+func (p *spanCounter) Tracer(string, ...trace.TracerOption) trace.Tracer {
+	p.tracers++
+	return countingTracer{provider: p}
+}
+
+type countingTracer struct {
+	embedded.Tracer
+
+	provider *spanCounter
+}
+
+func (t countingTracer) Start(ctx context.Context, _ string, _ ...trace.SpanStartOption) (context.Context, trace.Span) {
+	t.provider.starts++
+	return ctx, noop.Span{}
+}
+
+// untracedSpan is the span an untraced invocation carries: not recording, which
+// is what a no-op provider hands run when there is no TRACEPARENT and no
+// endpoint. It differs from noop.Span in naming a provider the test can count
+// through and in noticing that it was ended.
+type untracedSpan struct {
+	noop.Span
+
+	provider *spanCounter
+	ended    bool
+}
+
+func (s *untracedSpan) TracerProvider() trace.TracerProvider { return s.provider }
+
+func (s *untracedSpan) End(...trace.SpanEndOption) { s.ended = true }
 
 // treeOf reads every regular file beneath dir, keyed by its path relative to it.
 func treeOf(t *testing.T, dir string) map[string]string {

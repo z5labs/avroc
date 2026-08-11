@@ -7,6 +7,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -147,7 +148,7 @@ func TestMain_PluginInfo(t *testing.T) {
 
 		var stdout bytes.Buffer
 		generated := false
-		record := func(*avrocpb.GenerateRequest, FileWriter) error {
+		record := func(context.Context, *avrocpb.GenerateRequest, FileWriter) error {
 			generated = true
 			return nil
 		}

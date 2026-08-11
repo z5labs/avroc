@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/z5labs/avroc/avrocpb"
+	"github.com/z5labs/avroc/internal/ir"
 
 	avro "github.com/z5labs/avro-go"
 	"google.golang.org/protobuf/proto"
@@ -465,41 +466,70 @@ func TestGenerate_MultipleTypes(t *testing.T) {
 	}
 }
 
-func TestBuildSchemaFile_Filename(t *testing.T) {
-	schema := &avrocpb.Schema{
-		Namespace: proto.String("com.example"),
-		Type: &avrocpb.Type{
-			Type: &avrocpb.Type_Record{
-				Record: &avrocpb.Record{
-					Name:      proto.String("MyRecord"),
-					Namespace: proto.String("com.example"),
-					FullName:  proto.String("com.example.MyRecord"),
+// TestGeneratedFilenames asserts the name each schema's file is written under.
+//
+// It is asked of a whole generation rather than of the function that renders one
+// schema, because the filename is Generate's: the base name is derived once
+// there and used both for the file and for the span naming that schema's work
+// (#197), so a test that called the renderer would be supplying the answer it
+// was checking.
+//
+// The array root is the case worth having. This generator names the file after
+// what the root is *about*, which for `schema array<Event>;` is the record
+// inside the array and not the namespace's last component — where
+// ir.SchemaBaseName used to land for a root that is not itself a named type.
+func TestGeneratedFilenames(t *testing.T) {
+	testCases := []struct {
+		name   string
+		schema *avrocpb.Schema
+		want   string
+	}{
+		{
+			name: "a record root",
+			schema: &avrocpb.Schema{
+				Namespace: proto.String("com.example"),
+				Type: &avrocpb.Type{
+					Type: &avrocpb.Type_Record{
+						Record: &avrocpb.Record{
+							Name:      proto.String("MyRecord"),
+							Namespace: proto.String("com.example"),
+							FullName:  proto.String("com.example.MyRecord"),
+						},
+					},
 				},
 			},
+			want: "my_record.go",
 		},
+		{name: "an array root", schema: arrayRootSchema(), want: "event.go"},
 	}
 
-	filename, _, err := buildSchemaFile("mypackage", schema, false)
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
-	if filename != "my_record.go" {
-		t.Errorf("expected my_record.go, got %q", filename)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := generateFiles(t, &avrocpb.GenerateRequest{
+				Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("mypackage")}},
+				Schemas: []*avrocpb.Schema{tc.schema},
+			})
+			if len(files) != 1 {
+				t.Fatalf("the generation produced %d files, want 1", len(files))
+			}
+			if files[0].path != tc.want {
+				t.Errorf("expected %s, got %q", tc.want, files[0].path)
+			}
+		})
 	}
 }
 
-// TestBuildSchemaFile_ArrayRootFilename asserts this generator names the file
-// after what an array root is about rather than after the namespace, which is
-// where ir.SchemaBaseName used to land for a root that is not itself a named
-// type.
-func TestBuildSchemaFile_ArrayRootFilename(t *testing.T) {
-	filename, _, err := buildSchemaFile("mypackage", arrayRootSchema(), false)
+// renderSchema is buildSchemaFile with the base name derived the way Generate
+// derives it, for the tests that are about the source one schema renders to
+// rather than about the name it is written under.
+func renderSchema(t *testing.T, packageName string, schema *avrocpb.Schema) []byte {
+	t.Helper()
+
+	_, content, err := buildSchemaFile(t.Context(), packageName, ir.SchemaBaseName(schema), schema, false)
 	if err != nil {
 		t.Fatalf("buildSchemaFile failed: %v", err)
 	}
-	if filename != "event.go" {
-		t.Errorf("expected event.go, got %q", filename)
-	}
+	return content
 }
 
 // arrayRootSchema is the resolved form of `schema array<Event>;`: the record is

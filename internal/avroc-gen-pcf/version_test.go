@@ -36,7 +36,7 @@ func TestGenerateRejectsUnknownIRVersion(t *testing.T) {
 			// a valid version onto a request that carries none, which is the
 			// one thing this test needs left alone.
 			w := plugin.NewOutputDir(t.TempDir())
-			err := Generate(&avrocpb.GenerateRequest{
+			err := Generate(t.Context(), &avrocpb.GenerateRequest{
 				Version: tc.version,
 				Options: nil,
 				Schemas: []*avrocpb.Schema{versionTestSchema()},
