@@ -308,9 +308,12 @@ Three checks, because no one of them sees all of it:
 - **`internal/plugin.TestNoGeneratorReadsTheClock`** parses the source of every
   package that can put a byte in a generated file and fails on any *reference* —
   called, assigned or passed — to something that could not give the same answer
-  twice: `time.Now`, `os.Hostname`, `os.Getenv`, `os/user`, either random.
-  Repetition cannot catch a clock read, because two runs a moment apart agree on
-  the date.
+  twice. `forbiddenFuncs` and `forbiddenImports` in `determinism_test.go` are the
+  list; `time.Now`, `os.Hostname`, `os.Getenv`, `os/user` and either random are
+  examples from it and not the whole of it — every other way of reading the
+  environment (`os.LookupEnv`, `os.Environ`) or the machine (`os.Getwd`,
+  `os.Getpid`, `os.UserHomeDir`, …) is in there too. Repetition cannot catch a
+  clock read, because two runs a moment apart agree on the date.
 
 What the rule protects is that no non-reproducible value reaches a generated
 *byte*, and that is a data flow no file-at-a-time source scan can see. The ban

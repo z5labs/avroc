@@ -97,7 +97,7 @@ func bannedPackages() []string {
 // There is one, internal/telemetry, and the shortness of the list is the
 // point: this is the entire amount by which the over-approximation described
 // at the top of this file has been shrunk. A package earns a place here by
-// being unable to write output at all, which is asserted rather than asserted
+// being unable to write output at all, which is asserted rather than assumed
 // of it — see [TestTheExemptPackageCannotProduceGeneratedOutput] — and not by
 // having a good reason to read a clock.
 func exemptPackages() []string {
