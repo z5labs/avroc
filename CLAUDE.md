@@ -34,7 +34,7 @@ go test -v ./...
 - **`internal/avroc-gen-pcf/`** — Parsing Canonical Form generator plugin. Reads the descriptor it is handed and writes one canonical `.avsc` per schema beneath `--out`. Its files are `ir.CanonicalJSON`'s bytes verbatim — no trailing newline, no re-indentation — because they are fingerprint input rather than a rendering for a person.
 - **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it and produces its output through `plugin.FileWriter` — one call per file, path and whole content — with `plugin.OutputDir` the implementation that owns the path check, the directory creation and the record of what was written. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
-- **`internal/telemetry/`** — avroc's tracer provider, and nothing that uses it (#191). See "Tracing" below.
+- **`internal/telemetry/`** — avroc's tracer provider, and nothing that uses it (#191). See "Tracing" below. It is also the one package the determinism ban exempts (#195), because it produces nothing through `plugin.FileWriter`; see "Determinism".
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list. `ir.SchemaBaseName` is the one every generator's filename comes from, and it names the schema after what its **root type** is about: a named type is about itself, an array and a map are about what they contain (so `schema array<Event>;` is `event.go`, not the namespace's last component, #172), and anything else — a primitive, a union with no single subject — falls through to the additional types, then the namespace, then `schema`.
 - **`internal/docs/`** — No implementation; it is where the published documentation is checked from. `TestEveryRelativeLinkInTheDocumentationResolves` walks every Markdown file in the repository and requires each relative link to resolve *from the file it is written in*, fragment included, because a link is the one part of a document that breaks silently — renaming a heading breaks every reference to it without touching the files carrying them. Links inside fenced blocks are skipped: `docs/CONVENTIONS.md` quotes the conformance-language template, whose `../CONVENTIONS.md` is a path for the *quoting* document to write and not one to resolve from there. Nothing external is fetched, so the check is the same offline.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
@@ -305,11 +305,43 @@ Three checks, because no one of them sees all of it:
   many times in one process. That is what exercises Go's randomised map iteration
   order, which is the usual way the rule gets broken and the one that breaks
   intermittently.
-- **`internal/plugin.TestNoGeneratorReadsTheClock`** parses every generator's
-  source and fails on any *reference* — called, assigned or passed — to
-  something that could not give the same answer twice: `time.Now`,
-  `os.Hostname`, `os.Getenv`, `os/user`, either random. Repetition cannot catch
-  a clock read, because two runs a moment apart agree on the date.
+- **`internal/plugin.TestNoGeneratorReadsTheClock`** parses the source of every
+  package that can put a byte in a generated file and fails on any *reference* —
+  called, assigned or passed — to something that could not give the same answer
+  twice. `forbiddenFuncs` and `forbiddenImports` in `determinism_test.go` are the
+  list; `time.Now`, `os.Hostname`, `os.Getenv`, `os/user` and either random are
+  examples from it and not the whole of it — every other way of reading the
+  environment (`os.LookupEnv`, `os.Environ`) or the machine (`os.Getwd`,
+  `os.Getpid`, `os.UserHomeDir`, …) is in there too. Repetition cannot catch a
+  clock read, because two runs a moment apart agree on the date.
+
+What the rule protects is that no non-reproducible value reaches a generated
+*byte*, and that is a data flow no file-at-a-time source scan can see. The ban
+is an over-approximation of it, and it was absolute — naming `time.Now` at all,
+anywhere the generators are built from — for as long as no such package had a
+use for a clock. #196 gives one a use: a generator that opens a span reaches
+both of the banned things through the SDK, because a span is two wall-clock
+timestamps and an exporter finds its collector in the environment.
+
+The resolution (#195) is **not** a carve-out in `forbiddenFuncs`, which would
+allow `time.Now` in the file-writing packages too. The over-approximation is
+shrunk by exactly the amount the new use requires: telemetry lives in one
+package that produces nothing through `plugin.FileWriter`, and
+`determinism_test.go` names it in `exemptPackages` — by **package identity**,
+never a name pattern, a build tag or a comment directive — while every package
+that can produce output stays in `bannedPackages` under the absolute ban. Three
+checks keep the exemption from widening, because an exemption whose only
+evidence is the exempt package passing would go on passing if it covered the
+whole repository: the banned set is written out again as literals, so narrowing
+the ban takes a change to the test as well as to the list; the exempt package's
+module-local import graph is walked and required not to reach
+`internal/plugin`, which declares `FileWriter`; and a clock read and an
+environment read are injected into a **copy of `avroc-gen-go`'s own
+`Generate`** — the function that calls `WriteFile` — with the check required to
+report each one by name. Reachability is a necessary condition and not a
+sufficient one — `internal/ir` cannot reach `FileWriter` either, and its bytes
+are generated output — which is why the exempt list is explicit and one entry
+long rather than derived from the graph.
 
 `internal/plugin.SourceDateEpoch` is the only sanctioned way to get a timestamp:
 it reads `SOURCE_DATE_EPOCH`, returns UTC, and reports a malformed value rather
