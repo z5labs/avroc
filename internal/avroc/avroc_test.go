@@ -17,7 +17,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -508,6 +511,11 @@ func TestGeneratorGenerate(t *testing.T) {
 // non-zero exit fails the run whatever the generator left on disk, nothing it
 // left is merged, the status is reported without anything being concluded from
 // its value, and the descriptor and scratch directories are still removed.
+//
+// The generator says nothing at all on standard error, because the exit status
+// is the whole of what avroc analyses (#190): a silent failure is still a
+// failure, and it is the case a run that inferred anything from the generator's
+// output would get wrong.
 func TestGeneratorGenerateNonZeroExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -524,7 +532,6 @@ while [ $# -gt 0 ]; do
   esac
 done
 printf 'package half\n' > "$out/half.go"
-echo 'error: com.example.User: nope' >&2
 exit 3
 `))
 	g.log = log
@@ -578,23 +585,310 @@ exit 3
 		t.Errorf("nothing in the log reports the exit status: %v", records())
 	}
 
-	// The generator's diagnostic still reached the log: a failing run is the one
-	// where its explanation matters most.
-	var diagnosed bool
-	for _, r := range records() {
-		if r.message == "com.example.User: nope" && r.attrs["severity"] == "error" {
-			diagnosed = true
-		}
-	}
-	if !diagnosed {
-		t.Errorf("the failing generator's diagnostic is not in the log: %v", records())
-	}
-
 	for dir := range descriptorDirs(t) {
 		if _, ok := before[dir]; !ok {
 			t.Errorf("descriptor directory %q survived a failed invocation", dir)
 		}
 	}
+}
+
+// TestGeneratorGenerateSignal is docs/plugin/SPEC.md's other failure: a
+// generator killed by a signal is reported as killed by that signal, naming it,
+// and distinguishably from one that exited non-zero.
+func TestGeneratorGenerateSignal(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	log, records := recordingLogger()
+	g := testGenerator(t, writeShellGenerator(t, "kill -TERM $$\n"))
+	g.log = log
+
+	projectRoot, outputDir := newProject(t)
+	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
+	if err == nil {
+		t.Fatal("generate reported success for a generator killed by a signal")
+	}
+	if !strings.Contains(err.Error(), "terminated by signal") {
+		t.Errorf("error %q does not say the generator was terminated by a signal", err)
+	}
+	if !strings.Contains(err.Error(), "terminated") {
+		t.Errorf("error %q does not name the signal", err)
+	}
+	if !strings.Contains(err.Error(), testGeneratorName) {
+		t.Errorf("error %q does not name the generator", err)
+	}
+
+	var reported bool
+	for _, r := range records() {
+		if r.message != "generator terminated by signal" {
+			continue
+		}
+		reported = true
+		if r.attrs["signal"] != "terminated" {
+			t.Errorf("signal attribute = %q, want %q", r.attrs["signal"], "terminated")
+		}
+		if r.attrs["signal_number"] != strconv.Itoa(int(syscall.SIGTERM)) {
+			t.Errorf("signal_number attribute = %q, want %q", r.attrs["signal_number"], strconv.Itoa(int(syscall.SIGTERM)))
+		}
+		if r.attrs["generator"] != testGeneratorName {
+			t.Errorf("generator attribute = %q, want %q", r.attrs["generator"], testGeneratorName)
+		}
+		if _, ok := r.attrs["exit_code"]; ok {
+			t.Error("a generator killed by a signal was reported with an exit code")
+		}
+	}
+	if !reported {
+		t.Errorf("nothing in the log reports the signal: %v", records())
+	}
+}
+
+// TestGeneratorGenerateNeverRan is the third of reportFailure's cases, and the
+// one that is neither of the other two: the executable avroc resolved could not
+// be started at all — a file that lost its execute bit between discovery and
+// invocation. It is reported as a failure to run, without an exit status and
+// without a signal, because there was no process to produce either.
+func TestGeneratorGenerateNeverRan(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	log, records := recordingLogger()
+	executablePath := writeShellGenerator(t, "exit 0\n")
+	if err := os.Chmod(executablePath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := testGenerator(t, executablePath)
+	g.log = log
+
+	projectRoot, outputDir := newProject(t)
+	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
+	if err == nil {
+		t.Fatal("generate reported success for a generator that never ran")
+	}
+	if !strings.Contains(err.Error(), "failed to run") {
+		t.Errorf("error %q does not report a generator that never ran", err)
+	}
+	if !strings.Contains(err.Error(), testGeneratorName) {
+		t.Errorf("error %q does not name the generator", err)
+	}
+	if strings.Contains(err.Error(), "exited with status") || strings.Contains(err.Error(), "signal") {
+		t.Errorf("error %q reports a generator that never ran as one that exited", err)
+	}
+
+	var reported bool
+	for _, r := range records() {
+		if r.message == "failed to run generator" {
+			reported = true
+			if r.attrs["generator"] != testGeneratorName {
+				t.Errorf("generator attribute = %q, want %q", r.attrs["generator"], testGeneratorName)
+			}
+		}
+	}
+	if !reported {
+		t.Errorf("nothing in the log reports the generator that never ran: %v", records())
+	}
+}
+
+// TestGeneratorStandardErrorReachesAvrocsUnaltered is #190: avroc analyses the
+// exit status and nothing else, so a generator's standard error is passed
+// through to avroc's own — the same bytes, in the same order, with no prefix and
+// no reformatting.
+//
+// The lines the generator writes are deliberately the ones the removed
+// diagnostic format used to rewrite: a severity-prefixed line, a line that was
+// never a diagnostic, a bare severity with an empty message, a blank line, and a
+// final line without its newline. Under the old contract each of those came out
+// as something other than what was written; under this one none of them does.
+//
+// Exiting zero after writing to standard error is the other half of the rule —
+// the exit status is the verdict and what is on stderr is not.
+func TestGeneratorStandardErrorReachesAvrocsUnaltered(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	const written = "error: com.example.User: package_name is required\n" +
+		"Traceback (most recent call last):\n" +
+		"error:\n" +
+		"\n" +
+		"  indented under a stack trace\n" +
+		"trailing without a newline"
+
+	g := testGenerator(t, writeShellGenerator(t, fmt.Sprintf("printf '%%s' '%s' >&2\nexit 0\n", written)))
+
+	projectRoot, outputDir := newProject(t)
+	got := captureStderr(t, func() {
+		if err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User")); err != nil {
+			t.Errorf("a generator that exited zero after writing to standard error failed the run: %v", err)
+		}
+	})
+
+	if got != written {
+		t.Errorf("avroc's standard error carried\n%q\nwant\n%q", got, written)
+	}
+}
+
+// TestGeneratorStandardErrorArrivesBeforeTheProcessExits is the other half of
+// the passthrough: the bytes reach avroc's standard error as the generator
+// writes them, not when it exits. A generator that complains and then hangs is
+// the case that makes the difference visible, and it is the one a user is most
+// likely to hit.
+func TestGeneratorStandardErrorArrivesBeforeTheProcessExits(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	release := filepath.Join(t.TempDir(), "release")
+	g := testGenerator(t, writeShellGenerator(t, fmt.Sprintf(`echo 'still running' >&2
+while [ ! -f '%s' ]; do sleep 0.05; done
+exit 0
+`, release)))
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+
+	restore := swapStderr(t, w)
+
+	projectRoot, outputDir := newProject(t)
+	done := make(chan error, 1)
+	go func() {
+		done <- generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
+	}()
+
+	// The read blocks until the generator writes, and the generator does not
+	// exit until this test lets it — so a line read here is one that arrived
+	// while the process was still running.
+	line := make(chan string, 1)
+	go func() {
+		buf := make([]byte, len("still running\n"))
+		if _, err := io.ReadFull(r, buf); err != nil {
+			line <- ""
+			return
+		}
+		line <- string(buf)
+	}()
+
+	select {
+	case got := <-line:
+		if got != "still running\n" {
+			t.Errorf("avroc's standard error carried %q before the generator exited, want %q", got, "still running\n")
+		}
+	case <-time.After(30 * time.Second):
+		t.Error("nothing reached avroc's standard error while the generator was still running")
+	}
+
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Errorf("generate failed: %v", err)
+	}
+
+	restore()
+	_ = w.Close()
+}
+
+// swapStderr points os.Stderr at f for the rest of the test and returns the
+// restore, which is also registered with Cleanup so that a failing test cannot
+// leave the process writing into a closed pipe. Calling it twice is harmless.
+//
+// The process-wide variable is what has to move: a generation invocation hands
+// the child avroc's own descriptor rather than a writer of its choosing, which
+// is the property under test, so there is nothing narrower to intercept.
+func swapStderr(t *testing.T, f *os.File) (restore func()) {
+	t.Helper()
+
+	saved := os.Stderr
+	os.Stderr = f
+
+	var once sync.Once
+	restore = func() { once.Do(func() { os.Stderr = saved }) }
+	t.Cleanup(restore)
+	return restore
+}
+
+// captureStderr runs fn with os.Stderr replaced by a pipe and returns everything
+// written to it.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+
+	restore := swapStderr(t, w)
+
+	// Drained concurrently, so that a generator writing more than the pipe's
+	// buffer holds cannot deadlock against the read.
+	var out bytes.Buffer
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		_, _ = io.Copy(&out, r)
+	}()
+
+	func() {
+		defer restore()
+		defer func() { _ = w.Close() }()
+		fn()
+	}()
+
+	<-drained
+	return out.String()
+}
+
+// recordedLine is one slog record, reduced to what these tests assert on.
+type recordedLine struct {
+	level   slog.Level
+	message string
+	attrs   map[string]string
+}
+
+func (r recordedLine) String() string {
+	return fmt.Sprintf("%v %q %v", r.level, r.message, r.attrs)
+}
+
+// recordingLogger returns a logger that keeps every record, and the accessor
+// that reads them back. The accessor copies, so a caller ranging over it cannot
+// race a generator still being run by the pool.
+func recordingLogger() (*slog.Logger, func() []recordedLine) {
+	h := &recordingHandler{}
+	return slog.New(h), h.records
+}
+
+type recordingHandler struct {
+	mu    sync.Mutex
+	lines []recordedLine
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	line := recordedLine{
+		level:   r.Level,
+		message: r.Message,
+		attrs:   make(map[string]string),
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		line.attrs[a.Key] = a.Value.String()
+		return true
+	})
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.lines = append(h.lines, line)
+	return nil
+}
+
+func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *recordingHandler) records() []recordedLine {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]recordedLine(nil), h.lines...)
 }
 
 // TestGeneratorGenerateRefusesAnEscape is the boundary on the real fork/exec

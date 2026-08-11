@@ -24,7 +24,7 @@ avroc is a modular code generator for Avro IDL. A generator is an executable, no
 
 1. avroc writes a `GenerateRequest` descriptor into a directory created for that one invocation
 2. avroc execs `avroc-gen-<name> --descriptor <path> --out <dir> [--opt k=v ...]`, both paths absolute, and waits for it to exit
-3. The generator writes whole files beneath `--out` and reports diagnostics on stderr; a zero exit is the whole of the success signal
+3. The generator writes whole files beneath `--out` and reports on stderr, which avroc passes through to its own unaltered and does not parse; the exit status is the whole of what avroc analyses
 4. `--out` is a private, empty scratch directory, merged into the project's output tree only on a zero exit
 5. Generators run concurrently via `sourcegraph/conc` pools
 

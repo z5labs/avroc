@@ -787,8 +787,8 @@ publishing a breaking change to its image, which is exactly backwards.
 ### The plugin CLI contract
 
 The `avroc-gen-<name>` naming convention, the argument vector, the descriptor,
-exit codes, the stderr diagnostic format, `--plugin-info` and the determinism
-requirement are **not specified here**.
+exit codes, what becomes of the standard streams, `--plugin-info` and the
+determinism requirement are **not specified here**.
 
 Reason: they are [`plugin/SPEC.md`](../plugin/SPEC.md)'s (#114–#120), and they
 hold with no container involved — a generator on a developer's `PATH` obeys

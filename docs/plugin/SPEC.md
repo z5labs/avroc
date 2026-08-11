@@ -37,9 +37,9 @@ In scope: how avroc discovers a generator and hands it work. The
 argument vector — `--descriptor <path>` with `-` for standard input,
 `--out <dir>`, and repeated `--opt k=v`; the encoding and lifetime of the
 descriptor file; what a plugin may and may not do to the output directory; exit
-codes and the stderr diagnostic format; the determinism a plugin **MUST**
-exhibit; and the `--plugin-info` handshake by which a plugin declares what it
-supports before it is handed work.
+codes and what becomes of the standard streams; the determinism a plugin
+**MUST** exhibit; and the `--plugin-info` handshake by which a plugin declares
+what it supports before it is handed work.
 
 Out of scope, with reasons, in [Out of Scope](#out-of-scope).
 
@@ -266,14 +266,33 @@ comparing generated output cannot see the difference between their machines.
 ### Standard streams
 
 A plugin **MUST NOT** write to standard output during a generation invocation.
-Generated files go under `--out`, diagnostics go to stderr, and stdout carries
-exactly one thing in this contract: the `--plugin-info` declaration. Keeping it
-empty otherwise is what makes that declaration parseable without a mode flag,
-and makes a generation invocation safe to place in a pipeline.
+Generated files go under `--out`, anything the plugin has to say goes to
+standard error, and stdout carries exactly one thing in this contract: the
+`--plugin-info` declaration. Keeping it empty otherwise is what makes that
+declaration parseable without a mode flag, and makes a generation invocation
+safe to place in a pipeline.
 
-Standard error is the diagnostic channel, specified in [Exit codes and
-diagnostics](#exit-codes-and-diagnostics). Standard input is unused unless
-`--descriptor -` was passed.
+Standard error is the plugin's to write, and this contract imposes no format on
+it (#190). avroc **MUST** pass it through to its own standard error unaltered —
+the same bytes, in the same order, with nothing added and nothing reformatted —
+and **MUST** do so as the plugin writes them rather than holding them until the
+process exits. A plugin that complains and then hangs has still told the user
+what it complained about.
+
+Two things follow, and a plugin author should expect both. avroc gives the
+plugin its own standard error descriptor rather than copying the stream, so
+writes below `PIPE_BUF` stay atomic while a longer one — a stack trace — **MAY**
+interleave with another generator's when generators run concurrently. And
+because nothing is added, a line carries no indication of which generator wrote
+it; a plugin with several things to say **SHOULD** make each line identify what
+it is about, conventionally by opening with the fully-qualified name of the
+schema or field, since that is the only location a plugin has — it never sees
+the `.avdl` a user wrote.
+
+There was a format here once, and why there is not one now is
+[A diagnostic format](#a-diagnostic-format).
+
+Standard input is unused unless `--descriptor -` was passed.
 
 ## The output directory
 
@@ -441,54 +460,18 @@ generator, the first is usually the run being cancelled or the machine running
 out of memory — and a report that flattens them sends the user looking in the
 wrong place.
 
-### The diagnostic format
+### What a plugin says, and what avroc reads
 
-A diagnostic is a single line on standard error, encoded in UTF-8:
+The exit status is the whole of what avroc analyses (#190). A plugin that fails
+**SHOULD** write to standard error saying why, and avroc passes that through
+verbatim ([Standard streams](#standard-streams)) — but it is written for the
+person reading the build, not for avroc, and nothing in it changes the verdict.
 
-```
-<severity>: <message>
-```
-
-`<severity>` **MUST** be one of `error`, `warning` or `note` — a closed set of
-three, matched case-sensitively. `<message>` **MUST NOT** contain a newline; a
-diagnostic that needs more than one line **MUST** be written as one `error:` or
-`warning:` line followed by `note:` lines. A message **SHOULD** open with the
-fully-qualified name of the schema or field it is about, because that is the
-only location a plugin has: it never sees the `.avdl` a user wrote.
-
-The severity **MUST** open the line, the separator **MUST** be a colon and a
-single space, and the message **MUST NOT** be empty. Each of those is what tells
-a diagnostic from the ordinary output of a program that also writes to standard
-error: a line indented under a stack trace, an `error:something` with no space,
-and a bare `error: ` say nothing a level could be attached to, and avroc treats
-all three as text rather than guessing (#115).
-
-```
-error: com.example.User.created_at: logical type "duration" is not supported
-note: com.example.User.created_at: declared as fixed(12)
-```
-
-avroc **MUST** parse lines of that form into its structured log at the
-corresponding level, attributed to the generator (#115). Any line that does not
-match **MUST** be surfaced verbatim and attributed the same way. It is never
-discarded and never held back until the process exits: an unrecognised line is
-usually a panic, a stack trace or a library writing to stderr on its own
-account, and those are exactly what a user needs to see when a generator fails
-in a way its author did not anticipate.
-
-The levels are `error:` to error, `warning:` to warning and `note:` to info. A
-line that is not a diagnostic is recorded at **warning**, one level above the
-`note:` a plugin writes deliberately — info is where a log is ordinarily
-threshold-ed, so a handler configured a notch above it would drop exactly the
-panic this rule exists to surface, and a line avroc could not classify is not one
-to file under the mildest severity it has.
-
-A plugin that writes an `error:` diagnostic **MUST** exit non-zero, and a plugin
-that exits non-zero **SHOULD** write at least one `error:` diagnostic saying
-why. avroc **MUST** fail the run on a non-zero exit even when nothing was
-written to stderr — a silent failure is still a failure — and **MUST NOT** fail
-a run whose generator exited zero after printing `error:`, because the exit
-status is the verdict and the diagnostics are the explanation.
+So avroc **MUST** fail the run on a non-zero exit even when nothing was written
+to standard error — a silent failure is still a failure — and **MUST NOT** fail
+a run whose generator exited zero having written to it, however alarming what it
+wrote. A plugin that says it has failed **MUST** exit non-zero, because saying
+so is the only way avroc will hear it.
 
 ## Determinism
 
@@ -725,6 +708,27 @@ third-party generator could meet. This document constrains how a plugin is
 reached and what it may assume, and stops there — the whole point of the plugin
 model is that avroc has no opinion about the code that comes out.
 
+### A diagnostic format
+
+Standard error carries whatever the plugin writes there, and this document says
+nothing about its shape (#190). There is no severity prefix, no closed set of
+levels, and nothing avroc parses back.
+
+Reason: a format only pays for itself if the channel it governs is reserved, and
+standard error is not. It was reserved once — a `<severity>: <message>` line
+avroc parsed into its own structured log — and the two implementations it took
+were the cheap part. The expensive part was everything that also writes there: a
+library on its own account, a panic, a telemetry SDK reporting that it could not
+reach its collector. Each arrived as a line avroc could not classify and filed
+under a severity nobody had chosen, which is build output dressed as a
+diagnostic. What the format bought instead — attribution and a level avroc could
+believe — is what a generator emitting log records with their own resource and
+span context gives back, richer than a parsed prefix ever was.
+
+Removing it is a breaking change for a plugin written against it. A plugin that
+still writes `error: …` lines is not thereby wrong; those lines simply reach the
+user as they were written, like every other line.
+
 ### Also out of scope
 
 - **Sandboxing.** A generator runs as a subprocess of avroc, with the invoking
@@ -756,6 +760,7 @@ model is that avroc has no opinion about the code that comes out.
 | [The output directory](#the-output-directory) | [#117](https://github.com/z5labs/avroc/issues/117), [#118](https://github.com/z5labs/avroc/issues/118), [#119](https://github.com/z5labs/avroc/issues/119) |
 | [The record of a previous run](#the-record-of-a-previous-run) | [#119](https://github.com/z5labs/avroc/issues/119) |
 | [Exit codes and diagnostics](#exit-codes-and-diagnostics) | [#115](https://github.com/z5labs/avroc/issues/115) |
+| [Standard streams](#standard-streams), [A diagnostic format](#a-diagnostic-format) — the stderr diagnostic format removed, standard error passed through | [#190](https://github.com/z5labs/avroc/issues/190) |
 | [Determinism](#determinism) | [#120](https://github.com/z5labs/avroc/issues/120) |
 | [Capability negotiation](#capability-negotiation) | [#116](https://github.com/z5labs/avroc/issues/116) |
 | No transport — the gRPC service and its socket removed | [#124](https://github.com/z5labs/avroc/issues/124) |

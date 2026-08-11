@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
@@ -33,6 +34,16 @@ import (
 // keeps them honest is a test, not a shared constant — see
 // TestTheDeclarationThisRepositorysGeneratorsWriteIsOneAvrocAccepts.
 const pluginInfoFlag = "--plugin-info"
+
+// handshakeWaitDelay bounds how long avroc waits after a handshake's process has
+// been killed before giving up on the pipes exec is copying out of it.
+//
+// The handshake is the one invocation whose streams avroc captures rather than
+// inherits, so it is the one where a grandchild that outlived its parent can
+// still be holding a pipe open: without this, Wait blocks on a descriptor nobody
+// is going to close, and a cancelled run hangs on a process avroc never started.
+// A generation invocation inherits avroc's own streams and needs no equivalent.
+const handshakeWaitDelay = 5 * time.Second
 
 // pluginInfo is docs/plugin/SPEC.md's capability declaration as avroc reads it.
 //
@@ -132,7 +143,7 @@ func queryPluginInfo(ctx context.Context, name, executablePath string) (*pluginI
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.WaitDelay = generatorWaitDelay
+	cmd.WaitDelay = handshakeWaitDelay
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("generator %q failed the %s handshake: %w%s",
