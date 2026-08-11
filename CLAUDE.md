@@ -512,6 +512,27 @@ and as an overridden UID. CI runs both on every pull request;
 <name> --address <ref>` push one multi-platform index to the reference they are
 given, and are what a person calls to put an image on a test registry.
 
+**The image carries no CA certificate bundle, and that is a decision** (#198,
+`docs/container/SPEC.md`'s "No certificate authorities"). A scratch image has no
+roots, so OTLP egress to an `https://` endpoint fails certificate verification at
+export time — harmlessly, since a failed export is a log record — and plaintext
+to a collector on the pod or host network is the supported shape. The bundle does
+not ship because it is the one file in an image that goes wrong with nobody
+touching it, which would make every release a re-issue of somebody else's trust
+decisions; the remedy for a deployment that needs TLS is one `COPY` in a derived
+image, and adding roots later gains a capability while removing them would break
+one, so not shipping is the reversible direction. `.dagger/tls_egress.go` is that
+sentence executed — `dagger call tls-egress` posts an export from the base image
+and from the bundle image to a collector answering on both schemes, and requires
+the plaintext one to arrive, the TLS one to fail at `x509`, and the TLS one to
+arrive once a bundle is supplied, the last being what pins the failure to the
+absent roots rather than to a fourth thing missing from scratch. Its client is a
+**probe copied into the image** rather than avroc, because Dagger overrides
+`OTEL_EXPORTER_OTLP_ENDPOINT` on every exec: an avroc-run version would pass
+against any image at all, and the same finding is why the determinism stage's
+traced run cannot claim nothing is listening at the endpoint it sets.
+`internal/tools/tls-egress` is the fixture on both ends of that wire.
+
 `.dagger/worked_example.go` is the third of them, and its input is a document:
 `dagger call worked-example` extracts the multi-stage Dockerfile from
 `docs/container/SPEC.md`'s "Worked example: adding a generator", builds it, and

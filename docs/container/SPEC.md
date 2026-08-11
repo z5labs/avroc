@@ -31,10 +31,11 @@ directory a generator is copied into and the `PATH` that makes it reachable, the
 entrypoint, the working directory a project is mounted at, the user and UID the
 process runs as together with the guidance for overriding it with
 `--user $(id -u):$(id -g)`, whether a shell is present and what follows from the
-answer, the path the IR `FileDescriptorSet` ships at, the tags a derived image
-may pin, what avroc's own generator images are and how they are combined, and
-which of these are covered by a compatibility guarantee and which are
-implementation detail that may change without notice.
+answer, whether the image trusts any certificate authority and what that means
+for exporting a trace out of it, the path the IR `FileDescriptorSet` ships at,
+the tags a derived image may pin, what avroc's own generator images are and how
+they are combined, and which of these are covered by a compatibility guarantee
+and which are implementation detail that may change without notice.
 
 Out of scope, with reasons, in [Out of Scope](#out-of-scope).
 
@@ -296,6 +297,105 @@ the image cannot write anywhere at all.
 Keeping the shell out is the same decision as having no plugin registry: the
 image's contents are exactly the executables somebody deliberately put there,
 and there is nothing else in it to run, exploit or depend on by accident.
+
+## No certificate authorities
+
+**The image carries no CA certificate bundle** (#198). There is no
+`/etc/ssl/certs/ca-certificates.crt` and no `/etc/ssl` at all — "scratch plus the
+files this document names" covers this too — so nothing running in the image can
+verify a TLS certificate against anything, because there is nothing in it to
+verify one against. It is covered by the [compatibility
+guarantees](#compatibility-guarantees).
+
+The thing that decides is **OTLP egress**. avroc and the generators here export
+a run's trace over OTLP/HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and an
+endpoint named with `https://` — a hosted backend, a managed collector, anything
+off the local network — fails certificate verification at export time with an
+`x509` error. The run does **not** fail with it: a failed export is a log record,
+and the files a generation produces are the ones it would have produced
+untraced. What is lost is the trace, and the record on standard error is where
+that is said.
+
+This is stated because it is otherwise undiscoverable. The exhaustive listing
+above reads as exhaustive, and a reader has no way to learn that TLS will not
+work until it does not — at export time, well after a run looks like it is
+working.
+
+### The supported shape
+
+Export **in plaintext, to a collector on the pod or the host network**:
+
+```console
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+    -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+    ghcr.io/z5labs/avroc-gen-go:v0 generate
+```
+
+That is the sidecar or DaemonSet collector most deployments already run, and TLS
+to the outside world is then its job — in an image that has roots and an operator
+who updates them. Nothing about that arrangement is avroc-specific, which is the
+argument for it: a build tool is not the right place for a trust store, and a
+collector already is one.
+
+### Supplying roots
+
+A deployment that has to reach an `https://` endpoint from the image itself
+supplies the roots, in a derived image, with the one instruction extension is
+made of:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/z5labs/avroc-gen-go:v0
+COPY --from=alpine:3 /etc/ssl/certs/ca-certificates.crt \
+     /etc/ssl/certs/ca-certificates.crt
+```
+
+That path is the conventional one, and it is the first place a Go program looks;
+`SSL_CERT_FILE` names a bundle kept somewhere else. Neither the path nor the
+variable is part of this contract — the file is the derived image's, and which
+of the two a given program consults is a property of that program rather than of
+the base. The four executables this project publishes are Go programs, so both
+work for them; a generator written in something else consults whatever that
+something else consults.
+
+An image that does this owns keeping the bundle current, which is exactly the
+cost being talked about below.
+
+### Why the bundle does not ship
+
+Shipping one costs a covered path and an entry in the exact listing above, and
+those are the cheap parts. The part that does not go away is that **a CA bundle
+is the one file in an image that becomes wrong without anybody touching it**.
+Shipping it would make every avroc release a re-issue of somebody else's trust
+decisions, on this project's release schedule rather than on theirs, and would
+put a staleness surface into an artifact that otherwise has none — an image
+whose every other file is a function of this repository's source.
+
+What it would buy is one `COPY` line for the subset of users who export straight
+to a TLS endpoint, and that line is in a Dockerfile they are already writing,
+against a distribution whose whole job is keeping that file current.
+
+The direction is the other half of the argument. An image that trusts nothing
+and later ships roots **gains** something nobody was relying on the absence of,
+and the release doing it would say so; an image that shipped them and later
+removed them would break somebody's `https://` endpoint. Not shipping is
+therefore the decision that can be revisited, and this section is what makes it a
+stated decision rather than something a reader has to find out.
+
+### It is checked, not asserted
+
+`dagger call tls-egress` posts an OTLP export from the published image to a real
+collector over both schemes and requires all three outcomes: the plaintext one
+arrives, the TLS one fails naming `x509`, and the TLS one arrives the moment a
+bundle is supplied at the path above. It runs against the base image **and**
+against an image carrying generators, which is where "the generator images
+inherit whatever the base decides" stops being a sentence, and CI runs it on
+every pull request.
+
+The third of those is what makes the second mean anything: without it, "TLS
+failed" would also be what a broken resolver, a collector that was not running
+and an image that could not speak TLS at all look like.
 
 ## The IR `FileDescriptorSet`
 
@@ -721,6 +821,7 @@ to any of them is a breaking change:
 | [The working directory](#the-working-directory) | `/work`, existing and owned by the image's user |
 | [The user](#the-user) | UID 65532, GID 65532, non-root, overridable |
 | [No shell](#no-shell) | Absent; extension is `COPY`-only |
+| [No certificate authorities](#no-certificate-authorities) | Absent; TLS egress verifies against nothing, and plaintext to a collector on the local network is the supported shape |
 | [The `FileDescriptorSet`](#the-ir-filedescriptorset) | `/usr/local/share/avroc/ir.binpb` |
 | [Tags](#tags-and-what-pinning-one-buys) | A published full-version tag never moves |
 | [Signatures](#verifying-a-signature) | The published index and each manifest under it are signed; the index digest carries provenance and an SBOM |
@@ -827,6 +928,7 @@ found there and what happens to it.
 | [The working directory](#the-working-directory) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [The user](#the-user) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [No shell](#no-shell) | [#126](https://github.com/z5labs/avroc/issues/126) |
+| [No certificate authorities](#no-certificate-authorities) | [#198](https://github.com/z5labs/avroc/issues/198) |
 | [The IR `FileDescriptorSet`](#the-ir-filedescriptorset) | [#113](https://github.com/z5labs/avroc/issues/113), [#126](https://github.com/z5labs/avroc/issues/126) |
 | [Tags and what pinning one buys](#tags-and-what-pinning-one-buys) | [#128](https://github.com/z5labs/avroc/issues/128) |
 | [Verifying a signature](#verifying-a-signature) | [#128](https://github.com/z5labs/avroc/issues/128) |
