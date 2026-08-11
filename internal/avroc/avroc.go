@@ -20,13 +20,35 @@ import (
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
+	"github.com/z5labs/avroc/internal/telemetry"
 
 	"github.com/z5labs/avro-go/idl"
 )
 
 // Main dispatches to an avroc subcommand. Generators are declared in an
 // avroc.json manifest (see avroc init) and run with avroc generate.
+//
+// Tracing is started and shut down here rather than in cmd/avroc, and the
+// reason is os.Exit: main calls it the moment this function returns, and
+// os.Exit does not run deferred functions — the defer cancel() beside it has
+// never run either. A defer up there would be dead code, and a batch span
+// processor holding the run's spans would drop every one of them. Down here it
+// is on every path out of the command, the failing ones included, because every
+// path out is a return.
 func Main(ctx context.Context, cli cli.Context) int {
+	// A configuration this build cannot honour is a warning and an untraced run,
+	// never a failed one: see internal/telemetry. The provider is usable either
+	// way, so there is nothing to check before deferring the flush.
+	tracing, err := telemetry.Start(ctx, cli)
+	if err != nil {
+		cli.Log.WarnContext(ctx, "tracing is disabled", slog.Any("error", err))
+	}
+	defer func() {
+		if err := tracing.Shutdown(ctx); err != nil {
+			cli.Log.ErrorContext(ctx, "failed to flush traces", slog.Any("error", err))
+		}
+	}()
+
 	if len(cli.Args) == 0 {
 		printUsage(os.Stderr)
 		return 1
