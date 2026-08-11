@@ -50,6 +50,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -242,11 +243,26 @@ func serve(dir, tlsAddr, plainAddr string) error {
 	return <-failed
 }
 
+// maxExportBytes bounds one export. An OTLP request carrying a build's spans is
+// kilobytes, so this is generous by three orders of magnitude and is not a limit
+// anything here is expected to reach — it is there so that the failure mode of a
+// client posting something enormous is a 4xx naming the size rather than the
+// fixture growing without bound and the check failing for a reason that has
+// nothing to do with certificates.
+const maxExportBytes = 1 << 20
+
 func newServer(addr string) *http.Server {
 	return &http.Server{
 		Addr:              addr,
 		Handler:           http.HandlerFunc(receive),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Pinned rather than left to the runtime's default, because this fixture
+		// is the one place in the repository whose subject *is* TLS: what the
+		// check measures is a client's trust store, and a run that had quietly
+		// negotiated an older protocol would be measuring it under conditions
+		// nobody chose. It applies to the plaintext listener too and costs
+		// nothing there, since newServer is one definition of what a listener is.
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 }
 
@@ -257,7 +273,7 @@ func newServer(addr string) *http.Server {
 // hold for a client that posted to the wrong path or sent nothing — which is the
 // difference between "the export arrived" and "something opened a connection".
 func receive(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxExportBytes))
 	if err != nil {
 		reject(w, r, http.StatusBadRequest, fmt.Sprintf("unreadable body: %v", err))
 		return
