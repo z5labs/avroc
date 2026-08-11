@@ -523,6 +523,41 @@ func TestTheDeclarationThisRepositorysGeneratorsWriteIsOneAvrocAccepts(t *testin
 	}
 }
 
+// TestAGeneratorFlushesWellInsideTheDelayAvrocAllowsIt is the other agreement
+// across the same boundary, and the one #196 needs: a generator that traces has
+// spans to flush before it exits, and avroc is what decides how long it may
+// take.
+//
+// [handshakeWaitDelay] is that bound. It is the only wait delay left — #190
+// retired the generation invocation's by inheriting standard error, so that
+// invocation is bounded by nothing at all — which makes it the tighter of the
+// two and a budget inside it a budget inside both. A generator still holding a
+// stream open past it is killed, so a flush budget at or above it is a flush
+// avroc interrupts, and the symptom is a generator that looks hung rather than a
+// collector that is not there.
+//
+// The two are not one shared constant, for the reason the declaration above is
+// not either: internal/plugin is the generator's half of docs/plugin/SPEC.md and
+// this package is avroc's, and a third-party generator implements the contract
+// importing nothing from here. So the relationship is stated in both places and
+// asserted here, rather than being two constants that happen to differ.
+func TestAGeneratorFlushesWellInsideTheDelayAvrocAllowsIt(t *testing.T) {
+	if plugin.FlushBudget >= handshakeWaitDelay {
+		t.Errorf("a generator's flush budget is %s and avroc kills it after %s: avroc would interrupt the flush",
+			plugin.FlushBudget, handshakeWaitDelay)
+	}
+	// "Well inside" rather than merely inside: the budget is what a generator
+	// spends *after* its work is done, and it shares the delay with whatever the
+	// process was still doing when it was killed.
+	if plugin.FlushBudget > handshakeWaitDelay/2 {
+		t.Errorf("a generator's flush budget is %s, more than half of avroc's %s wait delay",
+			plugin.FlushBudget, handshakeWaitDelay)
+	}
+	if plugin.FlushBudget <= 0 {
+		t.Errorf("a generator's flush budget is %s, which is no budget at all", plugin.FlushBudget)
+	}
+}
+
 // TestRunGenerateStopsAtTheHandshake is the whole cycle: a manifest, a generator
 // on PATH that is too old for this avroc's IR, and no output.
 //

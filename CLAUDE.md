@@ -34,7 +34,7 @@ go test -v ./...
 - **`internal/avroc-gen-pcf/`** — Parsing Canonical Form generator plugin. Reads the descriptor it is handed and writes one canonical `.avsc` per schema beneath `--out`. Its files are `ir.CanonicalJSON`'s bytes verbatim — no trailing newline, no re-indentation — because they are fingerprint input rather than a rendering for a person.
 - **`internal/plugin/`** — The generator's half of `docs/plugin/SPEC.md`: parsing the argument vector, reading the descriptor it names, and writing files beneath `--out`. Every generator here routes its `Main` through it and produces its output through `plugin.FileWriter` — one call per file, path and whole content — with `plugin.OutputDir` the implementation that owns the path check, the directory creation and the record of what was written. avroc's half — discovery and building the vector — is `internal/avroc`'s, and the two are separate on purpose: a third-party generator implements the contract without importing anything from this repository.
 - **`internal/cli/`** — Shared CLI context type (`cli.Context`) providing structured logger, environment, filesystem, and args.
-- **`internal/telemetry/`** — avroc's tracer provider, and nothing that uses it (#191). See "Tracing" below. It is also the one package the determinism ban exempts (#195), because it produces nothing through `plugin.FileWriter`; see "Determinism".
+- **`internal/telemetry/`** — the tracer provider, and nothing that uses it (#191). Linked into all four executables rather than avroc alone (#196): a generator starts one the same way, differing only in the two things an `Option` carries — that it names itself as the service and that its flush is bounded, because it is a child process avroc will not wait on forever. It also owns `Extract`, the reading half of the `TRACEPARENT` carrier avroc writes, for the reason below. See "Tracing". It is the one package the determinism ban exempts (#195), because it produces nothing through `plugin.FileWriter`; see "Determinism".
 - **`internal/ir/`** — Operations every generator performs on the resolved IR: the repository's single Avro Parsing Canonical Form implementation (shared by `avroc-gen-pcf` and `avroc-gen-go`'s fingerprint), plus name and filename helpers. No symbol table, no namespace qualification, no primitive list. `ir.SchemaBaseName` is the one every generator's filename comes from, and it names the schema after what its **root type** is about: a named type is about itself, an array and a map are about what they contain (so `schema array<Event>;` is `event.go`, not the namespace's last component, #172), and anything else — a primitive, a union with no single subject — falls through to the additional types, then the namespace, then `schema`.
 - **`internal/docs/`** — No implementation; it is where the published documentation is checked from. `TestEveryRelativeLinkInTheDocumentationResolves` walks every Markdown file in the repository and requires each relative link to resolve *from the file it is written in*, fragment included, because a link is the one part of a document that breaks silently — renaming a heading breaks every reference to it without touching the files carrying them. Links inside fenced blocks are skipped: `docs/CONVENTIONS.md` quotes the conformance-language template, whose `../CONVENTIONS.md` is a path for the *quoting* document to write and not one to resolve from there. Nothing external is fetched, so the check is the same offline.
 - **`avrocpb/`** — Generated Go code from the protobuf definitions, and the only package here a third-party generator imports. Public rather than internal because the IR is a contract; do not edit the generated files directly.
@@ -282,6 +282,64 @@ one to leave the same tree behind, byte for byte — with a decoding collector o
 the traced side, so a run that exported nothing cannot pass it — and
 `TestGeneratedBytesAreTheSameWithATraceparentOrWithout` is the same requirement
 against the variables themselves.
+
+**A generator invocation is a span under avroc's** (#196,
+`internal/plugin/trace.go`). `internal/plugin.Main` is the single place every
+generator here runs through, so it is one implementation and not three: it
+extracts the parent with `telemetry.Extract`, opens `avroc.plugin.generate` — or
+`avroc.plugin.info` for a handshake, which is traced on the same terms because
+avroc propagates to it on the same terms — and ends it with the exit status the
+process is about to return. The names say what the *generator* does where
+avroc's `avroc.generator.run` says what avroc does; they are parent and child
+over the same interval, and one name for both would leave the depth as the only
+way to tell the fork from the work. The span carries `generator` and
+`ir_version` — the descriptor's for a generation, the declared one for a
+handshake — and `exit_code`, each spelled as `internal/avroc` spells the same
+fact. A **cancelled** run is deliberately not classified here: a generator
+killed by that cancellation never reaches the end of its span, and one that
+merely noticed has an exit status like any other, so the classification stays
+avroc's, which can see the signal it sent.
+
+Four things there are decisions.
+
+- **Off is still free, and off is still the ordinary case.** No `TRACEPARENT`
+  and no endpoint is a no-op provider, no SDK, no connection and nothing extra
+  on either stream — which is what a generator run by a shell, by an older
+  avroc, or under an avroc that is not tracing gets. `docs/plugin/SPEC.md`'s
+  "Trace context" already said a plugin may ignore the pair entirely; this is
+  that sentence implemented rather than a new requirement.
+- **The flush is bounded, because a generator is a child process.** avroc is
+  free to take `telemetry.ShutdownTimeout` over its own flush; a generator is
+  not, because avroc kills a child that outlives its wait delay, and a generator
+  blocking on an export at exit is one killed mid-export — a symptom that reads
+  as a hung generator rather than as an absent collector.
+  `plugin.FlushBudget` is that bound and `telemetry.WithFlushBudget` applies it,
+  giving one export request half of it so a request begun as the flush begins
+  can fail and be reported inside it. The relationship to avroc's delay is
+  asserted rather than assumed:
+  `internal/avroc.TestAGeneratorFlushesWellInsideTheDelayAvrocAllowsIt` compares
+  it against `handshakeWaitDelay`, which since #190 is the only wait delay left
+  and therefore the tighter of the two bounds. The two are not one shared
+  constant for the reason `pluginInfoFlag` is not either.
+- **The flush is not deferred in `main`.** Every `cmd/avroc-gen-*` calls
+  `os.Exit` the moment `Main` returns, so `plugin.run` starts the provider and
+  defers the shutdown itself, registering it *before* the span so that the span
+  is always ended first — the discipline #191 needed for avroc, applied to the
+  three executables avroc forks.
+- **A generator names itself.** `telemetry.WithDefaultServiceName` makes
+  `service.name` the executable rather than `avroc`, for the case the operator
+  has not set `OTEL_SERVICE_NAME` — which #193 already promised by refusing to
+  override that variable for the child ("each executable's own default").
+
+Reading the environment for the carrier is `internal/telemetry.Extract`'s and
+not `internal/plugin`'s, and that is the determinism ban rather than taste:
+`internal/plugin` is a package that can write generated output, telemetry is the
+one package exempt from the ban, and a `LookupEnv` written in the first would be
+one the static check cannot see through `cli.Environment`.
+`telemetry.EnvTraceparent` and `EnvTracestate` are where both halves in this
+repository take the spelling from, `internal/avroc/propagate.go` aliasing them,
+because one misspelling made on one side is a child whose spans quietly start a
+trace of their own.
 
 ### Determinism
 
