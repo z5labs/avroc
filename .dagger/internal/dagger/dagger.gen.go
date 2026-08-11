@@ -251,6 +251,21 @@ type GoCiID string
 type GoID string
 
 // A unique identifier for an object.
+type GrafanaStackGrafanaID string
+
+// A unique identifier for an object.
+type GrafanaStackID string
+
+// A unique identifier for an object.
+type GrafanaStackLokiID string
+
+// A unique identifier for an object.
+type GrafanaStackMimirID string
+
+// A unique identifier for an object.
+type GrafanaStackTempoID string
+
+// A unique identifier for an object.
 type HTTPStateID string
 
 // A unique identifier for an object.
@@ -294,6 +309,27 @@ type ModuleSourceID string
 
 // A unique identifier for an object.
 type ObjectTypeDefID string
+
+// A unique identifier for an object.
+type OtelContribCollectorID string
+
+// A unique identifier for an object.
+type OtelCoreCollectorID string
+
+// A unique identifier for an object.
+type OtelExporterID string
+
+// A unique identifier for an object.
+type OtelID string
+
+// A unique identifier for an object.
+type OtelPipelineID string
+
+// A unique identifier for an object.
+type OtelProcessorID string
+
+// A unique identifier for an object.
+type OtelReceiverID string
 
 // The platform config OS and architecture in a Container.
 //
@@ -13140,6 +13176,56 @@ func (r *Query) LoadGoFromID(id GoID) *Go {
 	}
 }
 
+// Load a GrafanaStack from its ID.
+func (r *Query) LoadGrafanaStackFromID(id GrafanaStackID) *GrafanaStack {
+	q := r.query.Select("loadGrafanaStackFromID")
+	q = q.Arg("id", id)
+
+	return &GrafanaStack{
+		query: q,
+	}
+}
+
+// Load a GrafanaStackGrafana from its ID.
+func (r *Query) LoadGrafanaStackGrafanaFromID(id GrafanaStackGrafanaID) *GrafanaStackGrafana {
+	q := r.query.Select("loadGrafanaStackGrafanaFromID")
+	q = q.Arg("id", id)
+
+	return &GrafanaStackGrafana{
+		query: q,
+	}
+}
+
+// Load a GrafanaStackLoki from its ID.
+func (r *Query) LoadGrafanaStackLokiFromID(id GrafanaStackLokiID) *GrafanaStackLoki {
+	q := r.query.Select("loadGrafanaStackLokiFromID")
+	q = q.Arg("id", id)
+
+	return &GrafanaStackLoki{
+		query: q,
+	}
+}
+
+// Load a GrafanaStackMimir from its ID.
+func (r *Query) LoadGrafanaStackMimirFromID(id GrafanaStackMimirID) *GrafanaStackMimir {
+	q := r.query.Select("loadGrafanaStackMimirFromID")
+	q = q.Arg("id", id)
+
+	return &GrafanaStackMimir{
+		query: q,
+	}
+}
+
+// Load a GrafanaStackTempo from its ID.
+func (r *Query) LoadGrafanaStackTempoFromID(id GrafanaStackTempoID) *GrafanaStackTempo {
+	q := r.query.Select("loadGrafanaStackTempoFromID")
+	q = q.Arg("id", id)
+
+	return &GrafanaStackTempo{
+		query: q,
+	}
+}
+
 // Load a HTTPState from its ID.
 func (r *Query) LoadHTTPStateFromID(id HTTPStateID) *HTTPState {
 	q := r.query.Select("loadHTTPStateFromID")
@@ -13266,6 +13352,76 @@ func (r *Query) LoadObjectTypeDefFromID(id ObjectTypeDefID) *ObjectTypeDef {
 	q = q.Arg("id", id)
 
 	return &ObjectTypeDef{
+		query: q,
+	}
+}
+
+// Load a OtelContribCollector from its ID.
+func (r *Query) LoadOtelContribCollectorFromID(id OtelContribCollectorID) *OtelContribCollector {
+	q := r.query.Select("loadOtelContribCollectorFromID")
+	q = q.Arg("id", id)
+
+	return &OtelContribCollector{
+		query: q,
+	}
+}
+
+// Load a OtelCoreCollector from its ID.
+func (r *Query) LoadOtelCoreCollectorFromID(id OtelCoreCollectorID) *OtelCoreCollector {
+	q := r.query.Select("loadOtelCoreCollectorFromID")
+	q = q.Arg("id", id)
+
+	return &OtelCoreCollector{
+		query: q,
+	}
+}
+
+// Load a OtelExporter from its ID.
+func (r *Query) LoadOtelExporterFromID(id OtelExporterID) *OtelExporter {
+	q := r.query.Select("loadOtelExporterFromID")
+	q = q.Arg("id", id)
+
+	return &OtelExporter{
+		query: q,
+	}
+}
+
+// Load a Otel from its ID.
+func (r *Query) LoadOtelFromID(id OtelID) *Otel {
+	q := r.query.Select("loadOtelFromID")
+	q = q.Arg("id", id)
+
+	return &Otel{
+		query: q,
+	}
+}
+
+// Load a OtelPipeline from its ID.
+func (r *Query) LoadOtelPipelineFromID(id OtelPipelineID) *OtelPipeline {
+	q := r.query.Select("loadOtelPipelineFromID")
+	q = q.Arg("id", id)
+
+	return &OtelPipeline{
+		query: q,
+	}
+}
+
+// Load a OtelProcessor from its ID.
+func (r *Query) LoadOtelProcessorFromID(id OtelProcessorID) *OtelProcessor {
+	q := r.query.Select("loadOtelProcessorFromID")
+	q = q.Arg("id", id)
+
+	return &OtelProcessor{
+		query: q,
+	}
+}
+
+// Load a OtelReceiver from its ID.
+func (r *Query) LoadOtelReceiverFromID(id OtelReceiverID) *OtelReceiver {
+	q := r.query.Select("loadOtelReceiverFromID")
+	q = q.Arg("id", id)
+
+	return &OtelReceiver{
 		query: q,
 	}
 }

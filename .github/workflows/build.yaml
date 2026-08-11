@@ -204,6 +204,29 @@ jobs:
       - name: Check TLS egress from the images
         run: dagger call tls-egress
 
+      # One connected trace from this pipeline, through avroc, into every
+      # generator it forks (#199). It runs example/'s generation through the
+      # published image with its spans going to a real OpenTelemetry Collector
+      # backed by Tempo, then queries Tempo and asserts the trace's *structure*:
+      # one trace id across avroc's spans and every generator's, each generator's
+      # invocation span parented to the avroc span that forked it, and avroc's
+      # own root parented to the Dagger exec's span.
+      #
+      # It is a step of its own because propagation is the one property here that
+      # breaks with nothing else breaking. A generator whose span context was
+      # dropped generates correct output and exits zero, so every step above
+      # stays green and the only symptom is an orphan span in a backend nobody is
+      # watching during CI. The unit tests either side of the fork each stop at
+      # the process boundary they are testing; this is the only check that sees
+      # the spans meet again in a backend.
+      #
+      # It carries its own negative control — the same assertions against a build
+      # with TRACEPARENT propagation removed, which they must reject — so the
+      # failure path this step exists for is exercised on every run rather than
+      # only on the day it is needed.
+      - name: Check that the trace is one connected trace
+        run: dagger call trace-propagation
+
       # docs/container/SPEC.md's worked example, built and run rather than read
       # (#129). It extracts the multi-stage Dockerfile that document gives a
       # stranger, compiles the third-party generator in it with the build stage

@@ -220,11 +220,18 @@ func TestATracedRunPropagatesToEveryGeneratorProcess(t *testing.T) {
 		})
 	}
 
-	t.Run("the inherited tracestate is replaced too", func(t *testing.T) {
-		// avroc's own span context carries no trace state, so there is none to
-		// hand on — and the upstream one is not avroc's to forward.
-		if values := valuesOf(run.generate, envTracestate); len(values) != 0 {
-			t.Errorf("%s = %q, want it absent", envTracestate, values)
+	t.Run("the inherited tracestate travels with the trace", func(t *testing.T) {
+		// This reverses what #193 asserted here, and the reversal is a
+		// consequence of #199 rather than a second decision. Trace state is
+		// scoped to a *trace*: back when avroc started a trace of its own, its
+		// span context carried none and there was none to hand on, so "absent"
+		// was the right answer. avroc now continues the trace it was started
+		// inside, so the state belongs to avroc's own span context — and W3C
+		// Trace Context requires a participant that continues a trace to pass it
+		// along. Dropping it would strip a vendor's data at avroc and nowhere
+		// else in the chain.
+		if got := onlyValue(t, run.generate, envTracestate); got != "upstream=value" {
+			t.Errorf("%s = %q, want the inherited %q", envTracestate, got, "upstream=value")
 		}
 	})
 }
@@ -271,6 +278,73 @@ func TestAGeneratorStillGetsEverythingElseFromAvrocsEnvironment(t *testing.T) {
 		if got := onlyValue(t, run.generate, name); got != want {
 			t.Errorf("%s = %q, want %q", name, got, want)
 		}
+	}
+}
+
+// TestATracedRunIsAChildOfTheTraceContextItInherited is the carrier read in the
+// other direction (#199).
+//
+// #193 made avroc a writer of TRACEPARENT and left it a non-reader, and the two
+// halves are not independent: a run that hands every generator a correct span
+// context while starting a trace of its own produces something that looks
+// entirely right in isolation — one connected tree, every generator under its
+// invocation — and is an orphan in the backend the pipeline is watching. The
+// property is therefore about the *root*: everything avroc exports belongs to
+// the trace it was started inside, and its topmost span names the span that
+// started it.
+//
+// The value is read off the exported spans rather than off a recorder, because
+// what a collector receives is the only form of this anybody consumes.
+func TestATracedRunIsAChildOfTheTraceContextItInherited(t *testing.T) {
+	const (
+		inheritedTrace = "4bf92f3577b34da6a3ce929d0e0e4736"
+		inheritedSpan  = "00f067aa0ba902b7"
+	)
+	t.Setenv(envTraceparent, "00-"+inheritedTrace+"-"+inheritedSpan+"-01")
+
+	collector := newSpanCollector(t)
+	generateWithEnvDump(t, collector)
+
+	spans := collector.spans(t)
+	if len(spans) == 0 {
+		t.Fatal("the run exported no spans, so there is nothing to be a child of anything")
+	}
+
+	root := spanNamed(t, spans, spanRun)
+	if got := hex.EncodeToString(root.GetParentSpanId()); got != inheritedSpan {
+		t.Errorf("%s is parented to %q, want the inherited %s — avroc started a trace of its own instead of joining the one it was run inside",
+			spanRun, got, inheritedSpan)
+	}
+
+	// Every span and not merely the root: a root that joined the trace while its
+	// phases did not would be a stranger failure than the one this is about, and
+	// it costs one loop to rule out.
+	for _, span := range spans {
+		if got := hex.EncodeToString(span.GetTraceId()); got != inheritedTrace {
+			t.Errorf("%s is in trace %s, want the inherited %s", span.GetName(), got, inheritedTrace)
+		}
+	}
+}
+
+// TestAnInheritedTraceparentIsTheOnlyThingThatParentsARun is the ordinary case,
+// and the one that says the extraction above added no requirement.
+//
+// A run started from a shell has no trace context. The propagator extracts
+// nothing, avroc's root span is the root of a trace of its own, and that is
+// correct rather than a degraded form of the case above.
+func TestAnInheritedTraceparentIsTheOnlyThingThatParentsARun(t *testing.T) {
+	// Explicitly unset rather than merely not set: the test binary is itself
+	// routinely run under something that traces.
+	t.Setenv(envTraceparent, "")
+	t.Setenv(envTracestate, "")
+
+	collector := newSpanCollector(t)
+	generateWithEnvDump(t, collector)
+
+	root := spanNamed(t, collector.spans(t), spanRun)
+	if parent := root.GetParentSpanId(); len(parent) != 0 {
+		t.Errorf("%s is parented to %q with nothing to inherit from, want a root span",
+			spanRun, hex.EncodeToString(parent))
 	}
 }
 
@@ -335,6 +409,18 @@ func generateWithEnvDump(t *testing.T, collector *spanCollector) envDumpRun {
 	env := map[string]string{"PATH": filepath.Dir(generatorPath)}
 	if collector != nil {
 		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = collector.endpoint()
+	}
+
+	// The carrier is read twice by two different readers, and a test that seeded
+	// only one of them would be checking half of #199. avroc hands a *child* the
+	// pair by rewriting os.Environ, so t.Setenv is what a child sees; avroc reads
+	// its *own* parent through cli.Context.Env, which is this map, because
+	// everything avroc reads from the environment goes through cli.Context and
+	// never through os. So whatever the test set is put in both places.
+	for _, name := range []string{envTraceparent, envTracestate} {
+		if value, ok := os.LookupEnv(name); ok {
+			env[name] = value
+		}
 	}
 
 	c := cli.Context{

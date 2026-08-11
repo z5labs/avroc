@@ -57,6 +57,31 @@ func Main(ctx context.Context, cli cli.Context) int {
 		}
 	}()
 
+	// The run's own parent, when it has one (#199). avroc is routinely started by
+	// something that is already tracing — a CI job, or the Dagger exec that sets
+	// TRACEPARENT on every container it runs — and #193's carrier is symmetric:
+	// the pair avroc writes for a generator is the pair avroc reads for itself,
+	// through the same [telemetry.Extract] every generator here goes through.
+	//
+	// Without it a run produces something that looks entirely correct in
+	// isolation — one connected tree with every generator under its invocation —
+	// and is an orphan beside the pipeline that ran it. That is the failure
+	// `dagger call trace-propagation` exists to catch, and it is the one this
+	// call fixes.
+	//
+	// **Gated on tracing being on, and that is #193's decision rather than a new
+	// one.** An untraced avroc exports no span, so there is nothing of avroc's
+	// for a generator to be a child of; extracting anyway would leave
+	// generatorEnv handing the inherited context straight on, parenting a
+	// generator's spans to a trace avroc contributed nothing to. Off therefore
+	// stays actively unset, exactly as that story wrote it. It is the same
+	// condition [telemetry.Start] already uses to decide whether to touch
+	// OpenTelemetry's globals at all: on is when this process joins the world's
+	// tracing, and off is when it is not in it.
+	if tracing.Enabled() {
+		ctx = telemetry.Extract(ctx, cli.Env)
+	}
+
 	if len(cli.Args) == 0 {
 		printUsage(os.Stderr)
 		return 1

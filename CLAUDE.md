@@ -283,6 +283,32 @@ the traced side, so a run that exported nothing cannot pass it — and
 `TestGeneratedBytesAreTheSameWithATraceparentOrWithout` is the same requirement
 against the variables themselves.
 
+**The carrier is read as well as written** (#199, `internal/avroc.Main`). #193
+made avroc a writer of the pair and left it a non-reader, and the two halves are
+not independent: a run that hands every generator a correct span context while
+starting a trace of its own produces something that looks entirely right in
+isolation — one connected tree, every generator under its invocation — and is an
+orphan beside the CI job or the container exec that ran it. `Main` therefore
+takes its own parent from the environment with the same `telemetry.Extract` every
+generator goes through, so `docs/plugin/SPEC.md`'s "a `TRACEPARENT` avroc
+inherited from its own caller is avroc's *parent*" is behaviour rather than
+aspiration. `dagger call trace-propagation` is what noticed that it was not.
+
+Two things there are decisions. It is **gated on tracing being on**, which is
+#193's "off means actively unset" preserved rather than a new rule: an untraced
+avroc exports no span, so extracting anyway would leave `generatorEnv` handing
+the inherited context straight on and parenting a generator's spans to a trace
+avroc contributed nothing to. It is the same condition `telemetry.Start` already
+uses to decide whether to touch OpenTelemetry's globals. And an inherited
+**`TRACESTATE` now does reach a generator**, which reverses what #193 asserted:
+trace state is scoped to a trace, and a participant continuing one is required by
+W3C Trace Context to pass it along, so the old "absent" was a consequence of
+avroc starting a fresh trace rather than a decision about trace state.
+`TestATracedRunIsAChildOfTheTraceContextItInherited` and
+`TestAnInheritedTraceparentIsTheOnlyThingThatParentsARun` are the two halves, and
+they read the *exported* spans, because what a collector receives is the only
+form of this anybody consumes.
+
 **A generator invocation is a span under avroc's** (#196,
 `internal/plugin/trace.go`). `internal/plugin.Main` is the single place every
 generator here runs through, so it is one implementation and not three: it
@@ -532,6 +558,36 @@ absent roots rather than to a fourth thing missing from scratch. Its client is a
 against any image at all, and the same finding is why the determinism stage's
 traced run cannot claim nothing is listening at the endpoint it sets.
 `internal/tools/tls-egress` is the fixture on both ends of that wire.
+
+**One connected trace, executed** (#199, `.dagger/trace_propagation.go`).
+`dagger call trace-propagation` binds Tempo behind an OpenTelemetry Collector —
+both from the devex `otel` and `grafana-stack` modules, pinned at the same commit
+as `go` and `z5labs`, so one bump moves all four — runs `example/`'s generation
+through the bundle image with its spans going to that collector, then queries
+Tempo and asserts the trace's **structure**: one trace id across avroc's spans
+and every generator's, each `avroc.plugin.generate` parented to the
+`avroc.generator.run` that forked it and agreeing with it about which generator
+it is, the handshake pair held to the same rule, and avroc's own root parented to
+the Dagger exec's span. Structure rather than counts, because four generators
+reporting four orphan traces is exactly what a dropped `TRACEPARENT` produces and
+is exactly what a span count would accept. Nothing asserts a duration; it is a
+functional check and not a benchmark.
+
+Three things there are decisions. There is a **launcher inside the image**
+(`internal/tools/trace-propagation`, the fixture on both ends) because Dagger
+overrides `OTEL_EXPORTER_OTLP_ENDPOINT` on every exec — `tls_egress.go`'s finding
+again — so the endpoint has to be set *inside* the exec, by something that
+changes that one variable and re-execs avroc; it deliberately leaves
+`TRACEPARENT` alone, because that value is the exec's own span and is the thing
+under test, and records it, because it is also the only way the check learns the
+trace id to ask Tempo for. The **negative control is split from the run**: the
+same assertions go against a build with the injection removed from
+`generatorEnv`, and that build is required to get all the way to a *fetched
+trace* before the assertions reject it — a control written as "the whole thing
+errors" would go green the day the edit stopped compiling, having checked
+nothing. And **no TLS is covered**: the collector is reached over plaintext on
+the container network, which is the shape `docs/container/SPEC.md` supports, and
+the certificate question is `tls-egress`'s.
 
 `.dagger/worked_example.go` is the third of them, and its input is a document:
 `dagger call worked-example` extracts the multi-stage Dockerfile from
