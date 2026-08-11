@@ -1,7 +1,7 @@
 {
   "select": {
     "label": "story",
-    "milestone": "v0.2.0",
+    "milestone": null,
     "limit": 200
   },
   "dependencies": {
@@ -9,6 +9,8 @@
   },
   "verify": [
     "go build ./...",
+    "out=$(gofmt -l .); test -z \"$out\" || { echo \"$out\"; exit 1; }",
+    "go vet ./...",
     "go test -race -cover ./...",
     "golangci-lint run",
     "go build -o ./bin/avroc ./cmd/avroc && go build -o ./bin/avroc-gen-go ./cmd/avroc-gen-go && go build -o ./bin/avroc-gen-json ./cmd/avroc-gen-json && go build -o ./bin/avroc-gen-pcf ./cmd/avroc-gen-pcf && (export PATH=\"$PWD/bin:$PATH\"; cd example && avroc generate) && git diff --exit-code -- example"
@@ -18,7 +20,11 @@
     "workflow": "auto-merge.yaml"
   },
   "review": {
-    "required": true
+    "reviewers": ["copilot", "local"],
+    "app": {
+      "idEnv": "Z5LABS_REVIEW_APP_ID",
+      "keyEnv": "Z5LABS_REVIEW_APP_KEY"
+    }
   },
   "worktreeDir": ".claude/worktrees"
 }
