@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
@@ -165,16 +164,6 @@ type generator struct {
 	executablePath string
 }
 
-// generatorWaitDelay bounds how long avroc waits after a generator's process
-// has been killed before giving up on the streams it inherited.
-//
-// Cancellation kills the child, which cannot be caught or ignored, so this is
-// not what makes a cancelled run terminate. What it covers is a grandchild that
-// outlived its parent still holding avroc's stderr open: without it Wait blocks
-// on a descriptor nobody is going to close, and a cancelled run hangs on a
-// process avroc never started.
-const generatorWaitDelay = 5 * time.Second
-
 // run runs one generator over one descriptor, as docs/plugin/SPEC.md's
 // Invocation specifies: fork and exec avroc-gen-<name> with the descriptor and
 // an output directory as absolute paths, and wait for it to exit.
@@ -278,21 +267,27 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 	// never through the "-" form the contract also allows.
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
-	// Standard error is the diagnostic channel, so it is read rather than
-	// inherited: every line lands in avroc's structured log, attributed to the
-	// generator that wrote it. An io.Writer rather than a StderrPipe on purpose
-	// — exec copies into it from a goroutine that WaitDelay bounds, where a pipe
-	// read of avroc's own would hang on a grandchild holding the descriptor open
-	// and never reach the Wait that gives up on it.
-	stderr := newStderrDiagnostics(ctx, g.log, g.name)
-	cmd.Stderr = stderr
-	cmd.WaitDelay = generatorWaitDelay
+	// Standard error is inherited rather than read. avroc analyses the exit
+	// status and nothing else (#190), so the generator's stderr is its own to
+	// write and avroc's only job is to get out of the way: os.Stderr is an
+	// *os.File, which exec hands to the child as a file descriptor instead of
+	// spawning a goroutine to copy it, so the bytes reach avroc's standard error
+	// unaltered, in order, and as they are written rather than when the process
+	// exits.
+	//
+	// Two consequences are accepted deliberately. A multi-kilobyte write — a
+	// stack trace — from one of several concurrent generators can interleave
+	// with another's, because only writes below PIPE_BUF are atomic. And nothing
+	// says which generator a line came from until generators emit log records
+	// carrying their own resource; a prefix added here would be the parsed
+	// attribution this removed.
+	//
+	// Passing the descriptor through also retires the WaitDelay this used to
+	// need: with no copy goroutine there is no pipe for a grandchild to hold
+	// open, and the kill CommandContext sends on cancellation cannot be caught.
+	cmd.Stderr = os.Stderr
 
 	runErr := cmd.Run()
-	// After the wait, so that the copy is finished and the last line — which a
-	// generator killed mid-write may have left without its newline — is recorded
-	// rather than being the one thing avroc swallows.
-	stderr.flush()
 	if runErr != nil {
 		return nil, g.reportFailure(ctx, runErr)
 	}

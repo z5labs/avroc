@@ -413,11 +413,11 @@ No options required.
    `options` lists the `--opt` keys you accept; omit the member to decide for yourself instead.
 3. Accept `--descriptor <path> --out <dir> [--opt k=v ...]`, each option followed by its value as the next argument. `--descriptor -` means the descriptor arrives on standard input. Nothing else is on the vector, and nothing comes from the environment.
 4. Decode the descriptor at that path: it is a `GenerateRequest` in the protobuf binary wire encoding (see [`proto/`](proto/) and [`docs/ir/SPEC.md`](docs/ir/SPEC.md)). Check its `version` first.
-5. Write every generated file beneath `--out`, report problems on stderr, and exit zero. A non-zero exit fails the run and nothing you wrote is adopted as output.
+5. Write every generated file beneath `--out`, report problems on stderr in whatever form you like — avroc passes it through to its own stderr unaltered and reads none of it — and exit zero. The exit status is the whole of what avroc analyses: a non-zero exit fails the run and nothing you wrote is adopted as output.
 
 `--out` is a private, empty scratch directory for that one invocation, not the project's output directory: avroc merges it in only after a zero exit, which is what makes a partial failure harmless. Two runs over the same descriptor must produce byte-identical output.
 
-The full contract — discovery, the argument vector, capability negotiation, the descriptor's lifetime, exit codes and the stderr diagnostic format, and the determinism a plugin must exhibit — is [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md).
+The full contract — discovery, the argument vector, capability negotiation, the descriptor's lifetime, exit codes and what becomes of the standard streams, and the determinism a plugin must exhibit — is [`docs/plugin/SPEC.md`](docs/plugin/SPEC.md).
 
 To ship it, build an image `FROM` the published one and `COPY` the executable into the plugin directory — that is the whole of the distribution mechanism, and [_Worked example: adding a generator_](docs/container/SPEC.md#worked-example-adding-a-generator) is a runnable multi-stage Dockerfile doing exactly that.
 

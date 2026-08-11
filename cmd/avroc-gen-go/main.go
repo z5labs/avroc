@@ -14,7 +14,6 @@ import (
 
 	avrocgengo "github.com/z5labs/avroc/internal/avroc-gen-go"
 	"github.com/z5labs/avroc/internal/cli"
-	"github.com/z5labs/avroc/internal/plugin"
 )
 
 func main() {
@@ -22,10 +21,11 @@ func main() {
 	defer cancel()
 
 	code := avrocgengo.Main(ctx, cli.Context{
-		// Diagnostics go to standard error in docs/plugin/SPEC.md's format, so
-		// that avroc parses them back into its own structured log at the level
-		// the generator meant rather than surfacing a slog dump verbatim.
-		Log: slog.New(plugin.NewDiagnosticHandler(os.Stderr, nil)),
+		// Standard error is passed straight through to avroc's own (#190), so
+		// nothing about this handler's format is part of docs/plugin/SPEC.md:
+		// avroc analyses the exit status and does not read what is written here.
+		// A generator built elsewhere is free to log however it likes.
+		Log: slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		Env: cli.EnvironmentFunc(func(key string) (string, bool) {
 			return os.LookupEnv(key)
 		}),
