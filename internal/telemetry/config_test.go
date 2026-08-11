@@ -27,13 +27,13 @@ func environ(pairs map[string]string) cli.Environment {
 // specification gives for the non signal-specific endpoint variable.
 func TestTheEndpointIsTheBaseUrlPlusTheSignalsPath(t *testing.T) {
 	endpoints := map[string]string{
-		"http://localhost:4318":            "http://localhost:4318/v1/traces",
-		"http://localhost:4318/":           "http://localhost:4318/v1/traces",
-		"https://collector.example:443":    "https://collector.example:443/v1/traces",
-		"https://collector.example/otlp":   "https://collector.example/otlp/v1/traces",
-		"https://collector.example/otlp/":  "https://collector.example/otlp/v1/traces",
-		"http://localhost:4318?ignored=1":  "http://localhost:4318/v1/traces",
-		"http://localhost:4318#alsoIgnord": "http://localhost:4318/v1/traces",
+		"http://localhost:4318":             "http://localhost:4318/v1/traces",
+		"http://localhost:4318/":            "http://localhost:4318/v1/traces",
+		"https://collector.example:443":     "https://collector.example:443/v1/traces",
+		"https://collector.example/otlp":    "https://collector.example/otlp/v1/traces",
+		"https://collector.example/otlp/":   "https://collector.example/otlp/v1/traces",
+		"http://localhost:4318?ignored=1":   "http://localhost:4318/v1/traces",
+		"http://localhost:4318#alsoIgnored": "http://localhost:4318/v1/traces",
 	}
 
 	for raw, want := range endpoints {

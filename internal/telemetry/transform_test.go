@@ -300,6 +300,22 @@ func TestAnExportAfterShutdownIsNotARequest(t *testing.T) {
 	}
 }
 
+// TestABatchThatCarriesNothingIsNotARequest: a batch is non-empty and still
+// transforms to nothing when every element in it is nil. Posting the empty body
+// that produces would be a request a collector is entitled to reject, and the
+// rejection would arrive as a log record about a trace nobody sent.
+func TestABatchThatCarriesNothingIsNotARequest(t *testing.T) {
+	col := newCollector(t)
+	e := newExporter(config{endpoint: col.endpoint() + tracesPath})
+
+	if err := e.ExportSpans(t.Context(), []sdktrace.ReadOnlySpan{nil, nil}); err != nil {
+		t.Errorf("ExportSpans over a batch of nothing returned %v, want nil", err)
+	}
+	if got := len(col.recorded()); got != 0 {
+		t.Errorf("a batch of nothing made %d request(s)", got)
+	}
+}
+
 // TestAnExportThatCannotBeDeliveredIsAnError: the batch processor hands this to
 // the error handler, and a silent failure here is a trace nobody knows is
 // missing.

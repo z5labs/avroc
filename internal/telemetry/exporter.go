@@ -74,6 +74,14 @@ func (e *exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 	if err != nil {
 		return fmt.Errorf("failed to encode %d spans: %w", len(spans), err)
 	}
+	// A batch that held nothing the transform could carry — every element nil —
+	// encodes to no bytes, and a request with an empty body is one a collector is
+	// entitled to reject. There is nothing to export, so nothing is posted: the
+	// emptiness is decided after the transform rather than before it, because the
+	// transform is the thing that knows what survived.
+	if len(body) == 0 {
+		return nil
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.endpoint, bytes.NewReader(body))
 	if err != nil {
