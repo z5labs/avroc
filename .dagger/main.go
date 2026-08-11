@@ -412,16 +412,25 @@ const sourceDateEpoch = "1717372800"
 // forks, and a TRACEPARENT, so that the run is a child of somebody else's trace
 // exactly as it is under `dagger call`.
 //
-// **Nothing is listening at that endpoint, and that is deliberate.** What is
-// being checked is that a generation which opens spans writes the same bytes as
-// one that does not, and the spans have to be opened for that to mean anything;
-// where they go afterwards is no part of it. A collector container would add a
-// service to the check and a reason for it to fail that has nothing to do with
-// determinism, so the export fails instead — immediately, because the connection
-// is refused on the loopback address rather than timing out, and harmlessly,
-// because internal/telemetry logs a failed export and never fails a build over
-// one. A literal address rather than a name, so that a scratch container with no
-// resolver is not resolving anything.
+// **Where the spans end up is no part of this check.** What is being checked is
+// that a generation which opens spans writes the same bytes as one that does
+// not, and the spans have to be opened for that to mean anything; a collector
+// container would add a service to the check and a reason for it to fail that
+// has nothing to do with determinism. So this endpoint is a placeholder: an
+// address on the loopback with nothing behind it, written as a literal rather
+// than a name so that a scratch container with no resolver is not resolving
+// anything, and harmless either way because internal/telemetry logs a failed
+// export and never fails a build over one.
+//
+// It is a placeholder in a stronger sense than it looks, and the reason belongs
+// here rather than being rediscovered: **Dagger sets OTEL_EXPORTER_OTLP_ENDPOINT
+// itself on every exec**, overriding whatever the container carried, so that a
+// tool inside reports into Dagger's own trace. What avroc reads in this run is
+// therefore Dagger's endpoint and not this one — the spans are exported, and
+// they are exported successfully. Nothing above depends on which, but a check
+// that needed avroc pointed at an endpoint of its own could not be written this
+// way at all; tls_egress.go is the one that needed it, and says what it does
+// instead.
 func tracedRunEnv() []envVar {
 	return []envVar{
 		{"OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318"},

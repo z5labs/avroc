@@ -187,6 +187,23 @@ jobs:
       - name: Check the generator images against the contract
         run: dagger call generator-image-contract
 
+      # docs/container/SPEC.md's "No certificate authorities", executed (#198).
+      # It posts an OTLP export from the published image to a real collector
+      # over `http://` and over `https://`, and requires the plaintext one to
+      # arrive, the TLS one to fail naming x509, and the TLS one to arrive the
+      # moment a CA bundle is supplied at the conventional path.
+      #
+      # It is a step of its own because the listing the step above asserts can
+      # only say that no bundle is in the image; what an operator is being asked
+      # to act on is the consequence, which is that an `https://` OTLP endpoint
+      # configured on this image never delivers a span. That failure arrives at
+      # export time, in somebody's deployment, on a run that otherwise looks
+      # like it worked — and it is invisible to every other check here, all of
+      # which either configure no telemetry or make no claim about where a span
+      # ends up.
+      - name: Check TLS egress from the images
+        run: dagger call tls-egress
+
       # docs/container/SPEC.md's worked example, built and run rather than read
       # (#129). It extracts the multi-stage Dockerfile that document gives a
       # stranger, compiles the third-party generator in it with the build stage
