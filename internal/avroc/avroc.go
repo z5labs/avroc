@@ -23,6 +23,8 @@ import (
 	"github.com/z5labs/avroc/internal/telemetry"
 
 	"github.com/z5labs/avro-go/idl"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Main dispatches to an avroc subcommand. Generators are declared in an
@@ -35,6 +37,12 @@ import (
 // processor holding the run's spans would drop every one of them. Down here it
 // is on every path out of the command, the failing ones included, because every
 // path out is a return.
+//
+// The tracer the provider hands out goes to generate and to nothing else (#192).
+// A run is the thing worth a trace: it forks processes, walks a project tree and
+// takes seconds. init writes one file it was asked for and inspect renders one it
+// was handed, and neither is a question anybody asks a span about — so they are
+// not merely untraced by omission, they are never given the means.
 func Main(ctx context.Context, cli cli.Context) int {
 	// A configuration this build cannot honour is a warning and an untraced run,
 	// never a failed one: see internal/telemetry. The provider is usable either
@@ -64,7 +72,7 @@ func Main(ctx context.Context, cli cli.Context) int {
 		if code, ok := rejectExtraArgs(cmd, cli.Args[1:]); !ok {
 			return code
 		}
-		return runGenerate(ctx, cli)
+		return runGenerate(ctx, cli, tracing.Tracer(tracerScope))
 	case "inspect":
 		// inspect names the descriptor it renders, so it owns its own argument
 		// handling rather than being routed through rejectExtraArgs.
@@ -209,6 +217,16 @@ type generator struct {
 // project tree (#118). On any failure the directory is removed here, with
 // whatever the generator left in it, and no plan is returned.
 func (g generator) run(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (out *generatorOutput, err error) {
+	// One span per invocation, and the anchor #193 hangs the generator's own
+	// spans off: the context it is started from is the one exec.CommandContext
+	// carries into the child. Registered before every other defer here so that it
+	// unwinds after all of them, and therefore records the error the whole
+	// invocation returned rather than the one the process exited with.
+	ctx, span := startSpan(ctx, spanGeneratorRun, generatorAttr(g.name))
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
 	desc := newDescriptor(options, schemas)
 
 	// One descriptor file per generator invocation, in a directory created for
@@ -348,7 +366,18 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 // No meaning is attached to a particular non-zero value beyond failure. The
 // small integers are already spoken for by parties this contract does not
 // control, so the code is reported and nothing is concluded from it.
+//
+// The three cases are also the three shapes the invocation's span takes, because
+// the classification has already been made here and a second reading of the same
+// error somewhere else would be a fourth description of the same distinction: a
+// signal carries signal and signal_number, a non-zero exit carries exit_code,
+// and a generator that never ran carries neither, there having been no process
+// to produce either. What this does not do is set the span's status — run's
+// deferred endSpan sets it once, from the error this returns, so a generator
+// killed because the run was cancelled is still marked cancelled.
 func (g generator) reportFailure(ctx context.Context, runErr error) error {
+	span := trace.SpanFromContext(ctx)
+
 	var exitErr *exec.ExitError
 	if !errors.As(runErr, &exitErr) {
 		g.log.ErrorContext(ctx, "failed to run generator",
@@ -360,6 +389,10 @@ func (g generator) reportFailure(ctx context.Context, runErr error) error {
 
 	if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
 		signal := status.Signal()
+		span.SetAttributes(
+			attribute.String(attrSignal, signal.String()),
+			attribute.Int(attrSignalNumber, int(signal)),
+		)
 		g.log.ErrorContext(ctx, "generator terminated by signal",
 			slog.String("generator", g.name),
 			slog.String("signal", signal.String()),
@@ -368,6 +401,7 @@ func (g generator) reportFailure(ctx context.Context, runErr error) error {
 		return fmt.Errorf("generator %q was terminated by signal %s (%d): %w", g.name, signal, int(signal), runErr)
 	}
 
+	span.SetAttributes(attribute.Int(attrExitCode, exitErr.ExitCode()))
 	g.log.ErrorContext(ctx, "generator exited non-zero",
 		slog.String("generator", g.name),
 		slog.Int("exit_code", exitErr.ExitCode()),

@@ -179,7 +179,12 @@ func marshalOutputRecord(files []string) ([]byte, error) {
 // regeneration that produced the same files leaves the committed record and its
 // mtime exactly as it found them, so nothing downstream rebuilds because avroc
 // ran.
-func writeOutputRecord(ctx context.Context, log *slog.Logger, projectRoot string, files []string) error {
+func writeOutputRecord(ctx context.Context, log *slog.Logger, projectRoot string, files []string) (err error) {
+	ctx, span := startSpan(ctx, spanRecord)
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
 	data, err := marshalOutputRecord(files)
 	if err != nil {
 		return fmt.Errorf("failed to render %s: %w", outputRecordFilename, err)
@@ -252,7 +257,12 @@ func producedFiles(projectRoot string, outs []*generatorOutput) ([]string, error
 // A path that is no longer a regular file is left alone and reported. A person
 // who replaced a generated file with a directory or a link has taken it over,
 // and avroc removing it would be avroc deleting something it did not write.
-func pruneStale(ctx context.Context, log *slog.Logger, projectRoot string, previous, produced []string) error {
+func pruneStale(ctx context.Context, log *slog.Logger, projectRoot string, previous, produced []string) (err error) {
+	ctx, span := startSpan(ctx, spanPrune)
+	defer func() {
+		endSpan(ctx, span, err)
+	}()
+
 	root, err := filepath.Abs(projectRoot)
 	if err != nil {
 		return err

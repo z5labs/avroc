@@ -559,7 +559,7 @@ func TestRunGenerateStopsAtTheHandshake(t *testing.T) {
 		WorkingDir: workingDir,
 	}
 
-	if code := runGenerate(t.Context(), c); code != 1 {
+	if code := runGenerate(t.Context(), c, noopTracer()); code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if !strings.Contains(logs.String(), "IR version") {
