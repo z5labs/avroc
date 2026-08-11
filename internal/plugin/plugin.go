@@ -239,7 +239,14 @@ func OutputPath(out, p string) (string, error) {
 // files beneath --out and exits — with the directory behind an interface so
 // that Main owns the path checking and the bookkeeping and a generator owns
 // only its bytes.
-type GenerateFunc func(*avrocpb.GenerateRequest, FileWriter) error
+//
+// The context carries the invocation's span, which is how a generator's phases
+// become children of it (#197) without any generator growing a [trace.Tracer]
+// parameter to thread through untouched: the provider travels in the context, as
+// it does in internal/avroc. It is a context and not a tracer for the ordinary
+// reason as well — a generation is a whole process's work, and cancellation
+// belongs to whoever finds a use for it first.
+type GenerateFunc func(context.Context, *avrocpb.GenerateRequest, FileWriter) error
 
 // Main runs one invocation from an argument vector and returns the process exit
 // status.
@@ -375,7 +382,7 @@ func invoke(ctx context.Context, c cli.Context, info Info, generate GenerateFunc
 	trace.SpanFromContext(ctx).SetAttributes(attribute.Int64(attrIRVersion, int64(req.GetVersion())))
 
 	out := NewOutputDir(inv.Out)
-	if err := generate(req, out); err != nil {
+	if err := generate(ctx, req, out); err != nil {
 		c.Log.ErrorContext(ctx, "failed to generate", slog.String("generator", name), slog.Any("error", err))
 		return 1
 	}

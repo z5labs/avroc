@@ -7,6 +7,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -266,7 +267,7 @@ func TestOutputPath(t *testing.T) {
 
 // echoGenerate is a stand-in generator in the shape the contract describes: it
 // writes every schema's full name as a file.
-func echoGenerate(req *avrocpb.GenerateRequest, w FileWriter) error {
+func echoGenerate(_ context.Context, req *avrocpb.GenerateRequest, w FileWriter) error {
 	for _, schema := range req.GetSchemas() {
 		name := schema.GetType().GetRecord().GetFullName() + ".txt"
 		if err := w.WriteFile(name, []byte("first\nsecond\n")); err != nil {
@@ -344,7 +345,7 @@ func TestMain_Failures(t *testing.T) {
 		out := t.TempDir()
 		c, logs := newTestCLI("--descriptor", descriptorPath(t), "--out", out)
 
-		failing := func(*avrocpb.GenerateRequest, FileWriter) error {
+		failing := func(context.Context, *avrocpb.GenerateRequest, FileWriter) error {
 			return io.ErrUnexpectedEOF
 		}
 		if code := Main(t.Context(), c, testInfo(), failing); code == 0 {
@@ -361,7 +362,7 @@ func TestMain_Failures(t *testing.T) {
 		// avroc would adopt the directory with the file missing from it.
 		c, logs := newTestCLI("--descriptor", descriptorPath(t), "--out", t.TempDir())
 
-		swallowing := func(_ *avrocpb.GenerateRequest, w FileWriter) error {
+		swallowing := func(_ context.Context, _ *avrocpb.GenerateRequest, w FileWriter) error {
 			_ = w.WriteFile("../escapes.go", []byte("package pkg\n"))
 			return nil
 		}

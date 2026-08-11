@@ -90,7 +90,7 @@ func TestSingleObjectEncodingRefusesANonRecordRoot(t *testing.T) {
 			dir := t.TempDir()
 			w := plugin.NewOutputDir(dir)
 
-			err := Generate(singleObjectRequest(&avrocpb.Schema{
+			err := Generate(t.Context(), singleObjectRequest(&avrocpb.Schema{
 				Namespace: proto.String("com.example"),
 				Type:      tc.root,
 			}), w)
@@ -117,7 +117,7 @@ func TestSingleObjectEncodingRefusesBeforeWritingAnyFile(t *testing.T) {
 	dir := t.TempDir()
 	w := plugin.NewOutputDir(dir)
 
-	err := Generate(singleObjectRequest(
+	err := Generate(t.Context(), singleObjectRequest(
 		&avrocpb.Schema{Namespace: proto.String("com.example"), Type: eventRecord()},
 		&avrocpb.Schema{
 			Namespace: proto.String("com.example"),
@@ -144,7 +144,7 @@ func TestSingleObjectEncodingReportsARootOutsideTheClosedSet(t *testing.T) {
 	dir := t.TempDir()
 	w := plugin.NewOutputDir(dir)
 
-	err := Generate(singleObjectRequest(&avrocpb.Schema{Namespace: proto.String("com.example")}), w)
+	err := Generate(t.Context(), singleObjectRequest(&avrocpb.Schema{Namespace: proto.String("com.example")}), w)
 	if err == nil {
 		t.Fatal("Generate accepted a schema carrying no root type")
 	}
@@ -160,7 +160,7 @@ func TestSingleObjectEncodingAcceptsARecordRoot(t *testing.T) {
 	dir := t.TempDir()
 	w := plugin.NewOutputDir(dir)
 
-	if err := Generate(singleObjectRequest(&avrocpb.Schema{
+	if err := Generate(t.Context(), singleObjectRequest(&avrocpb.Schema{
 		Namespace: proto.String("com.example"),
 		Type:      eventRecord(),
 	}), w); err != nil {
@@ -186,7 +186,7 @@ func TestANonRecordRootGeneratesWithoutSingleObjectEncoding(t *testing.T) {
 	dir := t.TempDir()
 	w := plugin.NewOutputDir(dir)
 
-	err := Generate(&avrocpb.GenerateRequest{
+	err := Generate(t.Context(), &avrocpb.GenerateRequest{
 		Version: proto.Int32(ir.Version),
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("gen")}},
 		Schemas: []*avrocpb.Schema{{

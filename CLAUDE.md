@@ -341,6 +341,69 @@ repository take the spelling from, `internal/avroc/propagate.go` aliasing them,
 because one misspelling made on one side is a child whose spans quietly start a
 trace of their own.
 
+**A generator's phases are spans under its invocation's** (#197,
+`internal/plugin/trace.go`). An invocation being one span answers "which
+generator is slow"; these answer "which part of it".
+`avroc.plugin.descriptor.validate`, `avroc.plugin.options.parse`,
+`avroc.plugin.schema.generate` (one per schema, carrying the schema's
+`ir.SchemaBaseName`, and covering everything the generator does for that schema),
+`avroc.plugin.fingerprint` (one per schema, a child of that schema's, and the one
+place `avroc-gen-go` computes over the IR rather than walking it) and
+`avroc.plugin.file.write` (one per file, a child of its schema's, carrying the
+path relative to `--out`). They are the phases the code already had as functions
+rather than a decomposition invented for the trace, which is `internal/avroc`'s
+rule applied on the other side of the fork; and they live in `internal/plugin`
+for `tracerScope`'s reason, that `Main` is the one place all three generators run
+through, so it is one set of names and one instrumentation scope instead of
+three.
+
+Four things there are decisions.
+
+- **Cardinality fixes the granularity.** A span per schema and a span per file
+  are bounded by the manifest a person wrote; a span per *type* or per *field*
+  would be bounded by the user's IDL, and a schema with a few thousand fields
+  would produce a trace nobody can open. So anything finer is an attribute on one
+  of these spans and never a span of its own, and
+  `TestSpanCountIsAFunctionOfTheDescriptorAndNotTheSchema` — in all three
+  generators, over a 500-field record against a one-field one — is what holds
+  that as they grow.
+- **Not every generator opens all of them**, and that is the point.
+  `avroc-gen-go` is the only generator here with enough work in it to have parts;
+  `avroc-gen-json` and `avroc-gen-pcf` write one file per schema and do no
+  rendering, so they open the per-schema span and nothing finer.
+  Instrumentation heavier than the work it measures makes a trace harder to read,
+  not easier. That is also why the write is *inside* the schema's span rather
+  than beside it: one span name has to mean the same thing in all three, and for
+  the two with no write span of their own a write left outside would put the
+  filesystem time — often the larger half — and the failure on the invocation
+  instead of on the schema they belong to. `avroc-gen-go` loses nothing by it,
+  since its rendering is the difference between the schema's span and the file's.
+- **Off costs nothing per schema and nothing per file.** `startPhase` reads
+  `IsRecording` off the invocation's own span and returns immediately when it is
+  false — no tracer asked for, no attribute built, no span started — which is why
+  every helper takes its attribute as a plain string rather than an
+  `attribute.KeyValue` a call site would build whether or not anything was going
+  to read it, and why each generator derives its base name once and hands the
+  same value to the filename and to the span. The three
+  `TestAnUntracedGenerationStartsNoSpans` assert it against a provider that
+  *counts* rather than one that records, because "nothing was exported" is what a
+  non-recording provider gives for free and the claim is that nothing was
+  started.
+- **The bytes are the same traced or not**, and that is checked at three levels
+  rather than stated: each generator's `TestGenerateIsDeterministic` runs half its
+  repetitions traced and compares them against an untraced run 0,
+  `plugin.TestGeneratedBytesAreTheSameTracedOrNot` does it over a whole `Main`
+  through a decoding collector, and `dagger call regeneration`'s second run now
+  carries a `TRACEPARENT` and an endpoint, so the `example/` round trip itself is
+  a traced generation compared byte for byte against an untraced one. Nothing
+  listens at that endpoint on purpose: the spans have to be *opened* for the
+  comparison to mean anything, and where they go afterwards is no part of it.
+
+`GenerateFunc` grew a `context.Context` for this, which is how the invocation's
+span reaches a generator's phases without anything below `Main` growing a
+`trace.Tracer` parameter to thread through untouched — the provider travels in
+the context, exactly as it does in `internal/avroc`.
+
 ### Determinism
 
 Two runs of a generator over the same descriptor produce byte-identical output

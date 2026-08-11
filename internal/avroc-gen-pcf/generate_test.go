@@ -205,27 +205,40 @@ func TestGenerate_UnresolvedReference(t *testing.T) {
 	}
 }
 
-func TestBuildSchemaFile_Filename(t *testing.T) {
-	filename, _, err := buildSchemaFile(resolvedTestRecord())
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
+// TestGeneratedFilenames asserts the name each schema's file is written under.
+//
+// It is asked of a whole generation rather than of the function that renders one
+// schema, because the filename is Generate's: the base name is derived once
+// there and used both for the file and for the span naming that schema's work
+// (#197), so a test that called the renderer would be asserting about a
+// derivation nothing performs any more.
+//
+// The array root is the case worth having. This generator names the file after
+// what the root is *about*, which for `schema array<Event>;` is the record
+// inside the array and not the namespace's last component — where
+// ir.SchemaBaseName used to land for a root that is not itself a named type.
+func TestGeneratedFilenames(t *testing.T) {
+	testCases := []struct {
+		name   string
+		schema *avrocpb.Schema
+		want   string
+	}{
+		{name: "a record root", schema: resolvedTestRecord(), want: "test_record.avsc"},
+		{name: "an array root", schema: arrayRootSchema(), want: "event.avsc"},
 	}
-	if filename != "test_record.avsc" {
-		t.Errorf("expected test_record.avsc, got %q", filename)
-	}
-}
 
-// TestBuildSchemaFile_ArrayRootFilename asserts this generator names the file
-// after what an array root is about rather than after the namespace, which is
-// where ir.SchemaBaseName used to land for a root that is not itself a named
-// type.
-func TestBuildSchemaFile_ArrayRootFilename(t *testing.T) {
-	filename, _, err := buildSchemaFile(arrayRootSchema())
-	if err != nil {
-		t.Fatalf("buildSchemaFile failed: %v", err)
-	}
-	if filename != "event.avsc" {
-		t.Errorf("expected event.avsc, got %q", filename)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := generateFiles(t, &avrocpb.GenerateRequest{
+				Schemas: []*avrocpb.Schema{tc.schema},
+			})
+			if len(files) != 1 {
+				t.Fatalf("the generation produced %d files, want 1", len(files))
+			}
+			if files[0].path != tc.want {
+				t.Errorf("expected %s, got %q", tc.want, files[0].path)
+			}
+		})
 	}
 }
 

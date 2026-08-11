@@ -222,9 +222,17 @@ func (m *Avroc) IrDescriptorSet() *dagger.File {
 // generator's output must not vary with: the absolute paths in --descriptor and
 // --out, the working directory, the temporary directory, PATH beyond the entry
 // that resolves the generators, the user, the hostname, the locale and the time
-// zone. They agree about SOURCE_DATE_EPOCH, because that one is an input rather
-// than an accident of the machine — a run that varied it would be asking two
-// different questions and calling the difference a bug.
+// zone — and, since #197, whether the run is traced at all. They agree about
+// SOURCE_DATE_EPOCH, because that one is an input rather than an accident of the
+// machine — a run that varied it would be asking two different questions and
+// calling the difference a bug.
+//
+// Tracing is on the list for the same reason as the rest of it and is worth
+// naming separately, because it is the one entry that puts code *inside* the
+// generation loop: #196 makes an invocation a span and #197 makes its phases
+// spans, so the second run opens one between every two writes. Tracing is an
+// observation of a generation and never an input to it, and this is where that
+// sentence is checked over whole processes rather than in one.
 //
 // What this cannot catch is a generator reading the clock: two runs a moment
 // apart agree on the date. internal/plugin.TestNoGeneratorReadsTheClock is the
@@ -399,6 +407,28 @@ type envVar struct {
 // instant itself is arbitrary and fixed — 2024-06-03T00:00:00Z.
 const sourceDateEpoch = "1717372800"
 
+// tracedRunEnv is what makes the second run a traced one: an endpoint, so that
+// avroc builds a real SDK and propagates a span context to every generator it
+// forks, and a TRACEPARENT, so that the run is a child of somebody else's trace
+// exactly as it is under `dagger call`.
+//
+// **Nothing is listening at that endpoint, and that is deliberate.** What is
+// being checked is that a generation which opens spans writes the same bytes as
+// one that does not, and the spans have to be opened for that to mean anything;
+// where they go afterwards is no part of it. A collector container would add a
+// service to the check and a reason for it to fail that has nothing to do with
+// determinism, so the export fails instead — immediately, because the connection
+// is refused on the loopback address rather than timing out, and harmlessly,
+// because internal/telemetry logs a failed export and never fails a build over
+// one. A literal address rather than a name, so that a scratch container with no
+// resolver is not resolving anything.
+func tracedRunEnv() []envVar {
+	return []envVar{
+		{"OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318"},
+		{"TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+	}
+}
+
 // firstRun and secondRun disagree about everything else. Where a value has a
 // plausible-looking default, the second run deliberately does not use it: a
 // generator that read HOME and got the same answer both times would pass a
@@ -428,7 +458,7 @@ func secondRun() regenerationRun {
 		// leaked into the output would most plausibly leak as its own text.
 		root: "/srv/a-considerably-longer-project-directory",
 		tmp:  "/var/tmp/second",
-		env: []envVar{
+		env: append([]envVar{
 			{"PATH", "/nonexistent:" + pluginDir + ":/also-nonexistent"},
 			{"TMPDIR", "/var/tmp/second"},
 			{"HOME", "/home/somebody-else"},
@@ -439,7 +469,7 @@ func secondRun() regenerationRun {
 			{"LANG", "en_US.UTF-8"},
 			{"LC_ALL", "en_US.UTF-8"},
 			{"SOURCE_DATE_EPOCH", sourceDateEpoch},
-		},
+		}, tracedRunEnv()...),
 	}
 }
 
