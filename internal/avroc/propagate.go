@@ -9,6 +9,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/z5labs/avroc/internal/telemetry"
+
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -25,9 +27,18 @@ import (
 // The names are the header names upper-cased, which is the whole of the
 // convention: the values are the header values, unchanged, so a generator using
 // any OpenTelemetry SDK parses them with the propagator it already has.
+//
+// The spelling is internal/telemetry's, and this is an alias of it rather than a
+// second copy: that package reads the pair back on the generator's side (#196),
+// and one misspelling made on only one side is a child process whose spans
+// quietly start a trace of their own. It is not the pluginInfoFlag case — that
+// one is written out twice on purpose, because avroc's half and the generator's
+// half of docs/plugin/SPEC.md sit either side of a process boundary and a
+// third-party generator imports nothing from here. Both of these are avroc's own
+// executables and avroc already links that package.
 const (
-	envTraceparent = "TRACEPARENT"
-	envTracestate  = "TRACESTATE"
+	envTraceparent = telemetry.EnvTraceparent
+	envTracestate  = telemetry.EnvTracestate
 )
 
 // generatorEnv is the environment one generator process runs with: avroc's,

@@ -49,6 +49,10 @@ const (
 	// ShutdownTimeout bounds the final flush. It is short on purpose: a
 	// collector that has stopped answering must not hold up the exit status of a
 	// build, and a person waiting on `go generate` notices five seconds.
+	//
+	// It is the default and not the only value: a process whose parent will not
+	// wait for it indefinitely says so with [WithFlushBudget], which is what a
+	// generator does (see internal/plugin).
 	ShutdownTimeout = 5 * time.Second
 
 	// ExportTimeout bounds one export request, and is shorter than
@@ -89,6 +93,13 @@ type config struct {
 	serviceName string
 	resource    *resource.Resource
 	sampler     sdktrace.Sampler
+
+	// The two bounds a flush is subject to. They are on the configuration rather
+	// than read from [ExportTimeout] and [ShutdownTimeout] at the point of use
+	// because they are the caller's to shorten — see [WithFlushBudget] — and
+	// resolving them here is what keeps one pass over the options the only pass.
+	exportTimeout   time.Duration
+	shutdownTimeout time.Duration
 }
 
 // configFromEnv resolves the configuration from env, which is
@@ -97,7 +108,14 @@ type config struct {
 // A nil environment is an empty one rather than a panic: cli.Context is
 // constructed by tests as well as by main, and "no environment" and "an
 // environment with none of these variables in it" describe the same run.
-func configFromEnv(env cli.Environment, version string) (config, error) {
+//
+// The options are the caller's, not the operator's: they carry what differs
+// between the two kinds of process this package is linked into, and the
+// environment always wins over them where they overlap. A generator that names
+// itself with [WithDefaultServiceName] still answers to OTEL_SERVICE_NAME.
+func configFromEnv(env cli.Environment, version string, opts ...Option) (config, error) {
+	set := newSettings(opts)
+
 	lookup := func(key string) string {
 		if env == nil {
 			return ""
@@ -152,16 +170,18 @@ func configFromEnv(env cli.Environment, version string) (config, error) {
 		serviceName = attributes[string(semconv.ServiceNameKey)]
 	}
 	if serviceName == "" {
-		serviceName = DefaultServiceName
+		serviceName = set.defaultServiceName
 	}
 
 	return config{
-		enabled:     true,
-		endpoint:    endpoint,
-		headers:     headers,
-		serviceName: serviceName,
-		resource:    newResource(serviceName, version, attributes),
-		sampler:     sampler,
+		enabled:         true,
+		endpoint:        endpoint,
+		headers:         headers,
+		serviceName:     serviceName,
+		resource:        newResource(serviceName, version, attributes),
+		sampler:         sampler,
+		exportTimeout:   set.exportTimeout,
+		shutdownTimeout: set.shutdownTimeout,
 	}, nil
 }
 

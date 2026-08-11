@@ -12,6 +12,12 @@
 // process boundary: a third-party generator implements this contract without
 // importing anything here, and the only thing that binds the two is the vector
 // itself.
+//
+// It is also where an invocation joins avroc's trace, because [Main] is the one
+// place every generator in this repository runs through (#196). That is an
+// implementation of docs/plugin/SPEC.md's "Trace context" and not an addition
+// to it: the contract says a plugin MAY read the pair avroc sets, and one that
+// does not behaves exactly as it did before they existed. See trace.go.
 package plugin
 
 import (
@@ -28,7 +34,10 @@ import (
 
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/cli"
+	"github.com/z5labs/avroc/internal/telemetry"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -244,6 +253,9 @@ type GenerateFunc func(*avrocpb.GenerateRequest, FileWriter) error
 // error. Standard output carries nothing during a generation invocation, which
 // is what keeps it free for the declaration and makes an invocation safe to put
 // in a pipeline.
+//
+// This is also where an invocation joins avroc's trace (#196), and it is one
+// implementation rather than three because every generator here runs through it.
 func Main(ctx context.Context, c cli.Context, info Info, generate GenerateFunc) int {
 	return run(ctx, c, info, generate, os.Stdout)
 }
@@ -251,14 +263,79 @@ func Main(ctx context.Context, c cli.Context, info Info, generate GenerateFunc) 
 // run is Main with the declaration's destination passed in, so that a test can
 // read what a generator would have written to standard output without replacing
 // the process's own.
+//
+// It is also the whole of the invocation's tracing, and the reason it is here
+// rather than in a generator's main is os.Exit: every cmd/avroc-gen-* calls it
+// the moment this returns, and os.Exit runs no deferred function — the
+// defer cancel() beside it has never run either. A flush deferred up there would
+// be dead code and the batch processor would drop every span it was holding, so
+// the flush is deferred *inside this function*, which every path out of an
+// invocation returns through. It is the discipline #191 needed for avroc itself,
+// applied to the three executables avroc forks.
+//
+// The order of the two defers is load bearing. Deferred functions run last in
+// first out, so the flush is registered first and runs last: whatever ends the
+// span — the ordinary return below, or a panic unwinding through it — the span is
+// finished before the provider is asked to export it.
 func run(ctx context.Context, c cli.Context, info Info, generate GenerateFunc, stdout io.Writer) int {
 	name := info.Executable()
+
+	// A configuration this build cannot honour is a warning and an untraced
+	// invocation, never a failed one: see internal/telemetry, and note that a
+	// generator refusing to generate over a telemetry variable would be refusing
+	// over something docs/plugin/SPEC.md says it may ignore entirely.
+	tracing, err := telemetry.Start(ctx, c,
+		telemetry.WithDefaultServiceName(name),
+		telemetry.WithFlushBudget(FlushBudget),
+	)
+	if err != nil {
+		c.Log.WarnContext(ctx, "tracing is disabled", slog.String("generator", name), slog.Any("error", err))
+	}
+	defer func() {
+		if err := tracing.Shutdown(ctx); err != nil {
+			c.Log.ErrorContext(ctx, "failed to flush traces", slog.String("generator", name), slog.Any("error", err))
+		}
+	}()
 
 	// Checked before the vector is parsed, and by membership rather than by
 	// position: --plugin-info accepts no other argument, so a vector carrying one
 	// is a mistake to report rather than a generation to attempt with a flag
-	// ParseArgs would call unknown.
-	if slices.Contains(c.Args, PluginInfoFlag) {
+	// ParseArgs would call unknown. It is read here rather than inside invoke
+	// because the two vectors are two spans, and which one this is has to be
+	// known before either is opened.
+	declaring := slices.Contains(c.Args, PluginInfoFlag)
+
+	spanName, attrs := spanGenerate, []attribute.KeyValue{attribute.String(attrGenerator, name)}
+	if declaring {
+		// A handshake is handed no descriptor, so the only IR version there is to
+		// carry is the one being declared. A generation carries the descriptor's,
+		// set once it has been read.
+		spanName = spanPluginInfo
+		attrs = append(attrs, attribute.Int64(attrIRVersion, int64(info.IRVersion)))
+	}
+
+	// The parent is whatever avroc wrote into the environment, and nothing when
+	// it wrote nothing — which is the ordinary case, not a fallback:
+	// docs/plugin/SPEC.md's "Trace context" says a plugin run by a shell, by an
+	// older avroc or by an avroc that is not tracing sees exactly this.
+	ctx, span := tracing.Tracer(tracerScope).Start(
+		telemetry.Extract(ctx, c.Env),
+		spanName,
+		trace.WithAttributes(attrs...),
+	)
+
+	code := invoke(ctx, c, info, generate, stdout, declaring)
+	endSpan(span, code)
+	return code
+}
+
+// invoke runs the invocation itself and returns the process's exit status. It is
+// run without the telemetry, so that the span above is opened and ended in one
+// place and the two vectors below read as they did before there was one.
+func invoke(ctx context.Context, c cli.Context, info Info, generate GenerateFunc, stdout io.Writer, declaring bool) int {
+	name := info.Executable()
+
+	if declaring {
 		if len(c.Args) != 1 {
 			c.Log.ErrorContext(ctx, "invalid arguments",
 				slog.String("generator", name),
@@ -289,6 +366,13 @@ func run(ctx context.Context, c cli.Context, info Info, generate GenerateFunc, s
 		c.Log.ErrorContext(ctx, "failed to read descriptor", slog.String("generator", name), slog.Any("error", err))
 		return 1
 	}
+	// The version of the descriptor this invocation was *handed*, which is the
+	// one worth having on the span: a generator that refuses one it does not
+	// understand refuses it in Generate, and the span is then the only record of
+	// what it was refusing. Taken from the span in the context rather than from a
+	// parameter, for the reason internal/avroc gives — the provider travels in the
+	// context, so nothing below run grew an argument to thread through untouched.
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Int64(attrIRVersion, int64(req.GetVersion())))
 
 	out := NewOutputDir(inv.Out)
 	if err := generate(req, out); err != nil {

@@ -57,8 +57,16 @@ type exporter struct {
 // first one is made by the first export, which is what makes a configured but
 // unused endpoint cost nothing.
 func newExporter(cfg config) *exporter {
+	// A zero timeout is no timeout at all in net/http, which is the one thing it
+	// must not be allowed to mean: an unconfigured exporter is the one most
+	// likely to be pointed at a collector that will never answer.
+	timeout := cfg.exportTimeout
+	if timeout <= 0 {
+		timeout = ExportTimeout
+	}
+
 	return &exporter{
-		client:   &http.Client{Timeout: ExportTimeout},
+		client:   &http.Client{Timeout: timeout},
 		endpoint: cfg.endpoint,
 		headers:  cfg.headers,
 	}
