@@ -255,13 +255,46 @@ convenient place to put it, and it costs a plugin one branch.
 ### The environment
 
 avroc passes its own environment through to a generator unchanged, except as
-[Determinism](#determinism) requires of `SOURCE_DATE_EPOCH`.
+[Determinism](#determinism) requires of `SOURCE_DATE_EPOCH` and as
+[Trace context](#trace-context) requires of `TRACEPARENT` and `TRACESTATE`.
 
 A plugin **MUST NOT** require an environment variable to be set in order to do
 its normal work; everything that configures its output arrives as `--opt`. The
 manifest is the reviewable record of how a project's code was generated, and a
 setting that lives in the environment is absent from it — the two developers
 comparing generated output cannot see the difference between their machines.
+
+#### Trace context
+
+avroc sets `TRACEPARENT`, and `TRACESTATE` where there is one, on every process
+it runs — a generation invocation and a `--plugin-info` handshake alike. Their
+values are the [W3C Trace Context] header values of the span avroc opened for
+*that* invocation, so a plugin that starts its own spans with them as the parent
+produces a trace nested under the run that asked for the work. The names are the
+header names upper-cased, which is a convention rather than a ratified part of
+any specification, and is nonetheless what `otel-cli`, Dagger, Buildkite and the
+Jenkins OpenTelemetry plugin already agree on.
+
+Three consequences a plugin author should expect:
+
+- A plugin **MAY** ignore both variables entirely, and one that does behaves
+  exactly as it did before they existed. Reading them is how a plugin joins the
+  run's trace, not how it is configured.
+- The value is **per-invocation**, so it is neither the value avroc was started
+  with nor the same for two invocations of one run. A `TRACEPARENT` avroc
+  inherited is avroc's own parent and is replaced rather than passed on.
+- When avroc is not tracing, **neither variable is present** — including when
+  avroc's own environment carried one. A plugin therefore never sees trace
+  context belonging to a trace avroc is not part of.
+
+Everything else an OpenTelemetry SDK reads from the environment — the endpoint,
+the protocol, the headers, the sampler, the resource attributes — reaches a
+plugin unchanged, because avroc passes its environment through and configures
+none of them for the child. `OTEL_SERVICE_NAME` is included in that: avroc
+neither sets nor overrides it, so a user who sets it gets the whole build under
+one service name and a user who does not gets each executable's own default.
+
+[W3C Trace Context]: https://www.w3.org/TR/trace-context/
 
 ### Standard streams
 
@@ -484,7 +517,7 @@ working directory, the locale, the environment beyond `SOURCE_DATE_EPOCH`, the
 absolute paths passed in `--descriptor` and `--out`, the order in which the
 filesystem returns entries, and any concurrency inside the plugin. In
 particular, a plugin **MUST NOT** embed a timestamp, a hostname, a username, an
-absolute path or a random value in its output, and **MUST** emit anything
+absolute path, a trace id or a random value in its output, and **MUST** emit anything
 derived from an unordered collection in a fixed order — the descriptor's own
 order where there is one, or a byte-wise sort of a stable key where there is
 not. Map iteration order is the usual way this requirement is broken, and it

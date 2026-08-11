@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -153,6 +154,11 @@ func checkGenerator(ctx context.Context, log *slog.Logger, task genTask) (err er
 // stack trace attributed to nobody.
 func queryPluginInfo(ctx context.Context, name, executablePath string) (*pluginInfo, error) {
 	cmd := exec.CommandContext(ctx, executablePath, pluginInfoFlag)
+	// The handshake is propagated to on the same terms as a generation
+	// invocation (#193). It runs a whole process, and it is the first thing in a
+	// run that can be slow or hang; excluding it would leave the one invocation
+	// that happens before anything else the only untraced child avroc forks.
+	cmd.Env = generatorEnv(ctx, os.Environ())
 	// No descriptor is read during a handshake, so there is nothing standard
 	// input could carry; a plugin blocking on it would otherwise hang the run
 	// before any generation had been attempted.
