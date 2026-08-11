@@ -217,12 +217,10 @@ type generator struct {
 // project tree (#118). On any failure the directory is removed here, with
 // whatever the generator left in it, and no plan is returned.
 func (g generator) run(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (out *generatorOutput, err error) {
-	// One span per invocation, and the anchor #193 will hang the generator's own
-	// spans off. Nothing crosses the process boundary yet: exec.CommandContext
-	// takes this context for cancellation and for nothing else, and a child
-	// learns of a parent span only when something puts it on the vector or in the
-	// environment, which is #193's to add. What this does is make the span it
-	// would carry exist, and be the invocation rather than the run.
+	// One span per invocation, and the anchor the generator's own spans hang off:
+	// generatorEnv below puts this span's context in the child's environment
+	// (#193), so a span the generator opens is a child of this invocation rather
+	// than of the run as a whole.
 	//
 	// Registered before every other defer here so that it unwinds after all of
 	// them, and therefore records the error the whole invocation returned rather
@@ -308,6 +306,11 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 	// success, on failure and on cancellation, and no generator outlives the
 	// avroc that started it.
 	cmd := exec.CommandContext(ctx, g.executablePath, args...)
+	// avroc's own environment, carrying this invocation's span context instead of
+	// whatever trace context it inherited (#193). Setting Env at all is the thing
+	// to be careful about — a nil Env means the child gets os.Environ(), so
+	// generatorEnv starts from exactly that and removes exactly two variables.
+	cmd.Env = generatorEnv(ctx, os.Environ())
 	// Standard input is unused: avroc always passes the descriptor as a path,
 	// never through the "-" form the contract also allows.
 	cmd.Stdin = nil

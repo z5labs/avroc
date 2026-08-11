@@ -705,11 +705,24 @@ func (c *spanCollector) endpoint() string {
 func (c *spanCollector) spanNames(t *testing.T) []string {
 	t.Helper()
 
+	var names []string
+	for _, span := range c.spans(t) {
+		names = append(names, span.GetName())
+	}
+	return names
+}
+
+// spans is every span the collector was sent, decoded, in the order it received
+// them. It is what an assertion about parentage needs and spanNames does not:
+// the trace and span ids the exported bytes actually carry.
+func (c *spanCollector) spans(t *testing.T) []*tracepb.Span {
+	t.Helper()
+
 	c.mu.Lock()
 	bodies := append([][]byte(nil), c.bodies...)
 	c.mu.Unlock()
 
-	var names []string
+	var spans []*tracepb.Span
 	for _, body := range bodies {
 		for len(body) > 0 {
 			number, typ, read := protowire.ConsumeTag(body)
@@ -733,11 +746,9 @@ func (c *spanCollector) spanNames(t *testing.T) []string {
 				t.Fatalf("export body does not hold a ResourceSpans: %v", err)
 			}
 			for _, ss := range rs.GetScopeSpans() {
-				for _, span := range ss.GetSpans() {
-					names = append(names, span.GetName())
-				}
+				spans = append(spans, ss.GetSpans()...)
 			}
 		}
 	}
-	return names
+	return spans
 }

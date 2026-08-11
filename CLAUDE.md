@@ -246,10 +246,42 @@ Four things there are decisions.
   `TestInstrumentationDidNotChangeTheIteration` runs generators that finish in the
   reverse of the manifest's order with the spans recording.
 
+**The trace crosses the fork** (#193, `internal/avroc/propagate.go`). A generator
+is a separate process, so a span it opens has no parent unless avroc hands it
+one; `generatorEnv` is the whole of that, and `cmd.Env` on both the generation
+invocation and the `--plugin-info` handshake is where it is used. The carrier is
+`TRACEPARENT` and `TRACESTATE` — a convention rather than a ratified part of any
+specification, and nonetheless the one `otel-cli`, Dagger, Buildkite and the
+Jenkins plugin converged on, which is why avroc under `dagger call` already has a
+parent. `docs/plugin/SPEC.md`'s "Trace context" is normative.
+
+Four things there are decisions. It **overwrites**: a `TRACEPARENT` avroc
+inherited from CI is avroc's *own* parent, and the child gets the per-invocation
+span context instead of accompanying it. The **handshake is propagated to on the
+same terms**, because it runs a whole process and is the first thing in a run
+that can hang. **Off means actively unset**: with no span context to write,
+passing an inherited value through would parent a generator's spans to a trace
+avroc is not part of, so both variables are removed — which falls out of one code
+path, since the propagator injects nothing for an invalid span context and the
+strip already happened. And **`OTEL_SERVICE_NAME` is not overridden**, so a
+generator's identity is the user's choice or the SDK's default and never
+avroc's; every other SDK *configuration* variable reaches the child for the
+reason it always did, that avroc passes its environment through.
+
+Setting `cmd.Env` at all is the hazard the tests are aimed at — a nil `Env` means
+`os.Environ()`, so building one is how the rest of the environment gets silently
+dropped. `TestAGeneratorStillGetsEverythingElseFromAvrocsEnvironment` asserts an
+unrelated variable and `SOURCE_DATE_EPOCH` through a real child process, and
+`TestATracedRunPropagatesToEveryGeneratorProcess` reads what the child was
+actually handed — a shell generator writing its own environment down — rather
+than what avroc put in `cmd.Env`, which would pass with no process ever run.
+
 Tracing is an observation of a run and never an input to it:
 `TestGeneratedBytesAreTheSameTracedOrNot` requires a traced run and an untraced
 one to leave the same tree behind, byte for byte — with a decoding collector on
-the traced side, so a run that exported nothing cannot pass it.
+the traced side, so a run that exported nothing cannot pass it — and
+`TestGeneratedBytesAreTheSameWithATraceparentOrWithout` is the same requirement
+against the variables themselves.
 
 ### Determinism
 
