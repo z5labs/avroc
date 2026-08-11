@@ -15,6 +15,16 @@
       "pin": "47e25f065653c481a6d1567537307f2565bfa316"
     },
     {
+      "name": "grafana-stack",
+      "source": "github.com/z5labs/devex/daggerverse/grafana-stack@47e25f065653c481a6d1567537307f2565bfa316",
+      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+    },
+    {
+      "name": "otel",
+      "source": "github.com/z5labs/devex/daggerverse/otel@47e25f065653c481a6d1567537307f2565bfa316",
+      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+    },
+    {
       "name": "z5labs",
       "source": "github.com/z5labs/devex/daggerverse/z5labs@47e25f065653c481a6d1567537307f2565bfa316",
       "pin": "47e25f065653c481a6d1567537307f2565bfa316"

@@ -307,8 +307,17 @@ inherited: it is neither the value avroc was started with nor one value shared
 by the whole run. Two generators in a run are handed two different span
 contexts, and a generator's handshake is handed a third, different again from
 that generator's own generation invocation. A `TRACEPARENT` avroc inherited from
-its own caller is avroc's *parent*; it is replaced, never appended to and never
-passed on.
+its own caller is avroc's *parent*: avroc reads it and makes its own root span a
+child of it, so a run started by a CI job or by a container exec is part of that
+caller's trace rather than the start of one. The value itself is replaced for
+the child, never appended to and never passed on — what a plugin is handed names
+avroc's span for that invocation and nothing above it.
+
+`TRACESTATE` follows the trace rather than the span. A plugin is handed whatever
+state the run's trace carries, which is the caller's when avroc joined a
+caller's trace and none when avroc started its own. That is [W3C Trace
+Context]'s rule for anything continuing a trace, and it is the one place a value
+avroc inherited does reach a plugin unchanged.
 
 Three requirements on a plugin, all three of which are met by doing nothing:
 
