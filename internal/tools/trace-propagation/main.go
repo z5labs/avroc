@@ -206,20 +206,40 @@ func get(client *http.Client, url string) ([]byte, int, error) {
 	return body, resp.StatusCode, nil
 }
 
-// hasSpans reports whether a 200 carries a trace with anything in it.
+// hasSpans reports whether a 200 carries a trace with a span actually in it.
 //
 // Tempo answers a trace it has only partially received, so "the request
 // succeeded" is not the condition worth waiting for; a body holding no span at
 // all is one the poll should keep going on rather than hand to a check that
 // would report every assertion failing at once.
+//
+// It counts spans rather than batches, and the difference is not pedantry: a
+// `batches` array can be non-empty while every batch in it carries no
+// `scopeSpans`, or carries scopes holding no `spans`. Reading only the outer
+// length would end the wait on exactly the half-delivered trace this exists to
+// wait past, and the check downstream would then report every assertion failing
+// at once — which reads as avroc being broken rather than as the trace not
+// having arrived yet.
 func hasSpans(body []byte) bool {
 	var doc struct {
-		Batches []json.RawMessage `json:"batches"`
+		Batches []struct {
+			ScopeSpans []struct {
+				Spans []json.RawMessage `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"batches"`
 	}
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return false
 	}
-	return len(doc.Batches) > 0
+
+	for _, batch := range doc.Batches {
+		for _, scope := range batch.ScopeSpans {
+			if len(scope.Spans) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func truncate(body []byte) string {

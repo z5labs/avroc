@@ -66,17 +66,31 @@ func TestTheFetcherWaitsForATraceThatIsNotThereYet(t *testing.T) {
 // Handing it on would report every assertion in the check failing at once, which
 // reads as avroc being broken rather than as the trace not having arrived.
 func TestTheFetcherDoesNotAcceptATraceWithNoSpansInIt(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"batches":[]}`))
-	}))
-	t.Cleanup(server.Close)
+	// A batch that is present and empty is the case a check on the outer array
+	// alone would accept, and it is the one Tempo actually produces while a
+	// trace is still arriving — so it is written out rather than left to the
+	// obvious empty-array case.
+	for name, body := range map[string]string{
+		"no batches":              `{"batches":[]}`,
+		"a batch with no scopes":  `{"batches":[{}]}`,
+		"a scope with no spans":   `{"batches":[{"scopeSpans":[{}]}]}`,
+		"an empty spans array":    `{"batches":[{"scopeSpans":[{"spans":[]}]}]}`,
+		"two batches, both empty": `{"batches":[{"scopeSpans":[]},{"scopeSpans":[{"spans":[]}]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			t.Cleanup(server.Close)
 
-	err := fetchTrace(&bytes.Buffer{}, server.URL, "abc123", 100*time.Millisecond)
-	if err == nil {
-		t.Fatal("fetchTrace accepted a 200 holding no spans")
-	}
-	if !strings.Contains(err.Error(), "no spans") {
-		t.Errorf("the failure does not say what was wrong with the answer: %v", err)
+			err := fetchTrace(&bytes.Buffer{}, server.URL, "abc123", 100*time.Millisecond)
+			if err == nil {
+				t.Fatal("fetchTrace accepted a 200 holding no spans")
+			}
+			if !strings.Contains(err.Error(), "no spans") {
+				t.Errorf("the failure does not say what was wrong with the answer: %v", err)
+			}
+		})
 	}
 }
 

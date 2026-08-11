@@ -589,10 +589,20 @@ func checkGeneratorSpansAreChildren(spans []span) error {
 		case len(parents) == 0:
 			errs = append(errs, fmt.Errorf("the trace holds no %s span at all", pair.parent))
 			continue
-		case len(children) != len(parents):
+		// The two directions are different findings and are reported as such.
+		// Fewer children than parents is the failure this check is about: a
+		// generator process reported somewhere other than this trace. More
+		// children than parents is not that at all — it is a span appearing
+		// under a fork avroc did not make — and a single subtraction would
+		// describe it as a negative number of lost processes.
+		case len(children) < len(parents):
 			errs = append(errs, fmt.Errorf(
 				"avroc opened %d %s span(s) and the trace holds %d %s span(s), so %d generator process(es) reported somewhere other than this trace",
 				len(parents), pair.parent, len(children), pair.child, len(parents)-len(children)))
+		case len(children) > len(parents):
+			errs = append(errs, fmt.Errorf(
+				"the trace holds %d %s span(s) against %d %s span(s), so %d generator span(s) are in it that no avroc invocation accounts for",
+				len(children), pair.child, len(parents), pair.parent, len(children)-len(parents)))
 		}
 
 		for _, child := range children {
