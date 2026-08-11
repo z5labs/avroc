@@ -217,11 +217,16 @@ type generator struct {
 // project tree (#118). On any failure the directory is removed here, with
 // whatever the generator left in it, and no plan is returned.
 func (g generator) run(ctx context.Context, output string, options []*avrocpb.Option, schemas ...*avrocpb.Schema) (out *generatorOutput, err error) {
-	// One span per invocation, and the anchor #193 hangs the generator's own
-	// spans off: the context it is started from is the one exec.CommandContext
-	// carries into the child. Registered before every other defer here so that it
-	// unwinds after all of them, and therefore records the error the whole
-	// invocation returned rather than the one the process exited with.
+	// One span per invocation, and the anchor #193 will hang the generator's own
+	// spans off. Nothing crosses the process boundary yet: exec.CommandContext
+	// takes this context for cancellation and for nothing else, and a child
+	// learns of a parent span only when something puts it on the vector or in the
+	// environment, which is #193's to add. What this does is make the span it
+	// would carry exist, and be the invocation rather than the run.
+	//
+	// Registered before every other defer here so that it unwinds after all of
+	// them, and therefore records the error the whole invocation returned rather
+	// than the one the process exited with.
 	ctx, span := startSpan(ctx, spanGeneratorRun, generatorAttr(g.name))
 	defer func() {
 		endSpan(ctx, span, err)
