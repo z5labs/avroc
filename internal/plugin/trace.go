@@ -110,15 +110,19 @@ func StartOptionsParse(ctx context.Context) (context.Context, trace.Span) {
 	return startPhase(ctx, spanOptionsParse, "", "")
 }
 
-// StartSchemaGenerate starts the span covering the bytes of one schema being
-// rendered, named by that schema's base name — [ir.SchemaBaseName], which is the
-// name every generator's filename is built from and therefore the name a person
-// reading the trace already has in front of them.
+// StartSchemaGenerate starts the span covering everything a generator does for
+// one schema, named by that schema's base name — [ir.SchemaBaseName], which is
+// the name every generator's filename is built from and therefore the name a
+// person reading the trace already has in front of them.
 //
-// It covers the rendering and not the write. A generator that traces its writes
-// opens [StartFileWrite] beside this one rather than inside it, so that the two
-// intervals stay separately readable and one span name does not sometimes
-// contain a filesystem call and sometimes not.
+// Everything, which is to say the write as well as the rendering. A generator
+// fine-grained enough to trace its writes opens [StartFileWrite] *inside* this
+// one rather than beside it, so the rendering stays separately readable as the
+// difference between the two; a generator that does not still has its write time
+// inside the span for the schema it belongs to, rather than accounted only to
+// the invocation. One span name meaning "this schema's work" in every generator
+// is what lets a backend ask how long a schema took without knowing which
+// generator answered.
 func StartSchemaGenerate(ctx context.Context, schema string) (context.Context, trace.Span) {
 	return startPhase(ctx, spanSchemaGenerate, attrSchema, schema)
 }

@@ -346,10 +346,11 @@ trace of their own.
 generator is slow"; these answer "which part of it".
 `avroc.plugin.descriptor.validate`, `avroc.plugin.options.parse`,
 `avroc.plugin.schema.generate` (one per schema, carrying the schema's
-`ir.SchemaBaseName`), `avroc.plugin.fingerprint` (one per schema, a child of that
-schema's, and the one place `avroc-gen-go` computes over the IR rather than
-walking it) and `avroc.plugin.file.write` (one per file, carrying the path
-relative to `--out`). They are the phases the code already had as functions
+`ir.SchemaBaseName`, and covering everything the generator does for that schema),
+`avroc.plugin.fingerprint` (one per schema, a child of that schema's, and the one
+place `avroc-gen-go` computes over the IR rather than walking it) and
+`avroc.plugin.file.write` (one per file, a child of its schema's, carrying the
+path relative to `--out`). They are the phases the code already had as functions
 rather than a decomposition invented for the trace, which is `internal/avroc`'s
 rule applied on the other side of the fork; and they live in `internal/plugin`
 for `tracerScope`'s reason, that `Main` is the one place all three generators run
@@ -371,7 +372,12 @@ Four things there are decisions.
   `avroc-gen-json` and `avroc-gen-pcf` write one file per schema and do no
   rendering, so they open the per-schema span and nothing finer.
   Instrumentation heavier than the work it measures makes a trace harder to read,
-  not easier.
+  not easier. That is also why the write is *inside* the schema's span rather
+  than beside it: one span name has to mean the same thing in all three, and for
+  the two with no write span of their own a write left outside would put the
+  filesystem time — often the larger half — and the failure on the invocation
+  instead of on the schema they belong to. `avroc-gen-go` loses nothing by it,
+  since its rendering is the difference between the schema's span and the file's.
 - **Off costs nothing per schema and nothing per file.** `startPhase` reads
   `IsRecording` off the invocation's own span and returns immediately when it is
   false — no tracer asked for, no attribute built, no span started — which is why

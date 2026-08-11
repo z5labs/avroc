@@ -57,19 +57,24 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 		base := ir.SchemaBaseName(schema)
 
 		schemaCtx, schemaSpan := plugin.StartSchemaGenerate(ctx, base)
+
 		filename, content, err := buildSchemaFile(schemaCtx, packageName, base, schema, singleObject)
-		plugin.EndPhase(schemaSpan, err)
 		if err != nil {
+			plugin.EndPhase(schemaSpan, err)
 			return fmt.Errorf("failed to generate schema: %w", err)
 		}
 
-		// The write is a sibling of the rendering and not a child of it, so that
-		// "how long did this schema take to render" and "how long did it take to
-		// write" are two intervals a reader can subtract rather than one that
-		// sometimes contains a filesystem call.
-		_, writeSpan := plugin.StartFileWrite(ctx, filename)
+		// The write is inside the schema's span rather than beside it, so that
+		// the span for a schema covers everything done for that schema whichever
+		// generator opened it — the rendering is still separately readable as the
+		// difference between the two. It carries its own failure and so does the
+		// schema's: a write that failed is a schema this generator did not
+		// produce, and a reader who has collapsed the child should still see it.
+		_, writeSpan := plugin.StartFileWrite(schemaCtx, filename)
 		err = w.WriteFile(filename, content)
 		plugin.EndPhase(writeSpan, err)
+
+		plugin.EndPhase(schemaSpan, err)
 		if err != nil {
 			return err
 		}

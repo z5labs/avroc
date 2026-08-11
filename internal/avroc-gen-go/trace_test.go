@@ -165,6 +165,12 @@ func TestAGenerationsPhasesAreSpansUnderTheInvocations(t *testing.T) {
 	// One per file, named by the path relative to --out, which is the only form
 	// of the path that means anything: the absolute one is a scratch directory
 	// avroc made for this invocation alone.
+	//
+	// A child of its schema's span rather than a sibling, so that the span for a
+	// schema covers everything done for that schema — which is what the two
+	// generators with no write span of their own rely on, and what keeps one span
+	// name comparable across all three. The rendering is still separately
+	// readable, as the difference between the two.
 	writes := spansNamed(spans, spanFileWrite)
 	if len(writes) != len(w.files) {
 		t.Fatalf("the generation opened %d %q spans and wrote %d files: %v",
@@ -173,6 +179,10 @@ func TestAGenerationsPhasesAreSpansUnderTheInvocations(t *testing.T) {
 	for i, span := range writes {
 		if got, want := stringAttr(t, span, attrPath), w.files[i].path; got != want {
 			t.Errorf("%s = %q on span %d, want %q", attrPath, got, i, want)
+		}
+		if span.Parent().SpanID() != schemaSpans[i].SpanContext().SpanID() {
+			t.Errorf("the %q span for %q is not a child of the %q span it belongs to",
+				spanFileWrite, w.files[i].path, spanSchemaGenerate)
 		}
 	}
 
@@ -284,6 +294,36 @@ func TestAnUntracedGenerationStartsNoSpans(t *testing.T) {
 	}
 	if counter.starts != 0 {
 		t.Errorf("an untraced generation started %d spans, want 0", counter.starts)
+	}
+}
+
+// TestAFailedWriteFailsTheSchemasSpanToo is why the write is inside the
+// schema's span rather than beside it.
+//
+// A file this generator could not write is a schema it did not produce, so the
+// failure belongs on the span for that schema as well as on the span for the
+// write — a reader who has collapsed the children, or a backend that only counts
+// failed spans per schema, would otherwise see a schema that went fine.
+func TestAFailedWriteFailsTheSchemasSpanToo(t *testing.T) {
+	ctx, recorder := recordingContext(t)
+
+	err := Generate(ctx, &avrocpb.GenerateRequest{
+		Version: proto.Int32(ir.Version),
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("avro")}},
+		Schemas: determinismSchemas(),
+	}, failingWriter{})
+	if err == nil {
+		t.Fatal("Generate ignored a writer that refuses every file")
+	}
+
+	for _, name := range []string{spanFileWrite, spanSchemaGenerate} {
+		spans := spansNamed(recorder.Ended(), name)
+		if len(spans) == 0 {
+			t.Fatalf("the generation opened no %q span", name)
+		}
+		if spans[0].Status().Code != codes.Error {
+			t.Errorf("the %q span is not marked failed: %v", name, spans[0].Status())
+		}
 	}
 }
 

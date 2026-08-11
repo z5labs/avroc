@@ -47,18 +47,28 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 		base := ir.SchemaBaseName(schema)
 
 		_, span := plugin.StartSchemaGenerate(ctx, base)
-		content, err := buildSchemaFile(schema)
+		err := emitSchema(schema, ir.SnakeCase(base)+".avsc", w)
 		plugin.EndPhase(span, err)
 		if err != nil {
-			return fmt.Errorf("failed to generate schema: %w", err)
-		}
-
-		if err := w.WriteFile(ir.SnakeCase(base)+".avsc", content); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// emitSchema renders one schema and writes it, which is the whole of what this
+// generator does for a schema and therefore the whole of what that schema's span
+// covers. Splitting the write out would be the finer granularity there is not
+// enough work here to justify, and leaving it outside the span would put the
+// filesystem time — often the larger half — on the invocation instead of on the
+// schema it belongs to.
+func emitSchema(schema *avrocpb.Schema, filename string, w plugin.FileWriter) error {
+	content, err := buildSchemaFile(schema)
+	if err != nil {
+		return fmt.Errorf("failed to generate schema: %w", err)
+	}
+	return w.WriteFile(filename, content)
 }
 
 // buildSchemaFile generates the Avro JSON schema for a single schema, returning

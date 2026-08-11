@@ -14,6 +14,7 @@ import (
 	"github.com/z5labs/avroc/avrocpb"
 	"github.com/z5labs/avroc/internal/ir"
 
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -175,6 +176,33 @@ func TestAnUntracedGenerationStartsNoSpans(t *testing.T) {
 	}
 	if counter.starts != 0 {
 		t.Errorf("an untraced generation started %d spans, want 0", counter.starts)
+	}
+}
+
+// TestAFailedWriteFailsTheSchemasSpan is why the write is inside the schema's
+// span rather than after it.
+//
+// This generator opens no span of its own for the write, so a write left outside
+// would put both the filesystem time and the failure on the invocation rather
+// than on the schema they belong to — and a schema whose file was never written
+// would read as a schema that went fine.
+func TestAFailedWriteFailsTheSchemasSpan(t *testing.T) {
+	ctx, recorder := recordingContext(t)
+
+	err := Generate(ctx, &avrocpb.GenerateRequest{
+		Version: proto.Int32(ir.Version),
+		Schemas: []*avrocpb.Schema{resolvedTestRecord()},
+	}, failingWriter{})
+	if err == nil {
+		t.Fatal("Generate ignored a writer that refuses every file")
+	}
+
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("the generation opened %d spans, want 1: %v", len(spans), recordedNames(spans))
+	}
+	if spans[0].Status().Code != codes.Error {
+		t.Errorf("the %q span is not marked failed: %v", spans[0].Name(), spans[0].Status())
 	}
 }
 
