@@ -41,6 +41,46 @@ const descriptorFilename = "descriptor.binpb"
 // into a descriptor quietly different from the one avroc wrote.
 const descriptorFileMode os.FileMode = 0o444
 
+// newDescriptorDir creates the private directory one generator invocation's
+// descriptor is written into, and which the path at --descriptor names.
+//
+// docs/plugin/SPEC.md's "Location and lifetime" is what this implements: a
+// directory created for that one invocation and nothing else, never shared
+// between two generators or two runs, so a descriptor on disk belongs to exactly
+// one generator and one run and cannot have been overwritten by whichever
+// invocation happened to finish last.
+//
+// It is created *inside* the generator's own output tree, beside the scratch
+// directory --out names (newScratchDir), rather than under os.TempDir (#218).
+// avroc reads no ambient temporary directory at all, which is what lets the
+// published image be scratch plus the files docs/container/SPEC.md names — with
+// no /tmp in it, and no --tmpfs on the `docker run` line an adopter copies. The
+// leading dot keeps it out of a shell glob for the moment it exists, and the name
+// says what left it behind if a hard kill ever stops the removal from running,
+// exactly as the scratch directory's does.
+//
+// A leftover is **permanent**, and that is the one way the new location is worse
+// than the old one rather than merely different. Under os.TempDir the operating
+// system eventually reaped what a SIGKILL left; here nothing does — the directory
+// is in no merge plan, so pruneStale never sees it, and it is not in
+// avroc.gen.json, so no later run is entitled to remove it. What it costs is one
+// dot-directory per killed invocation, holding one read-only file, which `rm -rf`
+// and `git clean -fd` both take. A sweep of `.<generator>-descriptor-*` at startup
+// is deliberately not the answer: two avroc runs over one project are allowed, and
+// a sweep would remove a directory the other one is still reading its descriptor
+// from.
+//
+// Nothing here is a promise about the path: docs/plugin/SPEC.md forbids a plugin
+// deriving anything from the descriptor's name or its directory, so a plugin that
+// notices this location has already broken that rule rather than found a feature.
+func newDescriptorDir(output, generatorName string) (string, error) {
+	dir, err := os.MkdirTemp(output, "."+generatorName+"-descriptor-")
+	if err != nil {
+		return "", fmt.Errorf("failed to create descriptor directory: %w", err)
+	}
+	return dir, nil
+}
+
 // newDescriptor builds the descriptor for a single generator invocation: the IR
 // contract version, that generator's own options, and the resolved schemas it
 // was asked to generate from.

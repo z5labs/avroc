@@ -75,20 +75,16 @@ const (
 	// workDir is the working directory a caller mounts a project at.
 	workDir = "/work"
 
-	// tmpDir is a writable temporary directory, and it is the one thing in the
-	// image that docs/container/SPEC.md does not name — deliberately, since that
-	// document lists it under everything in the filesystem that is
-	// implementation detail rather than a covered guarantee.
-	//
-	// It is here because avroc writes each invocation's descriptor into a
-	// directory it creates under os.TempDir, so a scratch image without one
-	// fails every generation with `stat /tmp: no such file or directory` — the
-	// first thing ImageContract caught. tmpDirMode is 1777, root-owned,
-	// world-writable and sticky, which is the ordinary arrangement and the one
-	// that keeps working when a caller overrides the UID with
-	// `--user $(id -u):$(id -g)`.
-	tmpDir     = "/tmp"
-	tmpDirMode = 0o1777
+	// There is no temporary directory in this image, and its absence is a
+	// decision (#218). A 1777 /tmp used to be grafted on here, because avroc
+	// wrote each invocation's descriptor into a directory it created under
+	// os.TempDir and a scratch image without one failed every generation with
+	// `stat /tmp: no such file or directory` — the first thing ImageContract
+	// caught. avroc writes the descriptor into the generator's own output tree
+	// instead, so the requirement is gone rather than carried: the `docker run`
+	// lines docs/container/SPEC.md and the README print need no
+	// `--tmpfs /tmp:mode=1777`, and the image is once again exactly scratch plus
+	// the files that document names.
 
 	// imageUID and imageGID are the pinned non-root identity the image runs as.
 	// They are numbers rather than a name because the image has no /etc/passwd
@@ -314,10 +310,6 @@ func (m *Avroc) image(platform dagger.Platform) *dagger.Container {
 		WithDirectory(workDir, dag.Directory(), dagger.ContainerWithDirectoryOpts{
 			Owner: imageUser,
 		}).
-		// A temporary directory, because avroc writes each invocation's
-		// descriptor into one. Not owned by the image's user: 1777 is what makes
-		// it usable by whichever UID the container is actually running as.
-		WithDirectory("/", tmpDirectory()).
 		// PATH is set outright rather than appended to, because a scratch image
 		// has no PATH to append to. Only the guarantee that it contains the
 		// plugin directory is covered; the rest of the value is not.
@@ -343,25 +335,6 @@ func (m *Avroc) binaries(platform dagger.Platform) *dagger.Directory {
 		Platform:   string(platform),
 		DisableCgo: true,
 	})
-}
-
-// tmpDirectory is a directory holding nothing but `tmp`, with mode 1777, for
-// grafting onto the image's root.
-//
-// It is staged by a real mkdir in a container that has one rather than by
-// WithDirectory's permissions argument, because that argument sets the mode of
-// the files copied *into* a directory and not the mode of the directory itself
-// — which leaves /tmp root-owned at 0755, and every generation failing with
-// `permission denied` the moment the process is not root. That was the second
-// thing ImageContract caught, and it is the reason the check runs the image
-// rather than only reading its configuration.
-func tmpDirectory() *dagger.Directory {
-	const staging = "/staging"
-
-	return dag.Go().
-		Container(dag.Directory()).
-		WithExec([]string{"install", "-d", "-m", "1777", staging + tmpDir}).
-		Directory(staging)
 }
 
 // imageContractOn checks one platform's image.
@@ -512,7 +485,6 @@ func imageContents(executables []string) map[string]imageEntry {
 		descriptorSetPath:        {imageUID, imageGID, dataMode},
 		pluginDir:                {imageUID, imageGID, dirMode},
 		workDir:                  {imageUID, imageGID, dirMode},
-		tmpDir:                   {0, 0, tmpDirMode},
 	}
 	for _, name := range executables {
 		contents[pluginDir+"/"+name] = imageEntry{imageUID, imageGID, executableMode}

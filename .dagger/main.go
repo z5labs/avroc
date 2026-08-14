@@ -344,12 +344,14 @@ func (m *Avroc) regenerationOn(ctx context.Context, platform dagger.Platform) er
 // generateWorkedExample runs `avroc generate` once over a pristine copy of the
 // worked example and returns the tree it left behind.
 //
-// The container is scratch, holding the four statically linked binaries, an
-// empty temporary directory and the example: nothing else is in it, so nothing
-// else can be what the output depended on. It is also the shape
-// docs/container/SPEC.md publishes — the CLI and the generators on PATH, no
-// shell — so a generation that needs anything more than that is a finding about
-// the image as much as about determinism.
+// The container is scratch, holding the four statically linked binaries and the
+// example: nothing else is in it, so nothing else can be what the output depended
+// on. **There is no temporary directory in it**, which is #218 executed — avroc
+// writes each invocation's descriptor into the generator's own output tree, so a
+// generation that needed one would fail here rather than in an adopter's scratch
+// container. It is also the shape docs/container/SPEC.md publishes — the CLI and
+// the generators on PATH, no shell — so a generation that needs anything more
+// than that is a finding about the image as much as about determinism.
 func generateWorkedExample(
 	binaries *dagger.Directory,
 	example *dagger.Directory,
@@ -358,7 +360,6 @@ func generateWorkedExample(
 ) *dagger.Directory {
 	c := dag.Container(dagger.ContainerOpts{Platform: platform}).
 		WithDirectory(pluginDir, binaries).
-		WithDirectory(run.tmp, dag.Directory()).
 		WithDirectory(run.root, example).
 		WithWorkdir(run.root)
 
@@ -387,13 +388,18 @@ const pluginDir = "/usr/local/bin"
 // regenerationRun is one generation's arrangement of everything the output must
 // not depend on.
 type regenerationRun struct {
-	// root is the directory the worked example is copied to, and so the prefix
-	// of every absolute path avroc passes a generator in --out.
+	// root is the directory the worked example is copied to, and so the prefix of
+	// both absolute paths avroc passes a generator: --out, and — since #218 —
+	// --descriptor, whose per-invocation directory avroc creates inside the
+	// generator's own output tree.
+	//
+	// It is the axis that carries the descriptor's path, and it carries it alone.
+	// TMPDIR used to, and the two runs still disagree about that variable for the
+	// opposite reason: neither container has the directory it names, so an avroc
+	// that went back to reading it would fail the stage outright rather than pass
+	// it with the axis watching nothing.
 	root string
-	// tmp is TMPDIR, and so where the descriptor avroc passes in --descriptor is
-	// written.
-	tmp string
-	env []envVar
+	env  []envVar
 }
 
 type envVar struct {
@@ -442,10 +448,15 @@ func tracedRunEnv() []envVar {
 // plausible-looking default, the second run deliberately does not use it: a
 // generator that read HOME and got the same answer both times would pass a
 // check that was not looking.
+//
+// TMPDIR is set on both and neither container holds the directory it names. Since
+// #218 nothing in avroc reads it, so what it varies is no longer where the
+// descriptor goes — see regenerationRun.root — and what it is still here for is
+// the claim that avroc no longer reads it: a MkdirTemp("", …) put back anywhere
+// would fail both runs with `no such file or directory`.
 func firstRun() regenerationRun {
 	return regenerationRun{
 		root: "/work",
-		tmp:  "/tmp",
 		env: []envVar{
 			{"PATH", pluginDir},
 			{"TMPDIR", "/tmp"},
@@ -466,7 +477,6 @@ func secondRun() regenerationRun {
 		// Longer than the first, and at a different depth, because a path that
 		// leaked into the output would most plausibly leak as its own text.
 		root: "/srv/a-considerably-longer-project-directory",
-		tmp:  "/var/tmp/second",
 		env: append([]envVar{
 			{"PATH", "/nonexistent:" + pluginDir + ":/also-nonexistent"},
 			{"TMPDIR", "/var/tmp/second"},

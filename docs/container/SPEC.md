@@ -284,15 +284,14 @@ hard way by somebody:
   arguments, or against an image built `FROM` this one with a busybox copied in
   for the purpose.
 
-One directory in the image holds no file and is worth naming anyway: there is a
-writable temporary directory, because avroc writes each invocation's descriptor
-into a directory it creates under one. It is **not covered** — its path, its
-mode and its existence are [implementation
-detail](#compatibility-guarantees) like everything else in the filesystem that
-is not named above, and a derived image that wrote into it by path would be
-depending on something that may change in a patch release. It is mentioned here
-only so that "scratch plus the files named above" is not read as a promise that
-the image cannot write anywhere at all.
+One thing the image does **not** have is worth naming: there is no temporary
+directory in it, and none is needed. avroc writes each invocation's descriptor
+into a directory beneath the output tree the generator is writing to, so a
+`docker run` that mounts a project at `/work` needs no `--tmpfs`, no volume and
+no writable path anywhere else. Where the descriptor goes is
+[implementation detail](#compatibility-guarantees) like everything else in the
+filesystem that is not named above, and a derived image that wrote into it by
+path would be depending on something that may change in a patch release.
 
 Keeping the shell out is the same decision as having no plugin registry: the
 image's contents are exactly the executables somebody deliberately put there,

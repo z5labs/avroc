@@ -37,6 +37,12 @@ import (
 // That is what lets mergeOutput move each file with a rename rather than a copy,
 // which is in turn what keeps the merge short enough to be hard to interrupt.
 // The leading dot keeps it out of a shell glob for the moment it exists.
+//
+// Since #218 it has a neighbour: newDescriptorDir creates this invocation's
+// descriptor directory in the same tree, on the same terms and for a different
+// reason. The two are siblings and never nested, so a generator walking its own
+// --out cannot reach the descriptor and nothing avroc merges, prunes or records
+// can reach either.
 func newScratchDir(output, generatorName string) (string, error) {
 	dir, err := os.MkdirTemp(output, "."+generatorName+"-out-")
 	if err != nil {
