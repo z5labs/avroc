@@ -3,9 +3,9 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-// This file builds and checks the published generator images: avroc's own three
-// generators, each shipped as an image built FROM the base image, which image.go
-// builds (#127).
+// This file composes and checks the published generator images: avroc's own three
+// generators, each shipped as the base image plus one executable in the plugin
+// directory (#127, #217).
 //
 // # Why the built-ins go through the front door
 //
@@ -17,34 +17,48 @@
 // out that the mechanism needs a path the contract does not promise would have
 // been somebody in another repository, at their `docker build`.
 //
-// So the base ships the CLI and nothing else, and avroc-gen-go, avroc-gen-json
-// and avroc-gen-pcf reach their images the way a stranger's generator reaches
-// theirs: FROM the base, COPY into the plugin directory, chowned to the image's
-// user and marked executable, nothing else touched. Every path named below is
-// one docs/container/SPEC.md promises, which is the property this whole
-// arrangement exists to keep honest — and GeneratorImageContract is what fails
-// when it stops being true.
+// So the base ships no generator, and avroc-gen-go, avroc-gen-json and
+// avroc-gen-pcf reach their images through the one seam a stranger's generator
+// reaches theirs by: the plugin directory, under the name avroc searches PATH for.
+// Every path named below is one docs/container/SPEC.md promises, which is the
+// property this whole arrangement exists to keep honest — and
+// GeneratorImageContract is what fails when it stops being true.
+//
+// # Composition, not FROM plus COPY
+//
+// It was FROM plus COPY here until #217: m.image(platform).WithFile(...), which is
+// literally what a derived Dockerfile writes, because Dagger's WithFile and
+// buildkit's COPY are the same operation. The archetype's App.WithApp replaces it
+// and does strictly more of what that was standing in for — the executable is
+// matched platform by platform so an arm64 index cannot ship an amd64 generator,
+// its SPDX document joins the base's so the image's SBOM accounts for it, its
+// version is recorded so something says which release of the generator shipped,
+// a path collision with the base or with a generator composed earlier is refused
+// rather than layered over, and the composed entry is exec'd in every variant
+// before the first byte is pushed.
 //
 // # Why this is Dagger rather than a Dockerfile the pipeline builds
 //
 // docs/container/SPEC.md states these images as Dockerfiles, because a Dockerfile
-// is what an adopter writes, and the two instructions below are the two
-// instructions in one. The pipeline nonetheless builds them with the calls here
-// rather than by handing that Dockerfile to a builder, for a reason that is about
-// what is being checked rather than about taste: a `FROM ghcr.io/z5labs/avroc:v0`
-// line names a *published* image, and a pull request has to check the image it
-// just built. There is no way to point a Dockerfile's FROM at a container that
-// exists only inside the pipeline — a registry service is not reachable from a
-// Dockerfile build's image resolution — so building the committed Dockerfile
-// would check the previous release's base and say nothing about this change.
+// is what an adopter writes. The pipeline nonetheless composes them with the calls
+// here rather than by handing that Dockerfile to a builder, for a reason that is
+// about what is being checked rather than about taste: a
+// `FROM ghcr.io/z5labs/avroc:v0` line names a *published* image, and a pull request
+// has to check the image it just built. There is no way to point a Dockerfile's
+// FROM at a container that exists only inside the pipeline — a registry service is
+// not reachable from a Dockerfile build's image resolution — so building the
+// committed Dockerfile would check the previous release's base and say nothing
+// about this change.
 //
 // The drift that arrangement risks is closed by the check rather than by
 // discipline: checkImageFilesystem compares each generator image against an
 // exhaustive listing, so an image that differs from "the base plus exactly one
 // executable at the promised path" fails, which is the same assertion the
-// Dockerfile makes. Dagger's WithFile *is* COPY — both are buildkit — and the
-// stage built FROM the base runs no exec at all, which is the strongest form of
-// the COPY-only rule available: there is no shell in the image to run one with.
+// Dockerfile makes. Nothing composed here runs an exec in the finished image
+// either, which is the strongest form of the COPY-only rule available: there is no
+// shell in the image to run one with. What a Dockerfile *cannot* express is the
+// list above, which is why the two are no longer the same two instructions —
+// worked_example.go is where the document's own version is built and run.
 package main
 
 import (
@@ -86,15 +100,16 @@ func generatorExecutable(name string) string {
 	return "avroc-gen-" + name
 }
 
-// GeneratorImage builds the published image for one built-in generator: the base
-// image with that generator copied into the plugin directory, and nothing else
-// changed (#127).
+// GeneratorImage is the published image for one built-in generator, as a
+// container: the base image with that generator composed into the plugin
+// directory, and nothing else changed (#127, #217).
 //
-// It is the same two instructions docs/container/SPEC.md's worked example gives
-// a third-party author, and deliberately no more: the entrypoint is inherited
-// rather than set, Cmd stays empty so a caller's arguments are still avroc's, and
-// the only path named is the plugin directory, which is covered by the
-// compatibility guarantees.
+// It exists so that a contributor can load or export one, the way Image does, and
+// it hands back a container rather than the App for the reason given there. What it
+// promises is what the worked example promises a third-party author and no more:
+// the entrypoint is inherited rather than set, Cmd stays empty so a caller's
+// arguments are still avroc's, and the only path named is the plugin directory,
+// which is covered by the compatibility guarantees.
 //
 // platform defaults to the engine's own, which is what makes
 // `dagger call generator-image --name go` useful from a checkout.
@@ -118,16 +133,15 @@ func (m *Avroc) GeneratorImage(
 	return m.generatorImage(p, name), nil
 }
 
-// GeneratorBundleImage builds the image that combines every built-in generator:
-// one generator image with the others' executables copied into it (#127).
+// GeneratorBundleImage is the image that combines every built-in generator: the
+// base with all three composed into it (#127, #217).
 //
 // It is here because combining generators is the question an adopter asks
 // immediately after adding one — a project whose manifest names three generators
 // needs one image holding all three — and because the answer had better not be
-// "rebuild them all from source". It is not: each executable is copied out of the
-// published generator image that already carries it, at the path
-// docs/container/SPEC.md promises, which is `COPY --from=<image>` and is
-// available to anybody combining images this project has never heard of.
+// "rebuild them all from source". It is not: each generator is an application in
+// its own right, composed in, which is the seam an adopter combining generators
+// this project has never heard of uses too.
 //
 // example/ is what it is checked against, since that project's manifest names all
 // three; see checkImageGenerates.
@@ -315,7 +329,7 @@ func (m *Avroc) generatorImageContractOn(ctx context.Context, platform dagger.Pl
 
 	for _, name := range builtinGenerators() {
 		image := m.generatorImage(platform, name)
-		contents := append(baseImageExecutables(), generatorExecutable(name)) //nolint:gocritic // the base ships none, and appending is what says "the base's plus this one"
+		contents := append(baseImageExecutables(), generatorExecutable(name))
 
 		for _, err := range m.checkImageConfig(ctx, image) {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
