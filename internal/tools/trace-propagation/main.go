@@ -16,7 +16,7 @@
 // by two call sites agreeing.
 //
 //	go run ./internal/tools/trace-propagation -launch \
-//	    -endpoint http://collector:4318 -record /traceparent -- /usr/local/bin/avroc generate
+//	    -endpoint http://collector:4318 -record /traceparent -- /app/avroc generate
 //	go run ./internal/tools/trace-propagation -fetch -tempo http://tempo:3200 -trace <hex>
 //
 // # Why there is a launcher at all

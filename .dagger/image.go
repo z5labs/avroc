@@ -3,43 +3,52 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-// This file builds and checks the published base image — the one
+// This file composes and checks the published base image — the one
 // docs/container/SPEC.md describes and strangers' Dockerfiles name paths inside
-// (#126).
+// (#126, #217).
 //
-// # Why the image is built here rather than by the GoApp archetype
+// # Why there is no image built here any more
 //
-// The base-image story opened with a blocker and three ways out: extend the
-// devex GoApp archetype upstream to accept image customization, build the image
-// in this module, or accept a non-scratch base. This file is the second, and the
-// reason is that the first two are not alternatives at the same level.
+// There used to be, and this comment used to argue at length that there had to
+// be. The base-image story opened with a blocker and three ways out — extend the
+// devex archetype upstream to accept image customization, build the image here,
+// or accept a non-scratch base — and it took the second, because the archetype's
+// image half produced one scratch image per binary with /app/<binaryName> as
+// entrypoint and nothing else: no PATH, no user, no plugin directory, no second
+// executable, no data file. avroc's image is a base other people build FROM and
+// has to promise all of those.
 //
-// GoApp's imageForPlatform produces a scratch image holding one binary at
-// /app/<binaryName>, with that path as the entrypoint and nothing else set: no
-// PATH, no USER, no working directory, no second binary, no data file. avroc's
-// image has to promise all six, because it is a base that other people build
-// FROM — and four of the six are not settings GoApp is missing so much as a
-// different shape of image. avroc publishes an image that is a base: one binary
-// in a directory on PATH, into which other images COPY plugins that are found
-// by a PATH search rather than run as the entrypoint (#127); GoApp publishes one
-// image per binary and has no notion of a derived image. Teaching GoApp that shape
-// would be teaching it avroc's plugin model, which is a contract in this
-// repository's docs/ and belongs nowhere else. What would be left upstream after
-// the customization was general enough to keep — a settable USER, WORKDIR and
-// PATH — is a handful of Container calls, which is precisely what is below.
+// #217 is the first way out arriving after all. The refactored archetype makes
+// every one of those a property of the standard rather than of this repository:
+// /usr/local/bin is its fixed executable directory with PATH composed from the
+// same constant so the two cannot drift, 65532:65532 is its pinned non-root user
+// with no seam to move it, an image carries no working directory and states that
+// as a decision, a contribution arrives with a document describing it, and
+// App.WithApp composes one application's executable into another's plugin
+// directory — which is what a generator image is, matched platform by platform
+// and exec'd before anything is pushed. So what is left here is the two
+// contributions that are avroc's own and the checks that hold the contract, and
+// the image itself belongs to nobody in this file.
 //
-// The third way out, a non-scratch base, was rejected on the contract rather
-// than on size. docs/container/SPEC.md's "No shell" is a load-bearing promise:
-// it is what makes extension COPY-only, and what makes the image's contents
-// exactly the executables somebody deliberately put there. A distroless or
-// busybox base would be a smaller change here and a larger one there.
+// Two things the archetype does *not* express are worth naming, because both
+// were promises this repository made and neither is worked around here:
 //
-// What is *not* rebuilt here is anything about what "checked" means. fmt, vet,
-// lint and `go test -race` still route through the Z5Labs standard by way of Ci,
-// the binaries are still built by the shared devex Go module's Build, and this
-// file adds only the image layout the standard has no opinion about. That is the
-// split main.go's package comment anticipated, and no upstream devex change was
-// needed to reach it.
+//   - A writable 1777 /tmp, which #218 removed the need for by writing each
+//     invocation's descriptor into the output tree.
+//   - /work as a WorkingDir, which #219 withdrew, and which the archetype now
+//     rests a refusal on rather than merely omitting.
+//
+// A third arrived with the adoption itself and is recorded in
+// docs/container/SPEC.md rather than here: the base image no longer carries an
+// *empty* /usr/local/bin, because a contribution to any directory the image's
+// PATH resolves against is refused — content with no architecture that something
+// could find by name is how an arm64 image comes to run an amd64 executable —
+// and composition, the sanctioned route, would mean shipping a generator in the
+// base. See that document's "The plugin directory".
+//
+// The third way out, a non-scratch base, stayed rejected on the contract rather
+// than on size: docs/container/SPEC.md's "No shell" is what makes extension
+// COPY-only, and the archetype's base is scratch too.
 //
 // # Why the contract is a check rather than a comment
 //
@@ -70,7 +79,9 @@ import (
 // without changing it there is the drift ImageContract exists to catch.
 //
 // pluginDir lives in main.go, because the regeneration stage's scratch container
-// is deliberately the same layout as the published image and both read it.
+// resolves generators on PATH out of the same directory the published image does
+// and both read the constant; that container is no longer the published layout in
+// full, and main.go's comment on the constant says which half it reproduces.
 // Two of the rows that used to be here are gone, and each absence is a decision
 // rather than an omission. They are recorded as comments in the block below,
 // where the constant they replace used to be, because a deleted constant leaves
@@ -98,6 +109,24 @@ const (
 	// lines docs/container/SPEC.md and the README print need no
 	// `--tmpfs /tmp:mode=1777`, and the image is once again exactly scratch plus
 	// the files that document names.
+	//
+	// Since #217 the archetype nonetheless sets TMPDIR=/tmp, as part of a
+	// standardized environment whose whole point is that what a process reads out of
+	// HOME and TMPDIR is a property of the image rather than of the runtime. So the
+	// published image names a temporary directory it does not contain, and that is
+	// worth writing down rather than leaving to be discovered: a program that read
+	// it would get ENOENT on a path the configuration plainly advertises. What makes
+	// it harmless is #218 — avroc reads no ambient temporary directory at all, and
+	// internal/avroc.TestAvrocReadsNoAmbientTemporaryDirectory holds that as a
+	// property of the source across internal/, cmd/ and avrocpb/, so the thing that
+	// would break is a thing the tests refuse. Both halves are checked, and by
+	// different checks: that nothing reads it is that test's, and that the image
+	// does not carry it is imageContents' — the listing below is exhaustive, so a
+	// /tmp appearing in the image is a failure, in either direction.
+	//
+	// A deployment that wants one mounts a tmpfs or an emptyDir over it, which is
+	// what the archetype documents and is the reason nothing may be contributed
+	// under that path.
 
 	// imageUID and imageGID are the pinned non-root identity the image runs as.
 	// They are numbers rather than a name because the image has no /etc/passwd
@@ -115,18 +144,73 @@ const (
 	// author whose language has no protobuf code generation in the build.
 	descriptorSetPath = "/usr/local/share/avroc/ir.binpb"
 
+	// appDir is where the archetype puts an application's own binary, and homeDir
+	// is what it points HOME at. Neither is avroc's to choose and neither is in
+	// docs/container/SPEC.md: they are here because the filesystem listing is
+	// exhaustive, so a path the image carries has to be named somewhere even when
+	// nothing may depend on it.
+	//
+	// They are read from this repository rather than imported because the
+	// archetype exposes no constant for either, which is the same reason
+	// manifestFilename is written out below: a check reads the image the way a
+	// person would, and the day either value moves the listing is what says so.
+	appDir  = "/app"
+	homeDir = "/home/nonroot"
+
+	// homeMode is the mode HOME's directory has: traversable and readable,
+	// writable by nobody, and root-owned so that the refusal survives a caller
+	// overriding the runtime user. avroc writes nothing under HOME — since #218 it
+	// reads no ambient temporary directory either — so an empty read-only
+	// directory is the whole of what this row means.
+	homeMode = 0o555
+
 	// cliExecutable is the avroc CLI, and the only executable the base image
 	// ships. Its path is deliberately not part of the contract; that it is the
 	// one and only binary in the base is, because "the base is scratch plus the
 	// files docs/container/SPEC.md names" is what makes a generator image's
 	// contents exactly what somebody copied into it.
+	//
+	// It is also the name the archetype gives the binary it builds, which is the
+	// basename of the module path in go.mod and not something a caller states —
+	// so cliPackage below is the package that produces it and the two agree
+	// because this repository's module is called avroc.
 	cliExecutable = "avroc"
 
-	// executableMode is the mode every executable in the plugin directory has:
-	// readable and executable by the image's user and by any UID a caller
-	// overrides it with, which is what makes `--user $(id -u):$(id -g)` an
-	// ordinary configuration rather than a workaround.
-	executableMode = 0o755
+	// cliPackage is the package the archetype builds the base image's binary
+	// from. It is stated where the version is, rather than beside the entrypoint,
+	// because the archetype derives the executable's *name* from go.mod and takes
+	// only the package to compile.
+	cliPackage = "./cmd/" + cliExecutable
+
+	// executableMode is the mode every executable in the plugin directory has.
+	//
+	// It is 0555 rather than the 0755 this pipeline used to write, because the
+	// archetype owns it now: every byte it puts in an image is read-only, on the
+	// grounds that an image whose files the application can rewrite is one whose
+	// published digest stops describing what is running. What the contract needs
+	// is unchanged and is the reason the mode is world-anything at all — an
+	// executable any UID can run, so `--user $(id -u):$(id -g)` is an ordinary
+	// configuration rather than a workaround.
+	executableMode = 0o555
+
+	// contributedFileMode is the mode a contributed data file lands with, and it
+	// is the archetype's for executableMode's reason. The FileDescriptorSet is
+	// the one file in this image that has it; world-readable is the half the
+	// contract depends on, because a caller who overrides the UID reads the same
+	// file.
+	contributedFileMode = 0o444
+
+	// devVersion is the version every build that is not a release publishes
+	// under, and therefore the version every check builds.
+	//
+	// The archetype requires one: it stamps main.version into the binary and puts
+	// the value in an OCI annotation, and it refuses a version that could not be
+	// an image tag. A release states its own (release.go's planRelease, from the
+	// refs at HEAD); everything else is not a release and says so, rather than
+	// borrowing the last one's number. Nothing in docs/container/SPEC.md covers an
+	// annotation, so this value is invisible to a consumer — it exists so that
+	// "which release is this" has an answer that is never wrong.
+	devVersion = "v0.0.0-dev"
 )
 
 // imagePlatforms is the set of platforms the image is published for, and the
@@ -137,17 +221,25 @@ func imagePlatforms() []dagger.Platform {
 	return []dagger.Platform{"linux/amd64", "linux/arm64"}
 }
 
-// Image builds the published base image for one platform.
+// Image is the published base image for one platform, as a container.
 //
-// It is the image docs/container/SPEC.md describes, and every promise that
-// document makes is made here: the CLI in /usr/local/bin with that directory on
-// PATH, the CLI as the entrypoint with an empty Cmd, no working directory at all
-// (#219), UID and GID 65532 owning the plugin directory and running the process,
-// the IR FileDescriptorSet at its documented path, and nothing else in the
-// filesystem at all.
+// It exists so that a contributor can load or export the image the pipeline
+// builds — `dagger call image export --path ./avroc.tar` — and for nothing else.
+// Every promise docs/container/SPEC.md makes about it is the archetype's now:
+// baseApp is the whole of avroc's contribution, which is the package to compile
+// and one data file.
 //
-// No generator is in it. avroc's own three are shipped as images built FROM this
-// one (#127, GeneratorImage), which is the only arrangement in which they are
+// It hands back a *dagger.Container rather than the App it came from because
+// Dagger refuses a function that returns an object type belonging to a
+// dependency module, so an `app` entrypoint threading the archetype's chain out
+// to the command line is not expressible here. That is also why there is no
+// Publish beside this one: a publish is signed and attested by construction —
+// the archetype fails one it cannot produce provenance for — and the only
+// caller that has an OIDC token to exchange is the release workflow, which
+// reaches it through Release.
+//
+// No generator is in it. avroc's own three are composed onto this App (#127,
+// #217, GeneratorImage), which is the only arrangement in which they are
 // consumers of the extension mechanism rather than a private arrangement that
 // happens to look like one.
 //
@@ -166,74 +258,7 @@ func (m *Avroc) Image(
 	if err != nil {
 		return nil, err
 	}
-	return m.image(p), nil
-}
-
-// Publish pushes the image to address as a multi-platform index covering every
-// platform in imagePlatforms, and returns the digest-qualified reference it
-// pushed.
-//
-// address carries the tag, because this function's job is to push one reference
-// and not to decide which references exist. Which tags a release carries is
-// Release's, derived from the refs at HEAD in one place (#128); this is what a
-// person calls to put an image on a test registry, and what Release calls once
-// per tag.
-//
-// One index rather than one image per platform, so that a `FROM` line naming the
-// tag resolves to the manifest for whatever platform the builder is on, which is
-// what makes the published set of platforms invisible to a derived Dockerfile.
-func (m *Avroc) Publish(
-	ctx context.Context,
-	// The full image reference to push, including the tag.
-	address string,
-	// The registry username to authenticate as. Both this and password are
-	// needed for a registry that requires authentication, which is every
-	// registry this project publishes to.
-	// +optional
-	username string,
-	// The registry password or token to authenticate with.
-	// +optional
-	password *dagger.Secret,
-) (string, error) {
-	return publishIndex(ctx, address, username, password, m.image)
-}
-
-// publishIndex pushes one multi-platform index built from build, which is called
-// once per published platform.
-//
-// It is shared by Publish and PublishGenerator rather than written twice: the
-// credential handling and the index shape are properties of publishing an avroc
-// image, not of which image is being published, and a second copy would be a
-// second chance to get the anonymous-push case wrong.
-func publishIndex(
-	ctx context.Context,
-	address, username string,
-	password *dagger.Secret,
-	build func(dagger.Platform) *dagger.Container,
-) (string, error) {
-	platforms := imagePlatforms()
-	variants := make([]*dagger.Container, 0, len(platforms))
-	for _, p := range platforms {
-		variants = append(variants, build(p))
-	}
-
-	// Half a credential is refused rather than quietly dropped. Skipping the
-	// auth because one of the two is missing turns a typo into an anonymous
-	// push, which fails at the registry with a message about permissions rather
-	// than about the argument that was actually wrong — and on a registry that
-	// happened to allow it, would not fail at all.
-	switch {
-	case username != "" && password == nil:
-		return "", errors.New("username was given without password: both are needed to authenticate, and publishing with neither pushes anonymously")
-	case username == "" && password != nil:
-		return "", errors.New("password was given without username: both are needed to authenticate, and publishing with neither pushes anonymously")
-	}
-
-	c := dag.Container()
-	if username != "" {
-		c = c.WithRegistryAuth(address, username, password)
-	}
-	return c.Publish(ctx, address, dagger.ContainerPublishOpts{PlatformVariants: variants})
+	return m.baseImage(p), nil
 }
 
 // ImageContract checks the published image against every promise
@@ -290,67 +315,82 @@ func (m *Avroc) ImageContract(
 	return errors.Join(errs...)
 }
 
-// image is the base image for one platform, and the one definition of it: Image,
-// Publish and every image built FROM this one all come through here, so there is
-// no arrangement in which the image a check passed is not the image that was
-// pushed, nor one in which a generator image is built on a base nobody checked.
+// baseApp is the base image as the archetype's App, and the one definition of
+// it: Image, every generator image composed onto it and every check that reads it
+// all come through here, so there is no arrangement in which the image a check
+// passed is not the image that was pushed.
 //
-// The order of the calls below is the order docs/container/SPEC.md states the
-// promises in, which is not an accident worth preserving so much as one worth
-// not breaking: WithEntrypoint clears Cmd, so it comes before the WithoutDefaultArgs
-// that asserts Cmd is empty rather than after it.
-func (m *Avroc) image(platform dagger.Platform) *dagger.Container {
-	cli := dag.Directory().WithFile(
-		cliExecutable,
-		m.binaries(platform).File(cliExecutable),
-		dagger.DirectoryWithFileOpts{Permissions: executableMode},
-	)
+// Two lines are avroc's, and everything docs/container/SPEC.md covers other than
+// the FileDescriptorSet's path falls out of the archetype: the executable
+// directory and its membership of PATH, the entrypoint, the empty Cmd, the absent
+// working directory and the 65532:65532 that owns the files and runs the process.
+//
+// The FileDescriptorSet arrives as a contribution, which means it arrives with a
+// document: every byte an image carries is described, because the SPDX and
+// CycloneDX pair a publish attaches accounts for the whole image rather than for
+// the binary the chain compiled. A protobuf FileDescriptorSet has no ecosystem
+// and therefore no module able to produce a document for it, which is the case
+// Z5Labs.FileDocument exists for — so this is a call and not a hand-rolled SPDX
+// file in this repository. The licence is stated explicitly rather than left to
+// default: MIT is this repository's, and NOASSERTION would be the honest answer to
+// a question nobody had asked rather than to one whose answer is known. No version
+// is given, because the file is a rendering of this commit's protos and inventing
+// a number would put a value in a field consumers compare.
+//
+// version is the version the App publishes and stamps under. It is a parameter
+// rather than devVersion outright so that Release passes the release's own and
+// the check stages pass devVersion, and so that the two cannot be different code
+// paths — the container a contract check reads is built exactly as the container
+// a release pushes is.
+func (m *Avroc) baseApp(version string) *dagger.Z5LabsApp {
+	set := m.IrDescriptorSet()
 
-	return dag.Container(dagger.ContainerOpts{Platform: platform}).
-		// The plugin directory, owned by the image's user so that a generator
-		// copied in by a derived image lands somewhere that user can execute
-		// from. The CLI goes here too; its path is explicitly not part of the
-		// contract, and this is simply the one directory the image has.
-		WithDirectory(pluginDir, cli, dagger.ContainerWithDirectoryOpts{
-			Owner: imageUser,
+	return m.appChain().
+		App(version, dagger.Z5LabsGoChainAppOpts{
+			Pkg:       cliPackage,
+			Platforms: imagePlatforms(),
 		}).
-		// The FileDescriptorSet, world-readable because a caller who overrides
-		// the UID reads the same file.
-		WithFile(descriptorSetPath, m.IrDescriptorSet(), dagger.ContainerWithFileOpts{
-			Owner:       imageUser,
-			Permissions: 0o644,
-		}).
-		// PATH is set outright rather than appended to, because a scratch image
-		// has no PATH to append to. Only the guarantee that it contains the
-		// plugin directory is covered; the rest of the value is not.
-		WithEnvVariable("PATH", pluginDir).
-		// No working directory, and no directory created to be one (#219): there is
-		// deliberately no WithWorkdir and no WithDirectory for one anywhere in this
-		// chain, and checkImageConfig asserts the field is empty so that a value
-		// arriving from anywhere — here or a future base layer — is a failure.
-		//
-		// The reason is not that this function could not set one; it plainly could,
-		// and did until #219. It is that a working directory is not a property a
-		// consumer needs the image to hold — the caller already types the mount
-		// point in -v and can type it again in -w — and that this pipeline is being
-		// adopted onto a shared archetype which sets none and states that as a
-		// decision (#217). Spending the promise now, while the hand-rolled pipeline
-		// is still standing and every check here can be run against it, is what
-		// makes the adoption a change nothing consumer-visible rides on.
-		WithUser(imageUser).
-		WithEntrypoint([]string{pluginDir + "/" + cliExecutable}).
-		WithoutDefaultArgs()
+		WithFile(descriptorSetPath, set, dag.Z5Labs().FileDocument(set, dagger.Z5LabsFileDocumentOpts{
+			License: "MIT",
+			Name:    "avroc-ir-descriptor-set",
+		}))
+}
+
+// baseImage is one platform's base image, for the checks and for the stages that
+// run avroc rather than publish it.
+//
+// It is an accessor onto the App and not an image build: the container it hands
+// back is the one the archetype assembled and the one a publish would push, which
+// is the whole reason the checks are allowed to read it.
+func (m *Avroc) baseImage(platform dagger.Platform) *dagger.Container {
+	return m.baseApp(devVersion).Container(platform)
+}
+
+// appChain is the Go chain an App is built from — the source with its git
+// metadata folded in, and nothing configured about the check stages.
+//
+// The lint and test configuration deliberately does not travel here. Ci runs the
+// checks and App builds; a chain configured for both would make a change to the
+// lint version a change to the image's cache key, and the archetype's own comment
+// on WithBuild says the same thing from the other side.
+func (m *Avroc) appChain() *dagger.Z5LabsGoChain {
+	return dag.Z5Labs().Go(m.appSource())
 }
 
 // binaries builds every executable this repository ships, for one platform.
 //
-// One build for the base image and the three generator images alike, so the CLI
-// a generator image inherits and the generator copied into it are the same
-// binaries the base image was checked with. They are cross-compiled by the
-// toolchain container rather than compiled under emulation, and CGO is off
-// because the image is scratch: there is no libc in it, and a dynamically linked
-// executable would find no loader and fail with `no such file or directory`
-// naming a file that is plainly there.
+// It no longer builds anything that goes into the base image — the archetype
+// compiles the CLI itself, from cliPackage — and what is left is the two callers
+// that need a loose executable rather than an image: the generator Apps, which
+// package a prebuilt binary because the archetype names a Go application after
+// its module and avroc's three generators share one module (generator_image.go),
+// and CompanionModule, which hands executables to the companion module the way an
+// adopter with no generator image would.
+//
+// They are cross-compiled by the toolchain container rather than compiled under
+// emulation, and CGO is off because the image is scratch: there is no libc in it,
+// and a dynamically linked executable would find no loader and fail with `no such
+// file or directory` naming a file that is plainly there.
 func (m *Avroc) binaries(platform dagger.Platform) *dagger.Directory {
 	return dag.Go().Build(m.Source, dagger.GoBuildOpts{
 		Pkg:        "./cmd/...",
@@ -365,8 +405,25 @@ func (m *Avroc) binaries(platform dagger.Platform) *dagger.Directory {
 // first: a change that broke the entrypoint most likely broke the user and the
 // working directory too, and one run should say so.
 func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) error {
-	image := m.image(platform)
+	return errors.Join(m.checkBaseImage(ctx, m.baseImage(platform))...)
+}
 
+// checkBaseImage is every assertion the base image is held to, over a container
+// somebody else chose.
+//
+// It takes the container rather than a platform so that there is exactly one
+// definition of "the base image is correct" and three call sites for it:
+// ImageContract, which builds one per published platform; the release gate, which
+// passes the very container it is about to push (release.go's releaseContract);
+// and nothing else. The reviewer of #217 caught the release gate having grown a
+// second, hand-copied list — which would have meant a check added here silently
+// stopping short of a release, the exact hole putting the gate inside Release was
+// meant to close.
+//
+// Every group is run and every failure collected rather than stopping at the
+// first: a change that broke the entrypoint most likely broke the user and the
+// working directory too, and one run should say so.
+func (m *Avroc) checkBaseImage(ctx context.Context, image *dagger.Container) []error {
 	errs := m.checkImageConfig(ctx, image)
 	errs = append(errs, m.checkImageFilesystem(ctx, image, baseImageExecutables())...)
 	if err := m.checkImageIsTheCLI(ctx, image); err != nil {
@@ -375,7 +432,7 @@ func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) e
 	if err := m.checkAMissingWorkingDirectoryIsLegible(ctx, image); err != nil {
 		errs = append(errs, err)
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 // checkImageIsTheCLI runs the entrypoint and requires avroc's usage back.
@@ -551,44 +608,84 @@ func (m *Avroc) checkImageConfig(ctx context.Context, image *dagger.Container) [
 // difference between the two listings is exactly the set of files somebody
 // COPYed in, and checking a derived image against this is how "only COPY ran in
 // the stage built FROM the base" becomes an assertion rather than a claim.
-func imageContents(executables []string) map[string]imageEntry {
-	const (
-		dirMode  = 0o755
-		dataMode = 0o644
-	)
+func imageContents(pluginExecutables []string) map[string]imageEntry {
+	const dirMode = 0o755
 
 	contents := map[string]imageEntry{
+		// The application's own directory and the CLI in it. Neither path is
+		// covered by docs/container/SPEC.md — that document says the CLI's own
+		// path is implementation detail and a derived image reaches it through
+		// the entrypoint — and both are listed here anyway, because the listing
+		// is exhaustive or it is nothing. appDir is root-owned so the running
+		// user cannot unlink the binary it is about to exec.
+		appDir:                   {0, 0, dirMode},
+		cliPath():                {imageUID, imageGID, executableMode},
+		"/home":                  {0, 0, dirMode},
+		homeDir:                  {0, 0, homeMode},
 		"/usr":                   {0, 0, dirMode},
 		"/usr/local":             {0, 0, dirMode},
 		"/usr/local/share":       {0, 0, dirMode},
 		"/usr/local/share/avroc": {0, 0, dirMode},
-		descriptorSetPath:        {imageUID, imageGID, dataMode},
-		pluginDir:                {imageUID, imageGID, dirMode},
+		descriptorSetPath:        {imageUID, imageGID, contributedFileMode},
 	}
-	for _, name := range executables {
+
+	// The plugin directory appears exactly when something is in it, and that is
+	// the row #217 changed rather than a looseness in the check (see this file's
+	// comment and docs/container/SPEC.md's "The plugin directory"). The base
+	// image carries no generator, and a contribution to a directory the image's
+	// PATH resolves against is refused by the archetype — so the base's listing
+	// has no /usr/local/bin at all, and a generator image's has it because
+	// composing a generator created it.
+	// It is root-owned, where this pipeline used to make it the image user's.
+	// Nothing depends on the ownership of the directory — a derived image's COPY
+	// runs as root in the builder, and 0755 is traversable by every UID, so the
+	// executable inside it is reachable by the running user and by an overridden
+	// one. What a consumer does depend on is the mode and ownership of the
+	// *executable*, which is the row below and is unchanged in substance.
+	// docs/container/SPEC.md's "What it means for ownership" says so now.
+	if len(pluginExecutables) > 0 {
+		contents[pluginDir] = imageEntry{0, 0, dirMode}
+	}
+	for _, name := range pluginExecutables {
 		contents[pluginDir+"/"+name] = imageEntry{imageUID, imageGID, executableMode}
 	}
 	return contents
 }
 
-// baseImageExecutables is what ships in the base image's plugin directory: the
-// CLI, and nothing else.
+// baseImageExecutables is what ships in the base image's plugin directory:
+// nothing at all.
 //
 // avroc's own generators are not here, and their absence is the substance of
 // #127. A base that carried them would make the three published generator images
 // decorative — the built-ins would be reachable by a path nobody copied them to,
 // which is precisely the private arrangement that would leave the extension
 // mechanism untested by its own author.
+//
+// The CLI is not here either, and that is #217: the archetype puts an
+// application's own binary in appDir and names it absolutely in the entrypoint,
+// so the plugin directory is for what an extension adds and for nothing else.
+// docs/container/SPEC.md already said the CLI's path was implementation detail,
+// which is what made that free to change.
 func baseImageExecutables() []string {
-	return []string{cliExecutable}
+	return nil
 }
 
-// baseImageExecutablePaths is baseImageExecutables where they land, which is what
-// an Entrypoint would have to name.
+// cliPath is where the CLI lands inside the image.
+//
+// It is derived from the archetype's layout rather than promised: appDir plus the
+// binary's name, which the archetype takes from go.mod's module path. Nothing
+// outside this module may depend on it — docs/container/SPEC.md's "The CLI's own
+// path is not part of the contract" — and the checks depend on it only to be
+// exhaustive about the filesystem and to recognise the entrypoint.
+func cliPath() string {
+	return appDir + "/" + cliExecutable
+}
+
+// baseImageExecutablePaths is every executable the base image ships, where it
+// lands, which is what an Entrypoint would have to name.
 func baseImageExecutablePaths() []string {
-	names := baseImageExecutables()
-	paths := make([]string, 0, len(names))
-	for _, name := range names {
+	paths := []string{cliPath()}
+	for _, name := range baseImageExecutables() {
 		paths = append(paths, pluginDir+"/"+name)
 	}
 	return paths

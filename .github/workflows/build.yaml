@@ -84,14 +84,31 @@ jobs:
     env:
       DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
     steps:
-      # A shallow checkout on purpose. The module excludes .git from the source
-      # directory it checks, because none of fmt, vet, lint or test reads git
-      # metadata, so there is nothing here for the extra history to feed. That
-      # changes with the archetype: a GoApp stamps binaries from the refs at
-      # HEAD and needs real metadata, so `fetch-depth: 0` comes back in the same
-      # change that drops .git from the module's ignore list.
+      # Full history, because this job builds images (#217). The checkout was
+      # shallow while nothing here read git metadata; the archetype the pipeline
+      # now builds on stamps every binary with the short HEAD SHA and annotates
+      # every image with the commit, its committer time and the origin remote, so
+      # a checkout with no real .git fails at the first image the contract checks
+      # ask for.
+      #
+      # It does *not* come with `.git` moving into the module's source directory,
+      # which is what the comment here used to predict. The module binds it as its
+      # own argument and folds it in on the one path that builds an App
+      # (.dagger/main.go's appSource), so fmt, vet, lint and test still see a tree
+      # that does not change when a commit is made — full history costs this job a
+      # slower checkout and costs those four stages nothing.
+      #
+      # `fetch-depth: 0` brings tag refs with it, and that is fine rather than
+      # intended — do not read this as a checkout with no tags in it. Nothing here
+      # looks at them: `dagger call tag-scheme` runs the release derivation over a
+      # literal table and reads no repository at all, and the decision that a commit
+      # *is* a release belongs to release.yaml, which does its own checkout. A tag
+      # that happens to point at a pull request's HEAD therefore changes nothing
+      # this workflow does.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       # Pinned to the engineVersion the module itself declares, read out of
       # dagger.json rather than repeated here. The CLI provisions an engine of

@@ -86,8 +86,8 @@ func (m *Avroc) CompanionModule(ctx context.Context) error {
 	// Both start from the base image this pipeline built, which carries the CLI
 	// and no generator — so a generation that succeeded below did so with the
 	// generators these calls put there and with nothing that was lying around.
-	fromImages := dag.Companion(dagger.CompanionOpts{Image: m.image(platform)})
-	fromExecutables := dag.Companion(dagger.CompanionOpts{Image: m.image(platform)})
+	fromImages := dag.Companion(dagger.CompanionOpts{Image: m.baseImage(platform)})
+	fromExecutables := dag.Companion(dagger.CompanionOpts{Image: m.baseImage(platform)})
 
 	for _, name := range builtinGenerators() {
 		fromImages = fromImages.WithGenerator(name, dagger.CompanionWithGeneratorOpts{

@@ -523,15 +523,63 @@ grows a timestamp uses it rather than inventing its own.
 
 ### The published images
 
-`.dagger/image.go` builds the base image `docs/container/SPEC.md` describes, and
-that document is normative: `/usr/local/bin` on `PATH` holding the CLI **and no
-generator**, the CLI as `Entrypoint` with an empty `Cmd`, **no `WorkingDir` at
-all**, UID and GID 65532 owning the plugin directory and running the process,
-the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a `scratch`
-base — no shell, no libc, no package manager, so extension is `COPY`-only. The
-filesystem is now exactly the files that document names and nothing else: a 1777
-`/tmp` used to be grafted on for the descriptor, and #218 removed the reason for
-it rather than the mount that carried it (see "Where the descriptor is written").
+**Nothing here builds an image any more** (#217). `.dagger/` used to, and roughly
+1,900 of its lines existed for that reason; the refactored devex `z5labs` module is
+a chainable `Go` -> `App` -> `Publish` API and every promise avroc needed is the
+archetype's own, so `image.go`'s `image()`, `publishIndex`, `Publish`,
+`generator_image.go`'s `generatorImage`/`generatorBundleImage`/`PublishGenerator`
+and `release.go`'s `versionTags`/`publishTags`/`cosign`/`attest`/
+`provenanceStatement` are all deleted rather than wrapped. What is left in those
+files is avroc's two contributions, the composition, the release *decision* and the
+contract checks.
+
+`.dagger/image.go`'s `baseApp` is the base image `docs/container/SPEC.md` describes,
+and that document is normative: `/usr/local/bin` on `PATH` and **no executable in
+it** — no generator, and since #217 not the CLI either, whose path that document
+always called implementation detail — the CLI as `Entrypoint` with an empty `Cmd`,
+**no `WorkingDir` at all**, UID and GID 65532 running the process and owning every
+file, the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a
+`scratch` base — no shell, no libc, no package manager, so extension is `COPY`-only.
+A 1777 `/tmp` used to be grafted on for the descriptor, and #218 removed the reason
+for it rather than the mount that carried it (see "Where the descriptor is
+written").
+
+Two lines are avroc's: the package the archetype compiles (`cliPackage`) and the
+`FileDescriptorSet`, which arrives as a **contribution carrying a document** —
+`Z5Labs.FileDocument` with an explicit `MIT` and no invented version, because a
+protobuf descriptor set has no ecosystem able to produce one, and because a publish
+assembles the image's SPDX and CycloneDX pair out of one document per thing that
+entered it. Everything else falls out of the archetype, `Publish` asserting the whole
+image configuration before it pushes.
+
+**A generator image is composition, not `FROM` plus `COPY`.** Each generator is its
+own `App` — through the *generic* `Z5Labs.App` constructor rather than the Go chain,
+because the chain names a binary after `go.mod`'s module path and avroc's four
+commands share one module, so all four would be called `avroc` — and
+`App.WithApp` lands its entry in the plugin directory under its own name, matched
+platform by platform, with its document joining the base's, its version recorded,
+and its entry exec'd in every variant before the first byte is pushed. The bundle is
+the same base with all three composed in. `builtinGenerators` survives, because the
+set of generators is this repository's.
+
+**Four consumer-visible breaks ship with the adoption**, and `docs/container/SPEC.md`
+requires the next *minor* release's notes to name every one: attestation discovery
+becomes referrers-only (`cosign verify-attestation` finds nothing; `oras discover`
+does), the SBOM's subject moves from the executable to the whole image, the plugin
+directory is no longer present-and-empty in the base (a contribution to any directory
+on `PATH` is refused, and composition would mean shipping a generator in the base),
+and no directory is 65532-owned any more. The first two were anticipated by #217; the
+last two were found by re-deriving the unexpressible promises against the *landed*
+API, which is what that story asked for.
+
+**`.git` is bound apart from the source.** The archetype stamps the short HEAD SHA
+into every binary and annotates every image with the commit, its committer time and
+the origin, so an `App` needs real git metadata — and `New`'s ignore list keeps it out
+of `Source` so that fmt, vet, lint and test do not miss their cache on every commit.
+`New` takes a `gitDir` argument (`+defaultPath="/.git"`) and `appSource` is the one
+place the two are put back together; `build.yaml` fetches full history because a pull
+request builds images. The cost is that a git *worktree* has a `.git` file rather than
+a directory, so the image stages do not run from one — already true of `Release`.
 
 **The image sets no working directory, and that is a decision** (#219,
 `docs/container/SPEC.md`'s "The working directory"). `WorkingDir` was `/work` and
@@ -546,7 +594,7 @@ directory is mode `0555` and a `/work` that is not writable is not one a
 generation can write into. What made it affordable is that `-w /work` is a path
 the invocation already contains, where #218's `--tmpfs /tmp:mode=1777` was a fact
 an adopter had no way to possess. It is a **break**, deliberately, and the SPEC
-requires the next minor release's notes to name it beside #217's two rather than
+requires the next minor release's notes to name it beside #217's four rather than
 claiming they already do.
 
 Every check that reached `avroc.json` through the image's working directory now
@@ -588,37 +636,46 @@ of them exist because **an absence is the easiest thing to leave unchecked**.
   block three ways and requires each to be refused, because the failure path of an
   extractor nobody has broken is a check nobody knows the state of.
 
-`.dagger/generator_image.go` builds the three images that carry avroc's own
+`.dagger/generator_image.go` composes the three images that carry avroc's own
 generators, each of them the base plus one executable in the plugin directory
-(#127). The generators are deliberately not in the base: a built-in on `PATH`
+(#127, #217). The generators are deliberately not in the base: a built-in on `PATH`
 because the pipeline put it there is not a consumer of the extension mechanism,
 and the first person to discover that the mechanism needs a path the contract
 does not promise would otherwise have been a stranger at their own
-`docker build`. `dagger call generator-image --name go`, `... publish-generator`
-and `... generator-bundle-image` — the last being all three combined by copying
-each executable out of the image that publishes it, which is what an adopter
-writes as `COPY --from`.
+`docker build`. `dagger call generator-image --name go` and
+`... generator-bundle-image` are the accessors; there is no `publish-generator` any
+more, because the archetype's publish is signed and attested by construction and the
+only caller with an OIDC token to exchange is the release workflow.
 
-It is built here rather than by the devex `GoApp` archetype, whose image half
-produces one scratch image per binary with `/app/<binaryName>` as entrypoint and
-nothing else set; `image.go`'s package comment records why that was the choice
-over extending `GoApp` upstream or accepting a non-scratch base (#126). The
-check stages still route through the Z5Labs standard, so there is still one
-definition of what "checked" means.
+The bundle used to be all three combined by copying each executable *out of the
+image that publishes it*, which is what an adopter writes as `COPY --from`; it is
+three `WithApp` calls onto one base now. What was lost is that the old shape
+incidentally demonstrated a derived image of a derived image; the archetype states
+that composition is transitive, so nothing rests on having shown it. What was gained
+is that each generator arrives with its own document and version, collisions are
+refused rather than layered over, and every composed entry is exec'd in the finished
+image before it is pushed.
 
 `dagger call image-contract` is the compatibility guarantees table executed
 rather than read — the OCI configuration, an *exact* listing of every path in
 the image with its owner and mode, and `help` through the entrypoint, which is
-all a base holding no generator can be asked to do.
+all a base holding no generator can be asked to do. Since #217 the same
+assertions are also a **gate inside `Release`** (`releaseContract`), and
+`release.yaml` no longer calls the two contract stages as steps of its own: the
+archetype's guarantee that the container a check read is *the very container that
+will be pushed* holds only within one chained call, so two separate `dagger call`s
+were a second, cache-identical build that merely agreed. The standalone calls stay
+for pull requests, which have no release to gate.
 `dagger call generator-image-contract` is the other half: each generator image's
 configuration inherited unchanged, its filesystem exhaustively equal to the
 base's plus one executable (which is how "only `COPY` ran" becomes an assertion),
 each image generating with its own generator through the inherited entrypoint,
 and the combined image reproducing the committed `example/` byte for byte as 65532
-and as an overridden UID. CI runs both on every pull request;
-`dagger call publish --address <ref>` and `dagger call publish-generator --name
-<name> --address <ref>` push one multi-platform index to the reference they are
-given, and are what a person calls to put an image on a test registry.
+and as an overridden UID. CI runs both on every pull request. There is no
+`dagger call publish` for a person to put an image on a test registry: the
+archetype's publish is signed and attested by construction and refuses a run it
+cannot produce provenance for, so `dagger call image export --path ./avroc.tar` plus
+`docker load` is what looking at one costs now.
 
 **The image carries no CA certificate bundle, and that is a decision** (#198,
 `docs/container/SPEC.md`'s "No certificate authorities"). A scratch image has no
@@ -736,12 +793,13 @@ only until the next regeneration lowered it again, so the exclusion removes a
 hazard rather than a protection, and `osvVulnerabilityAlerts` no longer reaching
 them is the intended outcome and not its cost. `engineVersion` is the lever that
 moves those requires, and the `pin` SHAs beside it are the lever that moves the
-devex dependencies; neither is Renovate-managed today. The rule names the
-generated files rather than the directories holding them, because
-`.dagger/release.go` carries a custom regex manager — the cosign module version —
-that a directory-wide `ignorePaths` entry would silently switch off, and it is
-last in `packageRules` because the `indirect` rule above it would otherwise
-re-enable exactly the requires it excludes.
+devex dependencies; neither is Renovate-managed today. The rule still names the
+generated files rather than the directories holding them, even though the thing that
+forced it is gone: `.dagger/release.go` carried a custom regex manager for the cosign
+module version until #217 deleted the pin with the signing code, and the rule that a
+directory-wide `ignorePaths` entry silently switches off whatever gets added to that
+directory outlives its first instance. It is last in `packageRules` because the
+`indirect` rule above it would otherwise re-enable exactly the requires it excludes.
 
 ### Releasing the images
 
@@ -756,16 +814,28 @@ the others; two version tags is an error. `dagger call tag-scheme` runs that
 derivation over a table of cases on every pull request, with every expected tag
 written as a literal so the check cannot move with the constant it is checking.
 
-Each published digest is then signed with `cosign`, keyless: the identity is the
-release workflow, certified per run by the public sigstore CA from the OIDC token
-`id-token: write` lets the run mint, so there is no avroc key for anybody to hold
-or trust. Signing is recursive, so the published index and every per-platform
-manifest under it are signed; the attestations — a SLSA v1 provenance statement
-and one SPDX SBOM per executable per platform — go on the **index digest** and
-only there. Nothing is ever attached to a tag.
-The verifying commands are `docs/container/SPEC.md`'s "Verifying a signature",
-and cosign itself is built by `dag.Go().Install` at a module version pinned in
-`release.go`, so there is no tool image here to keep in step with an upstream tag.
+**The tag family, the signature and the attestations are the archetype's** (#217).
+`planRelease` answers "is this a release, and which version" and stops there;
+`App.Publish` derives `v0.2.0` -> `v0.2` -> `v0` -> `latest` from that version, pushes
+one manifest list per repository with every tag pointing at the one digest, signs the
+index and every per-platform manifest under it, and attaches a signed SLSA v1
+provenance statement plus an SPDX and a CycloneDX document per platform. `versionTags`,
+`publishTags`, `cosign`, `attest`, `provenanceStatement` and the `cosignPackage` pin are
+gone, and so are `Release`'s `--builder` and `--invocation`: every identifying field in
+the provenance comes out of the exchanged OIDC token's claims, because anything a
+caller could have supplied attests to nothing. `--repository` split into `--registry`
+plus `--repository` for the same reason the archetype splits them — a mirror serves the
+same release by changing one of the two.
+
+Signing is still keyless with no avroc key for anybody to hold, and nothing is ever
+attached to a tag. Two things a consumer runs did change and are named in
+`docs/container/SPEC.md`'s "Verifying a signature": the attestations are OCI
+**referrers and nothing else**, so `cosign verify-attestation` reports none and
+`oras discover` is what finds them, and each SBOM describes the **whole image**
+rather than one executable. `cosign verify` is untouched.
+
+`TagScheme` shrank to the half avroc still decides, and its table lost the `tags`
+column with `versionTags`. Every expected value is still a literal.
 
 ### Key Dependencies
 

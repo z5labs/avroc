@@ -362,7 +362,14 @@ func (m *Avroc) tracedGeneration(platform dagger.Platform, collector *dagger.Ser
 			"-endpoint", fmt.Sprintf("http://%s:%d", collectorHostname, collectorOtlpHTTPPort),
 			"-record", traceparentRecord,
 			"--",
-			pluginDir + "/" + cliExecutable, "generate",
+			// cliPath rather than the plugin directory: since #217 the archetype
+			// puts an application's own binary in its own directory and names it
+			// absolutely in the entrypoint, and the plugin directory is for what an
+			// extension adds. The launcher execs avroc by path rather than through
+			// the entrypoint because it *is* the entrypoint's replacement — it sets
+			// one environment variable and re-execs — so it has to name what the
+			// entrypoint would have run.
+			cliPath(), "generate",
 		})
 }
 
@@ -431,7 +438,15 @@ func (m *Avroc) propagationRemoved(ctx context.Context) (*Avroc, error) {
 			inject, path)
 	}
 
-	return &Avroc{Source: m.Source.WithNewFile(path, edited), LintConfig: m.LintConfig}, nil
+	// A copy of the receiver with one file replaced, rather than a fresh Avroc
+	// naming the fields it wants. Naming them is how this broke once: #217 added
+	// GitDir, a literal listing Source and LintConfig kept compiling, and the
+	// control's first call panicked on a nil directory a long way from here. The
+	// control differs from the committed tree in exactly one file, so saying that
+	// and nothing else is both shorter and the thing that stays true.
+	broken := *m
+	broken.Source = m.Source.WithNewFile(path, edited)
+	return &broken, nil
 }
 
 // traceparent is the W3C trace context the Dagger exec handed the container:

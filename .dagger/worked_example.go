@@ -110,7 +110,7 @@ func (m *Avroc) WorkedExampleImage(
 	if err != nil {
 		return nil, err
 	}
-	return example.image(m.image(p), p), nil
+	return example.image(m.baseImage(p), p), nil
 }
 
 // WorkedExample is the worked example executed rather than read (#129): it
@@ -163,7 +163,7 @@ func (m *Avroc) WorkedExample(ctx context.Context) error {
 		return err
 	}
 
-	image := example.image(m.image(platform), platform)
+	image := example.image(m.baseImage(platform), platform)
 
 	var errs []error
 	if err := example.rules(); err != nil {
@@ -494,7 +494,24 @@ func (e *workedExample) contents() (map[string]imageEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	contents := imageContents(baseImageExecutables())
+	// The plugin directory gets a row of its own, because since #217 the base image
+	// carries no /usr/local/bin and this example's COPY is what creates it — which
+	// is exactly the sentence docs/container/SPEC.md now makes about a derived
+	// image.
+	//
+	// It is keyed off the destination the document wrote rather than off a name
+	// round-tripped through path.Base: `dst` is already known to be a file directly
+	// inside pluginDir, because dockerfileCopy refuses anything else and says so
+	// naming the path, and asking path.Dir here rather than assuming it is what
+	// keeps this from quietly expecting `/usr/local/bin/bin` the day the document
+	// writes a directory destination. The entry itself is the document's own, which
+	// is the whole point of reading the COPY rather than assuming it; the directory
+	// is the builder's, and that its owner and mode are the base listing's rather
+	// than the COPY's `--chown` is something the stage passing is the evidence for.
+	contents := imageContents(nil)
+	if path.Dir(e.copy.dst) == pluginDir {
+		contents[pluginDir] = imageEntry{0, 0, 0o755}
+	}
 	contents[e.copy.dst] = entry
 	return contents, nil
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // Retrieve the binding value, as type Otel
-func (r *Binding) AsOtel() *Otel { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L151)
+func (r *Binding) AsOtel() *Otel { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L151)
 	q := r.query.Select("asOtel")
 
 	return &Otel{
@@ -19,7 +19,7 @@ func (r *Binding) AsOtel() *Otel { // otel (https://github.com/z5labs/devex/tree
 }
 
 // Retrieve the binding value, as type OtelContribCollector
-func (r *Binding) AsOtelContribCollector() *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L819)
+func (r *Binding) AsOtelContribCollector() *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L819)
 	q := r.query.Select("asOtelContribCollector")
 
 	return &OtelContribCollector{
@@ -28,7 +28,7 @@ func (r *Binding) AsOtelContribCollector() *OtelContribCollector { // otel (http
 }
 
 // Retrieve the binding value, as type OtelCoreCollector
-func (r *Binding) AsOtelCoreCollector() *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L491)
+func (r *Binding) AsOtelCoreCollector() *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L491)
 	q := r.query.Select("asOtelCoreCollector")
 
 	return &OtelCoreCollector{
@@ -37,7 +37,7 @@ func (r *Binding) AsOtelCoreCollector() *OtelCoreCollector { // otel (https://gi
 }
 
 // Retrieve the binding value, as type OtelExporter
-func (r *Binding) AsOtelExporter() *OtelExporter { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L173)
+func (r *Binding) AsOtelExporter() *OtelExporter { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L173)
 	q := r.query.Select("asOtelExporter")
 
 	return &OtelExporter{
@@ -46,7 +46,7 @@ func (r *Binding) AsOtelExporter() *OtelExporter { // otel (https://github.com/z
 }
 
 // Retrieve the binding value, as type OtelPipeline
-func (r *Binding) AsOtelPipeline() *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L407)
+func (r *Binding) AsOtelPipeline() *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L407)
 	q := r.query.Select("asOtelPipeline")
 
 	return &OtelPipeline{
@@ -55,7 +55,7 @@ func (r *Binding) AsOtelPipeline() *OtelPipeline { // otel (https://github.com/z
 }
 
 // Retrieve the binding value, as type OtelProcessor
-func (r *Binding) AsOtelProcessor() *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L163)
+func (r *Binding) AsOtelProcessor() *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L163)
 	q := r.query.Select("asOtelProcessor")
 
 	return &OtelProcessor{
@@ -64,7 +64,7 @@ func (r *Binding) AsOtelProcessor() *OtelProcessor { // otel (https://github.com
 }
 
 // Retrieve the binding value, as type OtelReceiver
-func (r *Binding) AsOtelReceiver() *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L156)
+func (r *Binding) AsOtelReceiver() *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L156)
 	q := r.query.Select("asOtelReceiver")
 
 	return &OtelReceiver{
@@ -73,7 +73,7 @@ func (r *Binding) AsOtelReceiver() *OtelReceiver { // otel (https://github.com/z
 }
 
 // Create or update a binding of type OtelContribCollector in the environment
-func (r *Env) WithOtelContribCollectorInput(name string, value *OtelContribCollector, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L819)
+func (r *Env) WithOtelContribCollectorInput(name string, value *OtelContribCollector, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L819)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelContribCollectorInput")
 	q = q.Arg("name", name)
@@ -86,7 +86,7 @@ func (r *Env) WithOtelContribCollectorInput(name string, value *OtelContribColle
 }
 
 // Declare a desired OtelContribCollector output to be assigned in the environment
-func (r *Env) WithOtelContribCollectorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L819)
+func (r *Env) WithOtelContribCollectorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L819)
 	q := r.query.Select("withOtelContribCollectorOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -97,7 +97,7 @@ func (r *Env) WithOtelContribCollectorOutput(name string, description string) *E
 }
 
 // Create or update a binding of type OtelCoreCollector in the environment
-func (r *Env) WithOtelCoreCollectorInput(name string, value *OtelCoreCollector, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L491)
+func (r *Env) WithOtelCoreCollectorInput(name string, value *OtelCoreCollector, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L491)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelCoreCollectorInput")
 	q = q.Arg("name", name)
@@ -110,7 +110,7 @@ func (r *Env) WithOtelCoreCollectorInput(name string, value *OtelCoreCollector, 
 }
 
 // Declare a desired OtelCoreCollector output to be assigned in the environment
-func (r *Env) WithOtelCoreCollectorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L491)
+func (r *Env) WithOtelCoreCollectorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L491)
 	q := r.query.Select("withOtelCoreCollectorOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -121,7 +121,7 @@ func (r *Env) WithOtelCoreCollectorOutput(name string, description string) *Env 
 }
 
 // Create or update a binding of type OtelExporter in the environment
-func (r *Env) WithOtelExporterInput(name string, value *OtelExporter, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L173)
+func (r *Env) WithOtelExporterInput(name string, value *OtelExporter, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L173)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelExporterInput")
 	q = q.Arg("name", name)
@@ -134,7 +134,7 @@ func (r *Env) WithOtelExporterInput(name string, value *OtelExporter, descriptio
 }
 
 // Declare a desired OtelExporter output to be assigned in the environment
-func (r *Env) WithOtelExporterOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L173)
+func (r *Env) WithOtelExporterOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L173)
 	q := r.query.Select("withOtelExporterOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -145,7 +145,7 @@ func (r *Env) WithOtelExporterOutput(name string, description string) *Env { // 
 }
 
 // Create or update a binding of type Otel in the environment
-func (r *Env) WithOtelInput(name string, value *Otel, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L151)
+func (r *Env) WithOtelInput(name string, value *Otel, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L151)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelInput")
 	q = q.Arg("name", name)
@@ -158,7 +158,7 @@ func (r *Env) WithOtelInput(name string, value *Otel, description string) *Env {
 }
 
 // Declare a desired Otel output to be assigned in the environment
-func (r *Env) WithOtelOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L151)
+func (r *Env) WithOtelOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L151)
 	q := r.query.Select("withOtelOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -169,7 +169,7 @@ func (r *Env) WithOtelOutput(name string, description string) *Env { // otel (ht
 }
 
 // Create or update a binding of type OtelPipeline in the environment
-func (r *Env) WithOtelPipelineInput(name string, value *OtelPipeline, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L407)
+func (r *Env) WithOtelPipelineInput(name string, value *OtelPipeline, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L407)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelPipelineInput")
 	q = q.Arg("name", name)
@@ -182,7 +182,7 @@ func (r *Env) WithOtelPipelineInput(name string, value *OtelPipeline, descriptio
 }
 
 // Declare a desired OtelPipeline output to be assigned in the environment
-func (r *Env) WithOtelPipelineOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L407)
+func (r *Env) WithOtelPipelineOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L407)
 	q := r.query.Select("withOtelPipelineOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -193,7 +193,7 @@ func (r *Env) WithOtelPipelineOutput(name string, description string) *Env { // 
 }
 
 // Create or update a binding of type OtelProcessor in the environment
-func (r *Env) WithOtelProcessorInput(name string, value *OtelProcessor, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L163)
+func (r *Env) WithOtelProcessorInput(name string, value *OtelProcessor, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L163)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelProcessorInput")
 	q = q.Arg("name", name)
@@ -206,7 +206,7 @@ func (r *Env) WithOtelProcessorInput(name string, value *OtelProcessor, descript
 }
 
 // Declare a desired OtelProcessor output to be assigned in the environment
-func (r *Env) WithOtelProcessorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L163)
+func (r *Env) WithOtelProcessorOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L163)
 	q := r.query.Select("withOtelProcessorOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -217,7 +217,7 @@ func (r *Env) WithOtelProcessorOutput(name string, description string) *Env { //
 }
 
 // Create or update a binding of type OtelReceiver in the environment
-func (r *Env) WithOtelReceiverInput(name string, value *OtelReceiver, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L156)
+func (r *Env) WithOtelReceiverInput(name string, value *OtelReceiver, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L156)
 	assertNotNil("value", value)
 	q := r.query.Select("withOtelReceiverInput")
 	q = q.Arg("name", name)
@@ -230,7 +230,7 @@ func (r *Env) WithOtelReceiverInput(name string, value *OtelReceiver, descriptio
 }
 
 // Declare a desired OtelReceiver output to be assigned in the environment
-func (r *Env) WithOtelReceiverOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L156)
+func (r *Env) WithOtelReceiverOutput(name string, description string) *Env { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L156)
 	q := r.query.Select("withOtelReceiverOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -240,7 +240,7 @@ func (r *Env) WithOtelReceiverOutput(name string, description string) *Env { // 
 	}
 }
 
-type Otel struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L151)
+type Otel struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L151)
 	query *querybuilder.Selection
 
 	id *ID
@@ -253,7 +253,7 @@ func (r *Otel) WithGraphQLQuery(q *querybuilder.Selection) *Otel {
 }
 
 // BatchProcessor builds a batch processor with collector defaults.
-func (r *Otel) BatchProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L323)
+func (r *Otel) BatchProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L323)
 	q := r.query.Select("batchProcessor")
 	q = q.Arg("name", name)
 
@@ -266,17 +266,17 @@ func (r *Otel) BatchProcessor(name string) *OtelProcessor { // otel (https://git
 type OtelContribOpts struct {
 
 	// Default: "docker.io"
-	Registry string // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L838)
+	Registry string // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L838)
 
 	// Default: "0.130.1"
-	Tag string // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L840)
+	Tag string // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L840)
 
-	ConfigFile *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L842)
+	ConfigFile *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L842)
 }
 
 // Contrib returns a ContribCollector backed by the
 // otel/opentelemetry-collector-contrib image. See Core.
-func (r *Otel) Contrib(opts ...OtelContribOpts) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L836)
+func (r *Otel) Contrib(opts ...OtelContribOpts) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L836)
 	q := r.query.Select("contrib")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `registry` optional argument
@@ -302,19 +302,19 @@ func (r *Otel) Contrib(opts ...OtelContribOpts) *OtelContribCollector { // otel 
 type OtelCoreOpts struct {
 
 	// Default: "docker.io"
-	Registry string // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L512)
+	Registry string // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L512)
 
 	// Default: "0.130.1"
-	Tag string // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L514)
+	Tag string // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L514)
 
-	ConfigFile *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L516)
+	ConfigFile *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L516)
 }
 
 // Core returns a CoreCollector backed by the
 // otel/opentelemetry-collector image at <registry>/<image>:<tag>.
 // configFile, when supplied, fully replaces the rendered pipeline
 // YAML; the image path is fixed.
-func (r *Otel) Core(opts ...OtelCoreOpts) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L510)
+func (r *Otel) Core(opts ...OtelCoreOpts) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L510)
 	q := r.query.Select("core")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `registry` optional argument
@@ -337,7 +337,7 @@ func (r *Otel) Core(opts ...OtelCoreOpts) *OtelCoreCollector { // otel (https://
 }
 
 // CustomExporter — see CustomReceiver.
-func (r *Otel) CustomExporter(kind string, name string, yamlBody string) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L395)
+func (r *Otel) CustomExporter(kind string, name string, yamlBody string) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L395)
 	q := r.query.Select("customExporter")
 	q = q.Arg("kind", kind)
 	q = q.Arg("name", name)
@@ -349,7 +349,7 @@ func (r *Otel) CustomExporter(kind string, name string, yamlBody string) *OtelEx
 }
 
 // CustomProcessor — see CustomReceiver.
-func (r *Otel) CustomProcessor(kind string, name string, yamlBody string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L387)
+func (r *Otel) CustomProcessor(kind string, name string, yamlBody string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L387)
 	q := r.query.Select("customProcessor")
 	q = q.Arg("kind", kind)
 	q = q.Arg("name", name)
@@ -362,7 +362,7 @@ func (r *Otel) CustomProcessor(kind string, name string, yamlBody string) *OtelP
 
 // CustomReceiver builds a receiver of arbitrary kind whose body is the
 // caller-supplied YAML, spliced verbatim under `receivers.<kind>/<name>`.
-func (r *Otel) CustomReceiver(kind string, name string, yamlBody string) *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L379)
+func (r *Otel) CustomReceiver(kind string, name string, yamlBody string) *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L379)
 	q := r.query.Select("customReceiver")
 	q = q.Arg("kind", kind)
 	q = q.Arg("name", name)
@@ -374,7 +374,7 @@ func (r *Otel) CustomReceiver(kind string, name string, yamlBody string) *OtelRe
 }
 
 // DebugExporter builds the stdout `debug` exporter at verbosity=detailed.
-func (r *Otel) DebugExporter(name string) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L311)
+func (r *Otel) DebugExporter(name string) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L311)
 	q := r.query.Select("debugExporter")
 	q = q.Arg("name", name)
 
@@ -387,7 +387,7 @@ func (r *Otel) DebugExporter(name string) *OtelExporter { // otel (https://githu
 // otlp receiver → batch processor → debug exporter for signal.
 // Component names are fixed (`otlp/debug`, `batch/debug`,
 // `debug/debug`); the pipeline name is `debug`.
-func (r *Otel) DebugPipeline(signal string) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L439)
+func (r *Otel) DebugPipeline(signal string) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L439)
 	q := r.query.Select("debugPipeline")
 	q = q.Arg("signal", signal)
 
@@ -448,7 +448,7 @@ func (r *Otel) UnmarshalJSON(bs []byte) error {
 // MemoryLimiterProcessor builds a memory_limiter processor with
 // conservative defaults (check_interval: 1s, limit_mib: 512). Callers
 // needing different thresholds should reach for CustomProcessor.
-func (r *Otel) MemoryLimiterProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L333)
+func (r *Otel) MemoryLimiterProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L333)
 	q := r.query.Select("memoryLimiterProcessor")
 	q = q.Arg("name", name)
 
@@ -463,17 +463,17 @@ type OtelOtlpExporterOpts struct {
 	// PEM-encoded CA certificate to verify the receiver against. When set
 	// the exporter speaks TLS instead of plaintext.
 	//
-	CaCert *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L232)
+	CaCert *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L232)
 	//
 	// PEM-encoded client certificate presented for mTLS. Must be paired
 	// with clientKey.
 	//
-	ClientCert *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L236)
+	ClientCert *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L236)
 	//
 	// PEM-encoded PKCS#8 client private key for mTLS. Must be paired with
 	// clientCert.
 	//
-	ClientKey *Secret // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L240)
+	ClientKey *Secret // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L240)
 }
 
 // OtlpExporter builds an OTLP gRPC exporter pointing at endpoint
@@ -481,7 +481,7 @@ type OtelOtlpExporterOpts struct {
 // (tls.insecure=true). Supplying caCert pins the server CA; supplying
 // clientCert + clientKey (which must be given together) presents an mTLS
 // identity.
-func (r *Otel) OtlpExporter(name string, endpoint string, opts ...OtelOtlpExporterOpts) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L227)
+func (r *Otel) OtlpExporter(name string, endpoint string, opts ...OtelOtlpExporterOpts) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L227)
 	q := r.query.Select("otlpExporter")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `caCert` optional argument
@@ -507,17 +507,17 @@ func (r *Otel) OtlpExporter(name string, endpoint string, opts ...OtelOtlpExport
 
 // OtelOtlpHTTPExporterOpts contains options for Otel.OtlpHTTPExporter
 type OtelOtlpHTTPExporterOpts struct {
-	CaCert *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L251)
+	CaCert *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L251)
 
-	ClientCert *File // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L253)
+	ClientCert *File // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L253)
 
-	ClientKey *Secret // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L255)
+	ClientKey *Secret // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L255)
 }
 
 // OtlpHttpExporter builds an OTLP/HTTP exporter pointing at endpoint
 // (URL with scheme, e.g. http://loki:3100/otlp). TLS options behave as
 // on OtlpExporter; point endpoint at an https:// URL when supplying them.
-func (r *Otel) OtlpHTTPExporter(name string, endpoint string, opts ...OtelOtlpHTTPExporterOpts) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L248)
+func (r *Otel) OtlpHTTPExporter(name string, endpoint string, opts ...OtelOtlpHTTPExporterOpts) *OtelExporter { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L248)
 	q := r.query.Select("otlpHttpExporter")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `caCert` optional argument
@@ -543,7 +543,7 @@ func (r *Otel) OtlpHTTPExporter(name string, endpoint string, opts ...OtelOtlpHT
 
 // OtlpReceiver builds the standard OTLP receiver listening on gRPC :4317
 // and HTTP :4318.
-func (r *Otel) OtlpReceiver(name string) *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L206)
+func (r *Otel) OtlpReceiver(name string) *OtelReceiver { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L206)
 	q := r.query.Select("otlpReceiver")
 	q = q.Arg("name", name)
 
@@ -554,7 +554,7 @@ func (r *Otel) OtlpReceiver(name string) *OtelReceiver { // otel (https://github
 
 // Pipeline builds an empty pipeline for signal (logs|traces|metrics)
 // keyed at <signal>/<name> in the rendered config.
-func (r *Otel) Pipeline(signal string, name string) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L425)
+func (r *Otel) Pipeline(signal string, name string) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L425)
 	q := r.query.Select("pipeline")
 	q = q.Arg("signal", signal)
 	q = q.Arg("name", name)
@@ -567,7 +567,7 @@ func (r *Otel) Pipeline(signal string, name string) *OtelPipeline { // otel (htt
 // ResourceProcessor builds a no-op resource processor (empty
 // attributes list). Callers needing actual attribute upserts should
 // reach for CustomProcessor.
-func (r *Otel) ResourceProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L350)
+func (r *Otel) ResourceProcessor(name string) *OtelProcessor { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L350)
 	q := r.query.Select("resourceProcessor")
 	q = q.Arg("name", name)
 
@@ -587,7 +587,7 @@ func (r *Otel) AsNode() Node {
 // ContribCollector wraps the otel/opentelemetry-collector-contrib
 // image. Method set is identical to CoreCollector; only the image
 // path differs, so the rendering and service helpers are shared.
-type OtelContribCollector struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L819)
+type OtelContribCollector struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L819)
 	query *querybuilder.Selection
 
 	id               *ID
@@ -611,7 +611,7 @@ func (r *OtelContribCollector) WithGraphQLQuery(q *querybuilder.Selection) *Otel
 	}
 }
 
-func (r *OtelContribCollector) BindingHosts(ctx context.Context) ([]string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L824)
+func (r *OtelContribCollector) BindingHosts(ctx context.Context) ([]string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L824)
 	q := r.query.Select("bindingHosts")
 
 	var response []string
@@ -620,7 +620,7 @@ func (r *OtelContribCollector) BindingHosts(ctx context.Context) ([]string, erro
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelContribCollector) BindingSvcs(ctx context.Context) ([]Service, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L825)
+func (r *OtelContribCollector) BindingSvcs(ctx context.Context) ([]Service, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L825)
 	q := r.query.Select("bindingSvcs")
 
 	q = q.Select("id")
@@ -653,7 +653,7 @@ func (r *OtelContribCollector) BindingSvcs(ctx context.Context) ([]Service, erro
 }
 
 // ConfigFile — see CoreCollector.ConfigFile.
-func (r *OtelContribCollector) ConfigFile() *File { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L885)
+func (r *OtelContribCollector) ConfigFile() *File { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L885)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -711,7 +711,7 @@ func (r *OtelContribCollector) UnmarshalJSON(bs []byte) error {
 }
 
 // OtlpGrpcEndpoint — see CoreCollector.OtlpGrpcEndpoint.
-func (r *OtelContribCollector) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L897)
+func (r *OtelContribCollector) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L897)
 	if r.otlpGrpcEndpoint != nil {
 		return *r.otlpGrpcEndpoint, nil
 	}
@@ -724,7 +724,7 @@ func (r *OtelContribCollector) OtlpGrpcEndpoint(ctx context.Context) (string, er
 }
 
 // OtlpHttpEndpoint — see CoreCollector.OtlpHttpEndpoint.
-func (r *OtelContribCollector) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L912)
+func (r *OtelContribCollector) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L912)
 	if r.otlpHttpEndpoint != nil {
 		return *r.otlpHttpEndpoint, nil
 	}
@@ -736,7 +736,7 @@ func (r *OtelContribCollector) OtlpHTTPEndpoint(ctx context.Context) (string, er
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelContribCollector) Override() *File { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L822)
+func (r *OtelContribCollector) Override() *File { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L822)
 	q := r.query.Select("override")
 
 	return &File{
@@ -744,7 +744,7 @@ func (r *OtelContribCollector) Override() *File { // otel (https://github.com/z5
 	}
 }
 
-func (r *OtelContribCollector) Pipelines(ctx context.Context) ([]OtelPipeline, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L823)
+func (r *OtelContribCollector) Pipelines(ctx context.Context) ([]OtelPipeline, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L823)
 	q := r.query.Select("pipelines")
 
 	q = q.Select("id")
@@ -776,7 +776,7 @@ func (r *OtelContribCollector) Pipelines(ctx context.Context) ([]OtelPipeline, e
 	return convert(response), nil
 }
 
-func (r *OtelContribCollector) Registry(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L820)
+func (r *OtelContribCollector) Registry(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L820)
 	if r.registry != nil {
 		return *r.registry, nil
 	}
@@ -789,7 +789,7 @@ func (r *OtelContribCollector) Registry(ctx context.Context) (string, error) { /
 }
 
 // Service — see CoreCollector.Service.
-func (r *OtelContribCollector) Service() *Service { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L890)
+func (r *OtelContribCollector) Service() *Service { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L890)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -797,7 +797,7 @@ func (r *OtelContribCollector) Service() *Service { // otel (https://github.com/
 	}
 }
 
-func (r *OtelContribCollector) Tag(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L821)
+func (r *OtelContribCollector) Tag(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L821)
 	if r.tag != nil {
 		return *r.tag, nil
 	}
@@ -810,7 +810,7 @@ func (r *OtelContribCollector) Tag(ctx context.Context) (string, error) { // ote
 }
 
 // WithConfigFile — see CoreCollector.WithConfigFile.
-func (r *OtelContribCollector) WithConfigFile(f *File) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L863)
+func (r *OtelContribCollector) WithConfigFile(f *File) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L863)
 	assertNotNil("f", f)
 	q := r.query.Select("withConfigFile")
 	q = q.Arg("f", f)
@@ -821,7 +821,7 @@ func (r *OtelContribCollector) WithConfigFile(f *File) *OtelContribCollector { /
 }
 
 // WithMtls — see CoreCollector.WithMtls.
-func (r *OtelContribCollector) WithMtls(clientCa *File) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L878)
+func (r *OtelContribCollector) WithMtls(clientCa *File) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L878)
 	assertNotNil("clientCa", clientCa)
 	q := r.query.Select("withMtls")
 	q = q.Arg("clientCa", clientCa)
@@ -832,7 +832,7 @@ func (r *OtelContribCollector) WithMtls(clientCa *File) *OtelContribCollector { 
 }
 
 // WithPipeline — see CoreCollector.WithPipeline.
-func (r *OtelContribCollector) WithPipeline(p *OtelPipeline) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L856)
+func (r *OtelContribCollector) WithPipeline(p *OtelPipeline) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L856)
 	assertNotNil("p", p)
 	q := r.query.Select("withPipeline")
 	q = q.Arg("p", p)
@@ -843,7 +843,7 @@ func (r *OtelContribCollector) WithPipeline(p *OtelPipeline) *OtelContribCollect
 }
 
 // WithServiceBinding — see CoreCollector.WithServiceBinding.
-func (r *OtelContribCollector) WithServiceBinding(host string, svc *Service) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L848)
+func (r *OtelContribCollector) WithServiceBinding(host string, svc *Service) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L848)
 	assertNotNil("svc", svc)
 	q := r.query.Select("withServiceBinding")
 	q = q.Arg("host", host)
@@ -855,7 +855,7 @@ func (r *OtelContribCollector) WithServiceBinding(host string, svc *Service) *Ot
 }
 
 // WithTls — see CoreCollector.WithTls.
-func (r *OtelContribCollector) WithTLS(serverCert *File, serverKey *Secret) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L870)
+func (r *OtelContribCollector) WithTLS(serverCert *File, serverKey *Secret) *OtelContribCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L870)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -879,7 +879,7 @@ func (r *OtelContribCollector) AsNode() Node {
 // public surface is identical to ContribCollector — both share the
 // rendering and service-construction helpers below; only the image
 // path differs.
-type OtelCoreCollector struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L491)
+type OtelCoreCollector struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L491)
 	query *querybuilder.Selection
 
 	id               *ID
@@ -903,7 +903,7 @@ func (r *OtelCoreCollector) WithGraphQLQuery(q *querybuilder.Selection) *OtelCor
 	}
 }
 
-func (r *OtelCoreCollector) BindingHosts(ctx context.Context) ([]string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L496)
+func (r *OtelCoreCollector) BindingHosts(ctx context.Context) ([]string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L496)
 	q := r.query.Select("bindingHosts")
 
 	var response []string
@@ -912,7 +912,7 @@ func (r *OtelCoreCollector) BindingHosts(ctx context.Context) ([]string, error) 
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelCoreCollector) BindingSvcs(ctx context.Context) ([]Service, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L497)
+func (r *OtelCoreCollector) BindingSvcs(ctx context.Context) ([]Service, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L497)
 	q := r.query.Select("bindingSvcs")
 
 	q = q.Select("id")
@@ -947,7 +947,7 @@ func (r *OtelCoreCollector) BindingSvcs(ctx context.Context) ([]Service, error) 
 // ConfigFile returns the file that will be mounted as the collector's
 // --config: either the caller-supplied override or the
 // pipeline-rendered YAML. Inspecting it does not launch the service.
-func (r *OtelCoreCollector) ConfigFile() *File { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L573)
+func (r *OtelCoreCollector) ConfigFile() *File { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L573)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -1006,7 +1006,7 @@ func (r *OtelCoreCollector) UnmarshalJSON(bs []byte) error {
 
 // OtlpGrpcEndpoint returns the host:port of the running collector's
 // OTLP/gRPC listener (no scheme).
-func (r *OtelCoreCollector) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L589)
+func (r *OtelCoreCollector) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L589)
 	if r.otlpGrpcEndpoint != nil {
 		return *r.otlpGrpcEndpoint, nil
 	}
@@ -1021,7 +1021,7 @@ func (r *OtelCoreCollector) OtlpGrpcEndpoint(ctx context.Context) (string, error
 // OtlpHttpEndpoint returns <scheme>://<host>:4318 for the running
 // collector's OTLP/HTTP listener. The scheme is https once WithTls has
 // been called, http otherwise.
-func (r *OtelCoreCollector) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L606)
+func (r *OtelCoreCollector) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L606)
 	if r.otlpHttpEndpoint != nil {
 		return *r.otlpHttpEndpoint, nil
 	}
@@ -1033,7 +1033,7 @@ func (r *OtelCoreCollector) OtlpHTTPEndpoint(ctx context.Context) (string, error
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelCoreCollector) Override() *File { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L494)
+func (r *OtelCoreCollector) Override() *File { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L494)
 	q := r.query.Select("override")
 
 	return &File{
@@ -1041,7 +1041,7 @@ func (r *OtelCoreCollector) Override() *File { // otel (https://github.com/z5lab
 	}
 }
 
-func (r *OtelCoreCollector) Pipelines(ctx context.Context) ([]OtelPipeline, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L495)
+func (r *OtelCoreCollector) Pipelines(ctx context.Context) ([]OtelPipeline, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L495)
 	q := r.query.Select("pipelines")
 
 	q = q.Select("id")
@@ -1073,7 +1073,7 @@ func (r *OtelCoreCollector) Pipelines(ctx context.Context) ([]OtelPipeline, erro
 	return convert(response), nil
 }
 
-func (r *OtelCoreCollector) Registry(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L492)
+func (r *OtelCoreCollector) Registry(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L492)
 	if r.registry != nil {
 		return *r.registry, nil
 	}
@@ -1089,7 +1089,7 @@ func (r *OtelCoreCollector) Registry(ctx context.Context) (string, error) { // o
 // and :4318 (OTLP HTTP). Mounts the resolved config (override or
 // rendered) when one exists; otherwise launches with no --config flag,
 // matching the collector binary's behavior of refusing to start.
-func (r *OtelCoreCollector) Service() *Service { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L581)
+func (r *OtelCoreCollector) Service() *Service { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L581)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -1097,7 +1097,7 @@ func (r *OtelCoreCollector) Service() *Service { // otel (https://github.com/z5l
 	}
 }
 
-func (r *OtelCoreCollector) Tag(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L493)
+func (r *OtelCoreCollector) Tag(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L493)
 	if r.tag != nil {
 		return *r.tag, nil
 	}
@@ -1112,7 +1112,7 @@ func (r *OtelCoreCollector) Tag(ctx context.Context) (string, error) { // otel (
 // WithConfigFile fully replaces the rendered pipeline YAML with the
 // supplied file. Pipelines added via WithPipeline are ignored when an
 // override is set.
-func (r *OtelCoreCollector) WithConfigFile(f *File) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L543)
+func (r *OtelCoreCollector) WithConfigFile(f *File) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L543)
 	assertNotNil("f", f)
 	q := r.query.Select("withConfigFile")
 	q = q.Arg("f", f)
@@ -1125,7 +1125,7 @@ func (r *OtelCoreCollector) WithConfigFile(f *File) *OtelCoreCollector { // otel
 // WithMtls requires client certificates signed by clientCa (PEM-encoded)
 // on every incoming OTLP connection. Must be combined with WithTls;
 // Service returns an error otherwise.
-func (r *OtelCoreCollector) WithMtls(clientCa *File) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L564)
+func (r *OtelCoreCollector) WithMtls(clientCa *File) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L564)
 	assertNotNil("clientCa", clientCa)
 	q := r.query.Select("withMtls")
 	q = q.Arg("clientCa", clientCa)
@@ -1138,7 +1138,7 @@ func (r *OtelCoreCollector) WithMtls(clientCa *File) *OtelCoreCollector { // ote
 // WithPipeline appends a pipeline to the collector. The collector
 // dedupes shared components into one top-level entry per kind/name
 // at YAML-render time.
-func (r *OtelCoreCollector) WithPipeline(p *OtelPipeline) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L534)
+func (r *OtelCoreCollector) WithPipeline(p *OtelPipeline) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L534)
 	assertNotNil("p", p)
 	q := r.query.Select("withPipeline")
 	q = q.Arg("p", p)
@@ -1151,7 +1151,7 @@ func (r *OtelCoreCollector) WithPipeline(p *OtelPipeline) *OtelCoreCollector { /
 // WithServiceBinding binds a backend service into the collector's
 // network so exporter endpoints can reach it by hostname. Repeated
 // calls accumulate.
-func (r *OtelCoreCollector) WithServiceBinding(host string, svc *Service) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L524)
+func (r *OtelCoreCollector) WithServiceBinding(host string, svc *Service) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L524)
 	assertNotNil("svc", svc)
 	q := r.query.Select("withServiceBinding")
 	q = q.Arg("host", host)
@@ -1167,7 +1167,7 @@ func (r *OtelCoreCollector) WithServiceBinding(host string, svc *Service) *OtelC
 // PEM-encoded PKCS#8 private key; both are mounted into the collector and
 // wired into every otlp receiver at render time. After this call
 // OtlpHttpEndpoint returns an https:// URL.
-func (r *OtelCoreCollector) WithTLS(serverCert *File, serverKey *Secret) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L554)
+func (r *OtelCoreCollector) WithTLS(serverCert *File, serverKey *Secret) *OtelCoreCollector { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L554)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -1191,7 +1191,7 @@ func (r *OtelCoreCollector) AsNode() Node {
 // TLS options are supplied to the factory, the cert/key material is
 // carried here so the collector can mount it at the paths already baked
 // into Body (see exporterCertDir).
-type OtelExporter struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L173)
+type OtelExporter struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L173)
 	query *querybuilder.Selection
 
 	body *string
@@ -1206,7 +1206,7 @@ func (r *OtelExporter) WithGraphQLQuery(q *querybuilder.Selection) *OtelExporter
 	}
 }
 
-func (r *OtelExporter) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L176)
+func (r *OtelExporter) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L176)
 	if r.body != nil {
 		return *r.body, nil
 	}
@@ -1267,7 +1267,7 @@ func (r *OtelExporter) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
-func (r *OtelExporter) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L174)
+func (r *OtelExporter) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L174)
 	if r.kind != nil {
 		return *r.kind, nil
 	}
@@ -1279,7 +1279,7 @@ func (r *OtelExporter) Kind(ctx context.Context) (string, error) { // otel (http
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelExporter) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L175)
+func (r *OtelExporter) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L175)
 	if r.name != nil {
 		return *r.name, nil
 	}
@@ -1304,7 +1304,7 @@ func (r *OtelExporter) AsNode() Node {
 // exporters. Components are held by reference; the collector
 // deduplicates shared components into one top-level entry per
 // kind/name when the YAML is rendered.
-type OtelPipeline struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L407)
+type OtelPipeline struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L407)
 	query *querybuilder.Selection
 
 	id     *ID
@@ -1326,7 +1326,7 @@ func (r *OtelPipeline) WithGraphQLQuery(q *querybuilder.Selection) *OtelPipeline
 	}
 }
 
-func (r *OtelPipeline) Exporters(ctx context.Context) ([]OtelExporter, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L412)
+func (r *OtelPipeline) Exporters(ctx context.Context) ([]OtelExporter, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L412)
 	q := r.query.Select("exporters")
 
 	q = q.Select("id")
@@ -1407,7 +1407,7 @@ func (r *OtelPipeline) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
-func (r *OtelPipeline) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L409)
+func (r *OtelPipeline) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L409)
 	if r.name != nil {
 		return *r.name, nil
 	}
@@ -1419,7 +1419,7 @@ func (r *OtelPipeline) Name(ctx context.Context) (string, error) { // otel (http
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelPipeline) Processors(ctx context.Context) ([]OtelProcessor, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L411)
+func (r *OtelPipeline) Processors(ctx context.Context) ([]OtelProcessor, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L411)
 	q := r.query.Select("processors")
 
 	q = q.Select("id")
@@ -1451,7 +1451,7 @@ func (r *OtelPipeline) Processors(ctx context.Context) ([]OtelProcessor, error) 
 	return convert(response), nil
 }
 
-func (r *OtelPipeline) Receivers(ctx context.Context) ([]OtelReceiver, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L410)
+func (r *OtelPipeline) Receivers(ctx context.Context) ([]OtelReceiver, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L410)
 	q := r.query.Select("receivers")
 
 	q = q.Select("id")
@@ -1483,7 +1483,7 @@ func (r *OtelPipeline) Receivers(ctx context.Context) ([]OtelReceiver, error) { 
 	return convert(response), nil
 }
 
-func (r *OtelPipeline) Signal(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L408)
+func (r *OtelPipeline) Signal(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L408)
 	if r.signal != nil {
 		return *r.signal, nil
 	}
@@ -1496,7 +1496,7 @@ func (r *OtelPipeline) Signal(ctx context.Context) (string, error) { // otel (ht
 }
 
 // WithExporter — see WithReceiver.
-func (r *OtelPipeline) WithExporter(exp *OtelExporter) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L481)
+func (r *OtelPipeline) WithExporter(exp *OtelExporter) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L481)
 	assertNotNil("exp", exp)
 	q := r.query.Select("withExporter")
 	q = q.Arg("exp", exp)
@@ -1507,7 +1507,7 @@ func (r *OtelPipeline) WithExporter(exp *OtelExporter) *OtelPipeline { // otel (
 }
 
 // WithProcessor — see WithReceiver.
-func (r *OtelPipeline) WithProcessor(proc *OtelProcessor) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L474)
+func (r *OtelPipeline) WithProcessor(proc *OtelProcessor) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L474)
 	assertNotNil("proc", proc)
 	q := r.query.Select("withProcessor")
 	q = q.Arg("proc", proc)
@@ -1520,7 +1520,7 @@ func (r *OtelPipeline) WithProcessor(proc *OtelProcessor) *OtelPipeline { // ote
 // WithReceiver appends a receiver to the pipeline and returns a new
 // pipeline; the receiver is held by reference so it can be deduped
 // across pipelines at render time.
-func (r *OtelPipeline) WithReceiver(recv *OtelReceiver) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L467)
+func (r *OtelPipeline) WithReceiver(recv *OtelReceiver) *OtelPipeline { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L467)
 	assertNotNil("recv", recv)
 	q := r.query.Select("withReceiver")
 	q = q.Arg("recv", recv)
@@ -1539,7 +1539,7 @@ func (r *OtelPipeline) AsNode() Node {
 }
 
 // Processor is a single OpenTelemetry Collector processor component.
-type OtelProcessor struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L163)
+type OtelProcessor struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L163)
 	query *querybuilder.Selection
 
 	body *string
@@ -1554,7 +1554,7 @@ func (r *OtelProcessor) WithGraphQLQuery(q *querybuilder.Selection) *OtelProcess
 	}
 }
 
-func (r *OtelProcessor) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L166)
+func (r *OtelProcessor) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L166)
 	if r.body != nil {
 		return *r.body, nil
 	}
@@ -1615,7 +1615,7 @@ func (r *OtelProcessor) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
-func (r *OtelProcessor) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L164)
+func (r *OtelProcessor) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L164)
 	if r.kind != nil {
 		return *r.kind, nil
 	}
@@ -1627,7 +1627,7 @@ func (r *OtelProcessor) Kind(ctx context.Context) (string, error) { // otel (htt
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelProcessor) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L165)
+func (r *OtelProcessor) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L165)
 	if r.name != nil {
 		return *r.name, nil
 	}
@@ -1650,7 +1650,7 @@ func (r *OtelProcessor) AsNode() Node {
 // Receiver is a single OpenTelemetry Collector receiver component.
 // Body is the YAML body for this component, spliced under
 // `receivers.<kind>/<name>` at render time.
-type OtelReceiver struct { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L156)
+type OtelReceiver struct { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L156)
 	query *querybuilder.Selection
 
 	body *string
@@ -1665,7 +1665,7 @@ func (r *OtelReceiver) WithGraphQLQuery(q *querybuilder.Selection) *OtelReceiver
 	}
 }
 
-func (r *OtelReceiver) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L159)
+func (r *OtelReceiver) Body(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L159)
 	if r.body != nil {
 		return *r.body, nil
 	}
@@ -1726,7 +1726,7 @@ func (r *OtelReceiver) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
-func (r *OtelReceiver) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L157)
+func (r *OtelReceiver) Kind(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L157)
 	if r.kind != nil {
 		return *r.kind, nil
 	}
@@ -1738,7 +1738,7 @@ func (r *OtelReceiver) Kind(ctx context.Context) (string, error) { // otel (http
 	return response, q.Execute(ctx)
 }
 
-func (r *OtelReceiver) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L158)
+func (r *OtelReceiver) Name(ctx context.Context) (string, error) { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L158)
 	if r.name != nil {
 		return *r.name, nil
 	}
@@ -1762,7 +1762,7 @@ func (r *OtelReceiver) AsNode() Node {
 // Collector as a service for local development and testing, with a
 // component/pipeline builder API for composing receivers, processors,
 // and exporters without writing YAML by hand.
-func (r *Query) Otel() *Otel { // otel (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/otel/main.go#L151)
+func (r *Query) Otel() *Otel { // otel (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/otel/main.go#L151)
 	q := r.query.Select("otel")
 
 	return &Otel{

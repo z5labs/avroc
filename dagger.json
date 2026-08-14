@@ -11,23 +11,23 @@
     },
     {
       "name": "go",
-      "source": "github.com/z5labs/devex/daggerverse/go@47e25f065653c481a6d1567537307f2565bfa316",
-      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+      "source": "github.com/z5labs/devex/daggerverse/go@c10a12007999eb807f68cd9af9000fbaeab159cb",
+      "pin": "c10a12007999eb807f68cd9af9000fbaeab159cb"
     },
     {
       "name": "grafana-stack",
-      "source": "github.com/z5labs/devex/daggerverse/grafana-stack@47e25f065653c481a6d1567537307f2565bfa316",
-      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+      "source": "github.com/z5labs/devex/daggerverse/grafana-stack@c10a12007999eb807f68cd9af9000fbaeab159cb",
+      "pin": "c10a12007999eb807f68cd9af9000fbaeab159cb"
     },
     {
       "name": "otel",
-      "source": "github.com/z5labs/devex/daggerverse/otel@47e25f065653c481a6d1567537307f2565bfa316",
-      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+      "source": "github.com/z5labs/devex/daggerverse/otel@c10a12007999eb807f68cd9af9000fbaeab159cb",
+      "pin": "c10a12007999eb807f68cd9af9000fbaeab159cb"
     },
     {
       "name": "z5labs",
-      "source": "github.com/z5labs/devex/daggerverse/z5labs@47e25f065653c481a6d1567537307f2565bfa316",
-      "pin": "47e25f065653c481a6d1567537307f2565bfa316"
+      "source": "github.com/z5labs/devex/daggerverse/z5labs@c10a12007999eb807f68cd9af9000fbaeab159cb",
+      "pin": "c10a12007999eb807f68cd9af9000fbaeab159cb"
     }
   ],
   "source": ".dagger",

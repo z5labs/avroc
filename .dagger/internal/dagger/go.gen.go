@@ -11,7 +11,7 @@ import (
 )
 
 // Retrieve the binding value, as type Go
-func (r *Binding) AsGo() *Go { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L24)
+func (r *Binding) AsGo() *Go { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L24)
 	q := r.query.Select("asGo")
 
 	return &Go{
@@ -20,7 +20,7 @@ func (r *Binding) AsGo() *Go { // go (https://github.com/z5labs/devex/tree/47e25
 }
 
 // Retrieve the binding value, as type GoCi
-func (r *Binding) AsGoCi() *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L44)
+func (r *Binding) AsGoCi() *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L44)
 	q := r.query.Select("asGoCi")
 
 	return &GoCi{
@@ -29,7 +29,7 @@ func (r *Binding) AsGoCi() *GoCi { // go (https://github.com/z5labs/devex/tree/4
 }
 
 // Create or update a binding of type GoCi in the environment
-func (r *Env) WithGoCiInput(name string, value *GoCi, description string) *Env { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L44)
+func (r *Env) WithGoCiInput(name string, value *GoCi, description string) *Env { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L44)
 	assertNotNil("value", value)
 	q := r.query.Select("withGoCiInput")
 	q = q.Arg("name", name)
@@ -42,7 +42,7 @@ func (r *Env) WithGoCiInput(name string, value *GoCi, description string) *Env {
 }
 
 // Declare a desired GoCi output to be assigned in the environment
-func (r *Env) WithGoCiOutput(name string, description string) *Env { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L44)
+func (r *Env) WithGoCiOutput(name string, description string) *Env { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L44)
 	q := r.query.Select("withGoCiOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -53,7 +53,7 @@ func (r *Env) WithGoCiOutput(name string, description string) *Env { // go (http
 }
 
 // Create or update a binding of type Go in the environment
-func (r *Env) WithGoInput(name string, value *Go, description string) *Env { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L24)
+func (r *Env) WithGoInput(name string, value *Go, description string) *Env { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L24)
 	assertNotNil("value", value)
 	q := r.query.Select("withGoInput")
 	q = q.Arg("name", name)
@@ -66,7 +66,7 @@ func (r *Env) WithGoInput(name string, value *Go, description string) *Env { // 
 }
 
 // Declare a desired Go output to be assigned in the environment
-func (r *Env) WithGoOutput(name string, description string) *Env { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L24)
+func (r *Env) WithGoOutput(name string, description string) *Env { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L24)
 	q := r.query.Select("withGoOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -79,7 +79,7 @@ func (r *Env) WithGoOutput(name string, description string) *Env { // go (https:
 // Go wraps the Go CLI as Dagger functions. Construct via New(); call
 // Container() for the prepared base container, or use the per-CLI helpers
 // (Build, Test, Vet, ...) which reuse the same backing container.
-type Go struct { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L24)
+type Go struct { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L24)
 	query *querybuilder.Selection
 
 	env         *string
@@ -108,7 +108,7 @@ type GoBuildOpts struct {
 	//
 	//
 	// Default: "./..."
-	Pkg string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L240)
+	Pkg string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L240)
 	//
 	// Name of the artifact written under /out. Empty means `-o /out/`, which
 	// lets go build name each binary after its main package.
@@ -120,17 +120,17 @@ type GoBuildOpts struct {
 	// binaryName dodges the same collision; this one is not always a binary,
 	// because buildmode can make it an archive or a shared library.
 	//
-	ArtifactName string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L252)
+	ArtifactName string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L252)
 	//
 	// Pass -trimpath: strip the build's local file system paths out of the
 	// binary, so the output does not depend on where it was compiled.
 	//
-	Trimpath bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L257)
+	Trimpath bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L257)
 	//
 	// Pass -ldflags "-s -w": drop the symbol table and the DWARF debug
 	// info. Smaller binary, no usable stack symbolization or debugger.
 	//
-	Strip bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L262)
+	Strip bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L262)
 	//
 	// Link-time variable assignments, each `importpath.Name=value`,
 	// rendered as `-ldflags "-X importpath.Name=value"`. This is how a
@@ -140,25 +140,25 @@ type GoBuildOpts struct {
 	// ignores a stamp naming a variable that does not exist, or one that
 	// is not a package-level string.
 	//
-	Stamps []string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L272)
+	Stamps []string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L272)
 	//
 	// Build tags, passed as `-tags a,b,c`. Selects which `//go:build`
 	// files are compiled in.
 	//
-	Tags []string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L277)
+	Tags []string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L277)
 	//
 	// Target platform as `GOOS/GOARCH[/variant]`, e.g. "linux/arm64".
 	// Sets GOOS and GOARCH for a cross-compile; empty builds for the
 	// toolchain container's own platform. Any variant segment is ignored —
 	// GOARM/GOAMD64 are left unset.
 	//
-	Platform string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L284)
+	Platform string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L284)
 	//
 	// Set CGO_ENABLED=0. Produces a statically linked binary with no libc
 	// dependency, which is what a scratch image needs, at the cost of the
 	// cgo-backed net and os/user implementations.
 	//
-	DisableCgo bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L290)
+	DisableCgo bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L290)
 	//
 	// Pass -race: link Go's data-race detector into the output. The binary
 	// then reports racing accesses to stderr as it runs, at roughly 2-20x
@@ -170,7 +170,7 @@ type GoBuildOpts struct {
 	// golang image has one for its own platform, but a cross-compile via
 	// platform does not unless the toolchain image provides it.
 	//
-	Race bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L302)
+	Race bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L302)
 	//
 	// Pass -buildmode=<mode>: what the linker emits, which for most modes is
 	// not an executable. Absent leaves the flag off entirely, so `go build`
@@ -178,7 +178,7 @@ type GoBuildOpts struct {
 	// package, an archive for the rest. See BuildMode for what each member
 	// produces.
 	//
-	Buildmode GoBuildMode // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L310)
+	Buildmode GoBuildMode // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L310)
 }
 
 // Build runs `go build` against the supplied source and returns /out as a
@@ -193,7 +193,7 @@ type GoBuildOpts struct {
 // every caller re-learn the same spellings. Container() is the escape hatch
 // for anything not named here — it hands back the prepared container so a
 // caller can run whatever `go build` invocation it likes.
-func (r *Go) Build(source *Directory, opts ...GoBuildOpts) *Directory { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L234)
+func (r *Go) Build(source *Directory, opts ...GoBuildOpts) *Directory { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L234)
 	assertNotNil("source", source)
 	q := r.query.Select("build")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -246,7 +246,7 @@ func (r *Go) Build(source *Directory, opts ...GoBuildOpts) *Directory { // go (h
 }
 
 // Ci returns a new pipeline builder bound to the supplied source.
-func (r *Go) Ci(source *Directory) *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L72)
+func (r *Go) Ci(source *Directory) *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L72)
 	assertNotNil("source", source)
 	q := r.query.Select("ci")
 	q = q.Arg("source", source)
@@ -265,7 +265,7 @@ func (r *Go) Ci(source *Directory) *GoCi { // go (https://github.com/z5labs/deve
 // when New("") was used, from source/go.mod's `go` directive (fallback
 // "latest"). The signature takes ctx + returns error because go.mod
 // inspection requires async I/O.
-func (r *Go) Container(source *Directory) *Container { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L53)
+func (r *Go) Container(source *Directory) *Container { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L53)
 	assertNotNil("source", source)
 	q := r.query.Select("container")
 	q = q.Arg("source", source)
@@ -288,7 +288,7 @@ func (r *Go) Container(source *Directory) *Container { // go (https://github.com
 // graph, so the two documents cannot disagree about what shipped. See
 // Spdx for how the graph is resolved and how licence confidence is
 // handled.
-func (r *Go) CycloneDx(binary *File, source *Directory) *File { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/sbom.go#L80)
+func (r *Go) CycloneDx(binary *File, source *Directory) *File { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/sbom.go#L80)
 	assertNotNil("binary", binary)
 	assertNotNil("source", source)
 	q := r.query.Select("cycloneDx")
@@ -301,7 +301,7 @@ func (r *Go) CycloneDx(binary *File, source *Directory) *File { // go (https://g
 }
 
 // Env runs `go env` in a source-less base container and returns its stdout.
-func (r *Go) Env(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L488)
+func (r *Go) Env(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L488)
 	if r.env != nil {
 		return *r.env, nil
 	}
@@ -316,7 +316,7 @@ func (r *Go) Env(ctx context.Context) (string, error) { // go (https://github.co
 // Fmt runs `gofmt -l -d .` against the supplied source. Returns the diff
 // of any unformatted files; non-empty output is also returned as an error so
 // CI fails fast on formatting violations.
-func (r *Go) Fmt(ctx context.Context, source *Directory) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L452)
+func (r *Go) Fmt(ctx context.Context, source *Directory) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L452)
 	assertNotNil("source", source)
 	if r.fmt != nil {
 		return *r.fmt, nil
@@ -334,12 +334,12 @@ func (r *Go) Fmt(ctx context.Context, source *Directory) (string, error) { // go
 type GoGenerateOpts struct {
 
 	// Default: "./..."
-	Pkg string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L191)
+	Pkg string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L191)
 }
 
 // Generate runs `go generate pkg` against the supplied source and returns
 // /src after generation. pkg defaults to `./...`.
-func (r *Go) Generate(source *Directory, opts ...GoGenerateOpts) *Directory { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L187)
+func (r *Go) Generate(source *Directory, opts ...GoGenerateOpts) *Directory { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L187)
 	assertNotNil("source", source)
 	q := r.query.Select("generate")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -414,7 +414,7 @@ func (r *Go) UnmarshalJSON(bs []byte) error {
 // The pin is what makes the result safe to cache across calls within a
 // session — without it, the proxy could resolve different versions on
 // successive invocations.
-func (r *Go) Install(pkg string) *File { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L84)
+func (r *Go) Install(pkg string) *File { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L84)
 	q := r.query.Select("install")
 	q = q.Arg("pkg", pkg)
 
@@ -424,7 +424,7 @@ func (r *Go) Install(pkg string) *File { // go (https://github.com/z5labs/devex/
 }
 
 // ModDownload runs `go mod download` against the supplied source.
-func (r *Go) ModDownload(ctx context.Context, source *Directory) error { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L162)
+func (r *Go) ModDownload(ctx context.Context, source *Directory) error { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L162)
 	assertNotNil("source", source)
 	if r.modDownload != nil {
 		return nil
@@ -437,7 +437,7 @@ func (r *Go) ModDownload(ctx context.Context, source *Directory) error { // go (
 
 // ModTidy runs `go mod tidy` against the supplied source and returns the
 // updated /src directory.
-func (r *Go) ModTidy(source *Directory) *Directory { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L148)
+func (r *Go) ModTidy(source *Directory) *Directory { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L148)
 	assertNotNil("source", source)
 	q := r.query.Select("modTidy")
 	q = q.Arg("source", source)
@@ -448,7 +448,7 @@ func (r *Go) ModTidy(source *Directory) *Directory { // go (https://github.com/z
 }
 
 // ModVerify runs `go mod verify` against the supplied source.
-func (r *Go) ModVerify(ctx context.Context, source *Directory) error { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L174)
+func (r *Go) ModVerify(ctx context.Context, source *Directory) error { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L174)
 	assertNotNil("source", source)
 	if r.modVerify != nil {
 		return nil
@@ -461,12 +461,12 @@ func (r *Go) ModVerify(ctx context.Context, source *Directory) error { // go (ht
 
 // GoRunOpts contains options for Go.Run
 type GoRunOpts struct {
-	Args []string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L209)
+	Args []string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L209)
 }
 
 // Run runs `go run pkg [args...]` against the supplied source and returns
 // the program's stdout. pkg is required (a single runnable main package).
-func (r *Go) Run(ctx context.Context, source *Directory, pkg string, opts ...GoRunOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L204)
+func (r *Go) Run(ctx context.Context, source *Directory, pkg string, opts ...GoRunOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L204)
 	assertNotNil("source", source)
 	if r.run != nil {
 		return *r.run, nil
@@ -512,7 +512,7 @@ func (r *Go) Run(ctx context.Context, source *Directory, pkg string, opts ...GoR
 // when the match covers essentially the whole file. Anything less
 // concludes NOASSERTION, so a low-confidence match cannot be mistaken
 // downstream for an established one.
-func (r *Go) Spdx(binary *File, source *Directory) *File { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/sbom.go#L46)
+func (r *Go) Spdx(binary *File, source *Directory) *File { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/sbom.go#L46)
 	assertNotNil("binary", binary)
 	assertNotNil("source", source)
 	q := r.query.Select("spdx")
@@ -528,17 +528,17 @@ func (r *Go) Spdx(binary *File, source *Directory) *File { // go (https://github
 type GoTestOpts struct {
 
 	// Default: "./..."
-	Pkg string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L428)
+	Pkg string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L428)
 
-	Race bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L430)
+	Race bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L430)
 
-	Flags []string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L432)
+	Flags []string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L432)
 }
 
 // Test runs `go test -count=1 [-race] [flags] pkg` against the supplied
 // source and returns the combined stdout. -count=1 is always passed to
 // bypass Go's internal test cache.
-func (r *Go) Test(ctx context.Context, source *Directory, opts ...GoTestOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L424)
+func (r *Go) Test(ctx context.Context, source *Directory, opts ...GoTestOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L424)
 	assertNotNil("source", source)
 	if r.test != nil {
 		return *r.test, nil
@@ -568,7 +568,7 @@ func (r *Go) Test(ctx context.Context, source *Directory, opts ...GoTestOpts) (s
 
 // ToolVersion runs `go version` in a source-less base container and returns
 // the trimmed output (e.g. "go version go1.23.0 linux/amd64").
-func (r *Go) ToolVersion(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L496)
+func (r *Go) ToolVersion(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L496)
 	if r.toolVersion != nil {
 		return *r.toolVersion, nil
 	}
@@ -583,7 +583,7 @@ func (r *Go) ToolVersion(ctx context.Context) (string, error) { // go (https://g
 // Version is the pinned Go toolchain version (e.g. "1.23"). Empty
 // means infer from the supplied source's go.mod `go` directive;
 // falls back to "latest" when no go directive is found.
-func (r *Go) Version(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L28)
+func (r *Go) Version(ctx context.Context) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L28)
 	if r.version != nil {
 		return *r.version, nil
 	}
@@ -599,12 +599,12 @@ func (r *Go) Version(ctx context.Context) (string, error) { // go (https://githu
 type GoVetOpts struct {
 
 	// Default: "./..."
-	Pkg string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L475)
+	Pkg string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L475)
 }
 
 // Vet runs `go vet pkg` against the supplied source. pkg defaults to
 // `./...`. Returns a non-nil error when vet reports any issue.
-func (r *Go) Vet(ctx context.Context, source *Directory, opts ...GoVetOpts) error { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L471)
+func (r *Go) Vet(ctx context.Context, source *Directory, opts ...GoVetOpts) error { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L471)
 	assertNotNil("source", source)
 	if r.vet != nil {
 		return nil
@@ -623,13 +623,13 @@ func (r *Go) Vet(ctx context.Context, source *Directory, opts ...GoVetOpts) erro
 
 // GoWorkOpts contains options for Go.Work
 type GoWorkOpts struct {
-	Args []string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L133)
+	Args []string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L133)
 }
 
 // Work runs `go work <subcommand> [args...]` against the supplied source
 // and returns stdout. subcommand is required (e.g. "init", "use", "sync",
 // "version").
-func (r *Go) Work(ctx context.Context, source *Directory, subcommand string, opts ...GoWorkOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L128)
+func (r *Go) Work(ctx context.Context, source *Directory, subcommand string, opts ...GoWorkOpts) (string, error) { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L128)
 	assertNotNil("source", source)
 	if r.work != nil {
 		return *r.work, nil
@@ -666,7 +666,7 @@ func (r *Go) AsNode() Node {
 // errors are aggregated. Stage 2 builds the source and Run returns the
 // produced binary as a *dagger.File. Downstream consumers compose that file
 // into their own pipelines (package, sign, publish, ...).
-type GoCi struct { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L44)
+type GoCi struct { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L44)
 	query *querybuilder.Selection
 
 	check *Void
@@ -692,7 +692,7 @@ func (r *GoCi) WithGraphQLQuery(q *querybuilder.Selection) *GoCi {
 // aggregated error. Use when callers want to run the checks
 // independently of the build (for example multi-platform pipelines
 // that share one check run across N platform builds).
-func (r *GoCi) Check(ctx context.Context) error { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L148)
+func (r *GoCi) Check(ctx context.Context) error { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L148)
 	if r.check != nil {
 		return nil
 	}
@@ -753,7 +753,7 @@ func (r *GoCi) UnmarshalJSON(bs []byte) error {
 // Run executes the pipeline: stage 1 (Check) → stage 2 (build). Returns
 // the built binary as a *dagger.File. On stage-1 failure, returns the
 // aggregated error from Check and a nil file (stage 2 is skipped).
-func (r *GoCi) Run() *File { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L173)
+func (r *GoCi) Run() *File { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L173)
 	q := r.query.Select("run")
 
 	return &File{
@@ -763,9 +763,9 @@ func (r *GoCi) Run() *File { // go (https://github.com/z5labs/devex/tree/47e25f0
 
 // GoCiWithBuildOpts contains options for GoCi.WithBuild
 type GoCiWithBuildOpts struct {
-	Pkg string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L131)
+	Pkg string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L131)
 
-	BinaryName string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L133)
+	BinaryName string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L133)
 }
 
 // WithBuild configures the build stage parameters. pkg defaults to "."
@@ -775,7 +775,7 @@ type GoCiWithBuildOpts struct {
 //
 // Note: the binary-name flag is called binaryName (CLI: --binary-name) to
 // avoid colliding with Dagger CLI's top-level --output/-o flag.
-func (r *GoCi) WithBuild(opts ...GoCiWithBuildOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L129)
+func (r *GoCi) WithBuild(opts ...GoCiWithBuildOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L129)
 	q := r.query.Select("withBuild")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `pkg` optional argument
@@ -794,7 +794,7 @@ func (r *GoCi) WithBuild(opts ...GoCiWithBuildOpts) *GoCi { // go (https://githu
 }
 
 // WithFmt enables the gofmt check stage.
-func (r *GoCi) WithFmt() *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L77)
+func (r *GoCi) WithFmt() *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L77)
 	q := r.query.Select("withFmt")
 
 	return &GoCi{
@@ -804,9 +804,9 @@ func (r *GoCi) WithFmt() *GoCi { // go (https://github.com/z5labs/devex/tree/47e
 
 // GoCiWithLintOpts contains options for GoCi.WithLint
 type GoCiWithLintOpts struct {
-	Version string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L101)
+	Version string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L101)
 
-	Config *File // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L103)
+	Config *File // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L103)
 }
 
 // WithLint enables the golangci-lint check stage. version pins the
@@ -820,7 +820,7 @@ type GoCiWithLintOpts struct {
 // linter runs. Pass a `v1.x` version to roll the whole stage back, config
 // dialect included; the module path installed follows the version's major,
 // so both majors are reachable without forking this pipeline.
-func (r *GoCi) WithLint(opts ...GoCiWithLintOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L99)
+func (r *GoCi) WithLint(opts ...GoCiWithLintOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L99)
 	q := r.query.Select("withLint")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `version` optional argument
@@ -840,12 +840,12 @@ func (r *GoCi) WithLint(opts ...GoCiWithLintOpts) *GoCi { // go (https://github.
 
 // GoCiWithTestOpts contains options for GoCi.WithTest
 type GoCiWithTestOpts struct {
-	Race bool // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L115)
+	Race bool // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L115)
 }
 
 // WithTest enables the `go test ./...` check stage. Pass race=true to
 // enable the data-race detector.
-func (r *GoCi) WithTest(opts ...GoCiWithTestOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L113)
+func (r *GoCi) WithTest(opts ...GoCiWithTestOpts) *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L113)
 	q := r.query.Select("withTest")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `race` optional argument
@@ -860,7 +860,7 @@ func (r *GoCi) WithTest(opts ...GoCiWithTestOpts) *GoCi { // go (https://github.
 }
 
 // WithVet enables the `go vet ./...` check stage.
-func (r *GoCi) WithVet() *GoCi { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/ci.go#L83)
+func (r *GoCi) WithVet() *GoCi { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/ci.go#L83)
 	q := r.query.Select("withVet")
 
 	return &GoCi{
@@ -878,14 +878,14 @@ func (r *GoCi) AsNode() Node {
 
 // GoOpts contains options for Query.Go
 type GoOpts struct {
-	Version string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L37)
+	Version string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L37)
 }
 
 // New returns a Go module configured for the given toolchain version.
 // version is optional: empty means the version is inferred from the source's
 // go.mod for source-bearing CLI funcs, and "latest" is used for source-less
 // funcs (Env, ToolVersion, Install).
-func (r *Query) Go(opts ...GoOpts) *Go { // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/main.go#L35)
+func (r *Query) Go(opts ...GoOpts) *Go { // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/main.go#L35)
 	q := r.query.Select("go")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `version` optional argument
@@ -916,7 +916,7 @@ func (r *Query) Go(opts ...GoOpts) *Go { // go (https://github.com/z5labs/devex/
 // the `go build` spelling (`c-archive`) lives in buildModeFlags below rather
 // than in the identifier: a hyphen cannot appear in a Go identifier, so the
 // mapping has to be explicit.
-type GoBuildMode string // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L31)
+type GoBuildMode string // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L31)
 
 func (GoBuildMode) IsEnum() {}
 
@@ -984,7 +984,7 @@ const (
 	// BuildModeArchive builds the listed non-main packages into `.a` files
 	// (`archive`). Main packages are ignored, so pointing this at one
 	// produces nothing.
-	GoBuildModeArchive GoBuildMode = "ARCHIVE" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L37)
+	GoBuildModeArchive GoBuildMode = "ARCHIVE" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L37)
 
 	// BuildModeCArchive builds the listed main package into a C archive
 	// (`c-archive`). Only the functions carrying a cgo `//export` comment are
@@ -995,27 +995,27 @@ const (
 	// still produces an archive, but one exporting nothing and carrying no
 	// generated header. The archive/header pair is a consequence of having
 	// cgo exports, not of asking for this mode.
-	GoBuildModeCArchive GoBuildMode = "C_ARCHIVE" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L47)
+	GoBuildModeCArchive GoBuildMode = "C_ARCHIVE" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L47)
 
 	// BuildModeCShared builds the listed main package into a C shared
 	// library (`c-shared`) — the same exported surface as C_ARCHIVE, linked
 	// dynamically instead, and with the same relationship to cgo.
-	GoBuildModeCShared GoBuildMode = "C_SHARED" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L51)
+	GoBuildModeCShared GoBuildMode = "C_SHARED" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L51)
 
 	// BuildModeExe builds the listed main packages into executables
 	// (`exe`), forcing a position-dependent executable on a toolchain whose
 	// default for the target is PIE.
-	GoBuildModeExe GoBuildMode = "EXE" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L55)
+	GoBuildModeExe GoBuildMode = "EXE" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L55)
 
 	// BuildModePie builds the listed main packages into position
 	// independent executables (`pie`), which is what a hardened runtime
 	// wanting ASLR requires.
-	GoBuildModePie GoBuildMode = "PIE" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L59)
+	GoBuildModePie GoBuildMode = "PIE" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L59)
 
 	// BuildModePlugin builds the listed main packages into a shared library
 	// loadable at run time with `plugin.Open` (`plugin`). The plugin and
 	// its host have to be built by the same toolchain from the same
 	// dependency versions or the load fails.
-	GoBuildModePlugin GoBuildMode = "PLUGIN" // go (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/go/buildmode.go#L64)
+	GoBuildModePlugin GoBuildMode = "PLUGIN" // go (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/go/buildmode.go#L64)
 
 )
