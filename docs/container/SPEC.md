@@ -28,7 +28,7 @@ belongs here.
 
 In scope: what the published image guarantees to an image built `FROM` it — the
 directory a generator is copied into and the `PATH` that makes it reachable, the
-entrypoint, the working directory a project is mounted at, the user and UID the
+entrypoint, the working directory and who chooses it, the user and UID the
 process runs as together with the guidance for overriding it with
 `--user $(id -u):$(id -g)`, whether a shell is present and what follows from the
 answer, whether the image trusts any certificate authority and what that means
@@ -143,7 +143,8 @@ The image's `Entrypoint` is the avroc CLI, and its `Cmd` is empty (#126). The
 arguments a caller passes to `docker run` are therefore avroc's arguments:
 
 ```console
-$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc-gen-go:v0 generate
+$ docker run --rm -v "$PWD:/work" -w /work \
+    ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 
 The image named there is a [generator image](#avrocs-own-generators), because
@@ -164,23 +165,64 @@ which is what allows the CLI to move without a major version.
 
 ## The working directory
 
-The image's `WorkingDir` is **`/work`** (#126), and a caller mounts the project
-to be generated there. avroc resolves the relative paths in a project's manifest
-against the working directory, so a mount at `/work` and no further arguments is
-the shortest complete invocation:
+**The image declares no `WorkingDir`, and the caller chooses the mount point and
+points the working directory at it** (#219). avroc resolves a project's manifest
+and every relative path in it against the process working directory, so a caller
+who mounts a project names that path twice — once to mount it and once to work
+from it:
 
 ```console
-$ docker run --rm -v "$PWD:/work" ghcr.io/z5labs/avroc-gen-go:v0 generate
+$ docker run --rm -v "$PWD:/work" -w /work \
+    ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 
-`/work` **MUST** exist in the base image and **MUST** be owned by the [image's
-user](#the-user), so that generation into an unmounted `/work` works and a
-caller who mounts over it inherits nothing surprising. It is covered by the
-[compatibility guarantees](#compatibility-guarantees).
+`/work` there is the caller's choice and nothing more. Any path does, and the
+image contains none of them: nothing is created to be a working directory, and
+there is no path in the image a project has to be mounted over.
 
-A derived image **MAY** change `WorkingDir`, and a caller **MAY** override it
-with `--workdir`. Neither is expected: `/work` is a mount point, and a project
-that wants a different one passes different paths to avroc instead.
+A caller **MUST** point the working directory at the mounted project, with `-w`
+or `--workdir` or a derived image's `WORKDIR`. Nothing in the image does it for
+them, and an unset `WorkingDir` is not neutral — the runtime specification
+requires an absolute `process.cwd`, and an empty image value resolves to `/`,
+where there is no `avroc.json`. A run that forgets the flag fails in avroc's own
+words, naming the manifest it could not find, before it has done any work.
+
+That the image declares no working directory is covered by the [compatibility
+guarantees](#compatibility-guarantees): the assertion is that the field is
+**empty**, not that it holds some other value, because a `WorkingDir` arriving
+from a base layer nobody here wrote is exactly the change an unasserted field
+lets through.
+
+A derived image **MAY** set `WorkingDir`, and one built for a fixed project
+layout reasonably does. A caller **MUST NOT** rely on the base image setting one.
+
+### Why the image sets none
+
+Because the pipeline that builds it does not, and the response to that gap is to
+delete avroc's need for the thing rather than to ask for it upstream (#217, #218).
+The shared archetype states the absence as a decision rather than an omission,
+and it is load bearing there: a relative contribution path is refused on the
+grounds that it would resolve against a working directory the pipeline never
+sets. The writable half dies with it independently — a contributed directory is
+mode `0555`, so a `/work` created in the image would not be one generation could
+write into, and "generation into an unmounted `/work` works" would stop being
+true whatever happened to the configuration field.
+
+The flag is cheap in a way the argument turned on: `-v "$PWD:/work"` already
+types the path once, so `-w /work` types a path the invocation contains rather
+than teaching the reader a fact they had no way to possess. That is the
+difference between this and the `--tmpfs /tmp:mode=1777` #218 removed, and it is
+why this promise was worth spending and that one was not.
+
+> **Breaking change.** This is one, and it is called out as one: every `docker
+> run` in this document, in [`README.md`](../../README.md) and in
+> [`CONTRIBUTING.md`](../../CONTRIBUTING.md) grew a `-w`, and a documented command
+> that stops working does not ship in a patch release. It lands in the next minor
+> release beside the other breaks #217 carries — attestation discovery becoming
+> referrers-only, and the SBOM's subject moving from the executable to the image
+> — and the release notes name all three together. See [How a covered thing would
+> change](#how-a-covered-thing-would-change) for why a removal cannot be shipped
+> as an overlap the way a move can.
 
 ## The user
 
@@ -210,8 +252,9 @@ the number other people's tooling already expects.
 
 ### What it means for ownership
 
-The [plugin directory](#the-plugin-directory) and the [working
-directory](#the-working-directory) are owned by 65532:65532 in the base image. A
+The [plugin directory](#the-plugin-directory) is owned by 65532:65532 in the base
+image, and is the only directory in it that is: there is no [working
+directory](#the-working-directory) in the image to own. A
 derived image copying a plugin in **SHOULD** use `--chown=65532:65532` and
 **MUST** ensure the result is readable and executable by that user; a
 world-readable, world-executable file satisfies this without the `--chown`,
@@ -229,7 +272,7 @@ they may not be able to edit or delete it either.
 A caller **SHOULD** therefore run as themselves:
 
 ```console
-$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
     ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 
@@ -284,11 +327,13 @@ hard way by somebody:
   arguments, or against an image built `FROM` this one with a busybox copied in
   for the purpose.
 
-One thing the image does **not** have is worth naming: there is no temporary
-directory in it, and none is needed. avroc writes each invocation's descriptor
+Two things the image does **not** have are worth naming, and neither is needed.
+There is no temporary directory in it: avroc writes each invocation's descriptor
 into a directory beneath the output tree the generator is writing to, so a
-`docker run` that mounts a project at `/work` needs no `--tmpfs`, no volume and
-no writable path anywhere else. Where the descriptor goes is
+`docker run` that mounts a project needs no `--tmpfs`, no volume and
+no writable path anywhere else. And there is no [working
+directory](#the-working-directory) — nothing is created to be one, so the mounted
+project is the only writable path a generation touches. Where the descriptor goes is
 [implementation detail](#compatibility-guarantees) like everything else in the
 filesystem that is not named above, and a derived image that wrote into it by
 path would be depending on something that may change in a patch release.
@@ -325,7 +370,7 @@ working.
 Export **in plaintext, to a collector on the pod or the host network**:
 
 ```console
-$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
     -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
@@ -590,7 +635,7 @@ and a generator image is still avroc. Running one is running avroc with one more
 generator on its `PATH`:
 
 ```console
-$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
     ghcr.io/z5labs/avroc-gen-json:v0 generate
 ```
 
@@ -750,7 +795,7 @@ generator. The [example project](../../example)'s schema and a manifest naming
 
 ```console
 $ docker build -t avroc-hello .
-$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+$ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
     avroc-hello generate
 $ cat out/hello.txt
 hello
@@ -817,7 +862,7 @@ to any of them is a breaking change:
 | --- | --- |
 | [The plugin directory](#the-plugin-directory) | `/usr/local/bin`, on `PATH` |
 | [The entrypoint](#the-entrypoint) | Is the avroc CLI, and takes its arguments |
-| [The working directory](#the-working-directory) | `/work`, existing and owned by the image's user |
+| [The working directory](#the-working-directory) | None: `WorkingDir` is empty, and the caller points it at the mount |
 | [The user](#the-user) | UID 65532, GID 65532, non-root, overridable |
 | [No shell](#no-shell) | Absent; extension is `COPY`-only |
 | [No certificate authorities](#no-certificate-authorities) | Absent; TLS egress verifies against nothing, and plaintext to a collector on the local network is the supported shape |
@@ -838,8 +883,7 @@ depending on something that may change in a patch release, with no notice:
 - Layer count, layer ordering, image size, build timestamps and every other
   label or annotation on the manifest.
 - The set of platforms beyond `linux/amd64` and `linux/arm64` (#126).
-- Which UID owns a file that is not in the plugin directory or the working
-  directory.
+- Which UID owns a file that is not in the plugin directory.
 
 ### How a covered thing would change
 
@@ -855,6 +899,16 @@ project cannot see, is built by a pipeline this project cannot warn, and fails
 at `COPY` time with an error naming a path rather than a version. Giving it a
 release in which both the old and the new form work is what turns that into a
 deprecation notice somebody reads instead of a broken build somebody bisects.
+
+**A guarantee that is withdrawn rather than moved cannot be shipped that way**, and
+[the working directory](#the-working-directory) is the case (#219). There is no
+form in which `WorkingDir` is both `/work` and unset, so there is no overlap to
+hold: a withdrawal is announced in the release notes of the release that makes it,
+with the invocation the caller has to write instead, and it **MUST NOT** ship in a
+patch release. What replaces the overlap is that the new invocation works against
+both the old image and the new one — a `docker run` carrying `-w /work` behaves
+identically on an image that already set it — so a consumer can make the change
+before taking the release rather than after.
 
 ## Out of Scope
 
@@ -924,7 +978,7 @@ found there and what happens to it.
 | _This document_ | [#107](https://github.com/z5labs/avroc/issues/107) |
 | [The plugin directory](#the-plugin-directory) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [The entrypoint](#the-entrypoint) | [#126](https://github.com/z5labs/avroc/issues/126), [#127](https://github.com/z5labs/avroc/issues/127) |
-| [The working directory](#the-working-directory) | [#126](https://github.com/z5labs/avroc/issues/126) |
+| [The working directory](#the-working-directory) | [#126](https://github.com/z5labs/avroc/issues/126), [#219](https://github.com/z5labs/avroc/issues/219) |
 | [The user](#the-user) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [No shell](#no-shell) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [No certificate authorities](#no-certificate-authorities) | [#198](https://github.com/z5labs/avroc/issues/198) |

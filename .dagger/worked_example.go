@@ -456,11 +456,15 @@ func (m *Avroc) checkWorkedExampleGenerates(ctx context.Context, image *dagger.C
 
 	var errs []error
 	for _, user := range []string{imageUser, "1234:1234"} {
+		// WithWorkdir as well as mounting there: since #219 the image declares no
+		// working directory, and the document's own invocations carry the `-w`
+		// this is. See projectMount.
 		generated := image.
 			WithUser(user).
-			WithDirectory(workDir, project, dagger.ContainerWithDirectoryOpts{Owner: user}).
+			WithDirectory(projectMount, project, dagger.ContainerWithDirectoryOpts{Owner: user}).
+			WithWorkdir(projectMount).
 			WithExec([]string{"generate"}, dagger.ContainerWithExecOpts{UseEntrypoint: true}).
-			Directory(workDir + "/" + outDir)
+			Directory(projectMount + "/" + outDir)
 
 		entries, err := generated.Entries(ctx)
 		switch {

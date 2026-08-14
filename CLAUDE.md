@@ -525,13 +525,42 @@ grows a timestamp uses it rather than inventing its own.
 
 `.dagger/image.go` builds the base image `docs/container/SPEC.md` describes, and
 that document is normative: `/usr/local/bin` on `PATH` holding the CLI **and no
-generator**, the CLI as `Entrypoint` with an empty `Cmd`, `/work` as
-`WorkingDir`, UID and GID 65532 owning both directories and running the process,
+generator**, the CLI as `Entrypoint` with an empty `Cmd`, **no `WorkingDir` at
+all**, UID and GID 65532 owning the plugin directory and running the process,
 the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a `scratch`
 base — no shell, no libc, no package manager, so extension is `COPY`-only. The
 filesystem is now exactly the files that document names and nothing else: a 1777
 `/tmp` used to be grafted on for the descriptor, and #218 removed the reason for
 it rather than the mount that carried it (see "Where the descriptor is written").
+
+**The image sets no working directory, and that is a decision** (#219,
+`docs/container/SPEC.md`'s "The working directory"). `WorkingDir` was `/work` and
+`/work` was created here owned by the image's user; both are gone, and the caller
+names the mount point twice instead — `-v "$PWD:/work" -w /work`. It is the third
+of the promises #217 could not express against the refactored `z5labs` archetype,
+closed the way #218 closed the second: by deleting avroc's need for the thing
+rather than asking for it upstream. The archetype states the absence as a decision
+rather than an omission and rests a rule on it, so an upstream issue would have to
+overturn it; and the writable half dies independently, because a contributed
+directory is mode `0555` and a `/work` that is not writable is not one a
+generation can write into. What made it affordable is that `-w /work` is a path
+the invocation already contains, where #218's `--tmpfs /tmp:mode=1777` was a fact
+an adopter had no way to possess. It is a **break**, deliberately, and it rides
+in #217's release notes beside the two already there. Three things about the way
+it landed are decisions rather than mechanics. `ImageContract` asserts
+`WorkingDir` is *empty* rather than dropping the assertion, because an unasserted
+field is how a base layer's inherited value arrives unnoticed. `projectMount` in
+`image.go` is the checks' own mount point and is deliberately **not** in the block
+of contract constants, because nothing about the image depends on it and a check
+that mounted at `/project` would be equally correct — it is `/work` only so the
+checks run the command the documents print. And every check that reached
+`avroc.json` through the image's working directory now names one explicitly
+(`image.go`, `generator_image.go`, `worked_example.go`, `trace_propagation.go`),
+which is what `.dagger/main.go` and `daggerverse/avroc` had already written for
+exactly this reason — the latter defending against this image before it existed.
+`daggerverse/avroc`'s `projectDir` stays `/work` and its behaviour is unchanged:
+the mount point is still this project's convention, and the module is what names
+it now rather than the image.
 
 `.dagger/generator_image.go` builds the three images that carry avroc's own
 generators, each of them the base plus one executable in the plugin directory
@@ -650,7 +679,7 @@ generator that has no image yet. `Image` exposes what those composed.
 
 It is a **convenience over `docs/container/SPEC.md`, not a contract**, so it gets
 no `SPEC.md` (`docs/CONVENTIONS.md`, "What belongs here"): everything it does can
-be written as `docker run --rm -v "$PWD:/work"`, and a spec for it would imply
+be written as `docker run --rm -v "$PWD:/work" -w /work`, and a spec for it would imply
 the contract were a property of the module. What it needs to say it says in its
 module comment and in `dagger call --help`. It is a separate module rather than
 more functions on the root one because a caller who installs it should get the

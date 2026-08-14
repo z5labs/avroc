@@ -63,8 +63,8 @@ dagger call generator-bundle-image export --path ./avroc-all.tar
 describes — the one other people's Dockerfiles say `FROM` — and
 `image-contract` is that document's compatibility guarantees table executed
 rather than read: the plugin directory and its place on `PATH`, the entrypoint,
-the empty `Cmd`, the working directory, the pinned non-root UID, the absence of
-a shell, and the `FileDescriptorSet`'s path.
+the empty `Cmd`, the *absence* of a working directory, the pinned non-root UID,
+the absence of a shell, and the `FileDescriptorSet`'s path.
 
 The base ships the CLI and **no generator**. avroc's own three are images built
 `FROM` it, one `COPY` each, exactly as a stranger's generator image is
@@ -79,13 +79,15 @@ repository this project cannot see and breaks without breaking anything here: an
 image whose `PATH` lost `/usr/local/bin` runs avroc perfectly and fails at the
 point where somebody else's generator is not found.
 
-To run an image the way a consumer does, load the tarball and mount a project
-at `/work`. Use the bundle rather than the base — `example/`'s manifest names
-three generators, and the base carries none:
+To run an image the way a consumer does, load the tarball, mount a project and
+point `-w` at where you mounted it — the image declares no working directory, so
+that flag is not optional. Use the bundle rather than the base — `example/`'s
+manifest names three generators, and the base carries none:
 
 ```sh
 docker load -i ./avroc-all.tar
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" <image> generate
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" -w /work \
+  <image> generate
 ```
 
 `dagger call publish --address …` and `dagger call publish-generator --name …

@@ -113,13 +113,14 @@ const (
 	// handed the exec.
 	//
 	// It is in a directory this check adds to the image, at a path that is part
-	// of nothing: the image carries no temporary directory since #218, and the
-	// two directories it does carry are both wrong for this — /work is the tree
-	// checkOneConnectedTrace byte-compares against the committed example/, so a
-	// record left in it would fail that comparison, and the plugin directory is
-	// where a file is a generator. A derived image adding a directory of its own
-	// is what any adopter does, and it is not the image gaining a writable path
-	// to make avroc work: avroc needs none, which is the whole of #218.
+	// of nothing: the image carries no temporary directory since #218 and no
+	// working directory since #219, and neither of the two directories this check
+	// does have will do — the project mount is the tree checkOneConnectedTrace
+	// byte-compares against the committed example/, so a record left in it would
+	// fail that comparison, and the plugin directory is where a file is a
+	// generator. A derived image adding a directory of its own is what any adopter
+	// does, and it is not the image gaining a writable path to make avroc work:
+	// avroc needs none, which is the whole of #218.
 	//
 	// The negative control gets it too, because it goes through the same
 	// tracedGeneration — which is what keeps it able to reach a *fetched trace*
@@ -223,7 +224,7 @@ func (m *Avroc) checkOneConnectedTrace(
 	// this is that sentence made about a run whose spans actually left the
 	// container — which is more than Regeneration's traced run can say, since
 	// nothing is listening at the endpoint it configures.
-	generated := run.Directory(workDir)
+	generated := run.Directory(projectMount)
 	if err := m.diffTrees(ctx, m.Source.Directory("example"), generated, "/trace-propagation"); err != nil {
 		return fmt.Errorf("a traced generation did not reproduce the committed example: %w", err)
 	}
@@ -336,9 +337,14 @@ func (m *Avroc) tracedGeneration(platform dagger.Platform, collector *dagger.Ser
 			Permissions: executableMode,
 		}).
 		WithServiceBinding(collectorHostname, collector).
-		WithDirectory(workDir, m.Source.Directory("example"), dagger.ContainerWithDirectoryOpts{
+		// WithWorkdir as well as mounting there: since #219 the image declares no
+		// working directory, and the launcher re-execs avroc in place rather than
+		// naming a project, so the exec's own working directory is the only thing
+		// that puts avroc where avroc.json is. See projectMount.
+		WithDirectory(projectMount, m.Source.Directory("example"), dagger.ContainerWithDirectoryOpts{
 			Owner: imageUser,
 		}).
+		WithWorkdir(projectMount).
 		// The launcher's own scratch directory, owned by the image's user so it
 		// can write the record into it. See traceparentRecord.
 		WithDirectory(traceRecordDir, dag.Directory(), dagger.ContainerWithDirectoryOpts{

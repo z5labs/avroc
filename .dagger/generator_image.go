@@ -337,10 +337,14 @@ func (m *Avroc) checkGeneratorRuns(ctx context.Context, image *dagger.Container,
 		return err
 	}
 
+	// WithWorkdir as well as mounting there: since #219 the image declares no
+	// working directory, so a run that only mounted would start in / and fail to
+	// find avroc.json. See projectMount.
 	generated := image.
-		WithDirectory(workDir, project, dagger.ContainerWithDirectoryOpts{Owner: imageUser}).
+		WithDirectory(projectMount, project, dagger.ContainerWithDirectoryOpts{Owner: imageUser}).
+		WithWorkdir(projectMount).
 		WithExec([]string{"generate"}, dagger.ContainerWithExecOpts{UseEntrypoint: true}).
-		Directory(workDir + "/" + outDir)
+		Directory(projectMount + "/" + outDir)
 
 	entries, err := generated.Entries(ctx)
 	if err != nil {
