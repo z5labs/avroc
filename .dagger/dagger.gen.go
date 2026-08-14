@@ -63,9 +63,11 @@ func (r Avroc) MarshalJSON() ([]byte, error) {
 	var concrete struct {
 		Source     *dagger.Directory
 		LintConfig *dagger.File
+		GitDir     *dagger.Directory
 	}
 	concrete.Source = r.Source
 	concrete.LintConfig = r.LintConfig
+	concrete.GitDir = r.GitDir
 	return json.Marshal(&concrete)
 }
 
@@ -73,6 +75,7 @@ func (r *Avroc) UnmarshalJSON(bs []byte) error {
 	var concrete struct {
 		Source     *dagger.Directory
 		LintConfig *dagger.File
+		GitDir     *dagger.Directory
 	}
 	err := json.Unmarshal(bs, &concrete)
 	if err != nil {
@@ -80,6 +83,7 @@ func (r *Avroc) UnmarshalJSON(bs []byte) error {
 	}
 	r.Source = concrete.Source
 	r.LintConfig = concrete.LintConfig
+	r.GitDir = concrete.GitDir
 	return nil
 }
 
@@ -321,69 +325,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
 			return nil, (*Avroc).Lint(&parent, ctx)
-		case "Publish":
-			var parent Avroc
-			err = json.Unmarshal(parentJSON, &parent)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
-			}
-			var address string
-			if inputArgs["address"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["address"]), &address)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg address", err))
-				}
-			}
-			var username string
-			if inputArgs["username"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["username"]), &username)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
-				}
-			}
-			var password *dagger.Secret
-			if inputArgs["password"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg password", err))
-				}
-			}
-			return (*Avroc).Publish(&parent, ctx, address, username, password)
-		case "PublishGenerator":
-			var parent Avroc
-			err = json.Unmarshal(parentJSON, &parent)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
-			}
-			var name string
-			if inputArgs["name"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["name"]), &name)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg name", err))
-				}
-			}
-			var address string
-			if inputArgs["address"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["address"]), &address)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg address", err))
-				}
-			}
-			var username string
-			if inputArgs["username"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["username"]), &username)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
-				}
-			}
-			var password *dagger.Secret
-			if inputArgs["password"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg password", err))
-				}
-			}
-			return (*Avroc).PublishGenerator(&parent, ctx, name, address, username, password)
 		case "Regeneration":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -409,6 +350,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				err = json.Unmarshal([]byte(inputArgs["gitDir"]), &gitDir)
 				if err != nil {
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg gitDir", err))
+				}
+			}
+			var registry string
+			if inputArgs["registry"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["registry"]), &registry)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg registry", err))
 				}
 			}
 			var repository string
@@ -446,21 +394,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg idTokenRequestToken", err))
 				}
 			}
-			var builder string
-			if inputArgs["builder"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["builder"]), &builder)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg builder", err))
-				}
-			}
-			var invocation string
-			if inputArgs["invocation"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["invocation"]), &invocation)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg invocation", err))
-				}
-			}
-			return (*Avroc).Release(&parent, ctx, gitDir, repository, username, password, idTokenRequestUrl, idTokenRequestToken, builder, invocation)
+			return (*Avroc).Release(&parent, ctx, gitDir, registry, repository, username, password, idTokenRequestUrl, idTokenRequestToken)
 		case "TagScheme":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -489,6 +423,20 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return nil, (*Avroc).TlsEgress(&parent, ctx, platform)
+		case "TracePropagation":
+			var parent Avroc
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var platform string
+			if inputArgs["platform"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["platform"]), &platform)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg platform", err))
+				}
+			}
+			return nil, (*Avroc).TracePropagation(&parent, ctx, platform)
 		case "Vet":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)
@@ -537,7 +485,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg lintConfig", err))
 				}
 			}
-			return New(source, lintConfig), nil
+			var gitDir *dagger.Directory
+			if inputArgs["gitDir"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["gitDir"]), &gitDir)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg gitDir", err))
+				}
+			}
+			return New(source, lintConfig, gitDir), nil
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}

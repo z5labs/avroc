@@ -110,7 +110,7 @@ func (m *Avroc) WorkedExampleImage(
 	if err != nil {
 		return nil, err
 	}
-	return example.image(m.image(p), p), nil
+	return example.image(m.baseImage(p), p), nil
 }
 
 // WorkedExample is the worked example executed rather than read (#129): it
@@ -163,7 +163,7 @@ func (m *Avroc) WorkedExample(ctx context.Context) error {
 		return err
 	}
 
-	image := example.image(m.image(platform), platform)
+	image := example.image(m.baseImage(platform), platform)
 
 	var errs []error
 	if err := example.rules(); err != nil {
@@ -494,7 +494,13 @@ func (e *workedExample) contents() (map[string]imageEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	contents := imageContents(baseImageExecutables())
+	// The copied file is named as a plugin-directory executable so that the
+	// directory itself gets a row: since #217 the base image carries no
+	// /usr/local/bin, and this example's COPY is what creates it — which is
+	// exactly the sentence docs/container/SPEC.md now makes about a derived image.
+	// The entry is then overwritten with what the document actually asked for,
+	// which is the whole point of reading it rather than assuming it.
+	contents := imageContents([]string{path.Base(e.copy.dst)})
 	contents[e.copy.dst] = entry
 	return contents, nil
 }

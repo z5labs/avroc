@@ -6,56 +6,72 @@
 // Package main implements avroc's root Dagger module: the one definition of
 // this repository's pipeline, called by CI and by contributors alike.
 //
-// # Why this wraps the Z5Labs standard pipeline
+// # What this module still owns, now that the archetype builds the image
 //
-// Ci does not implement fmt, vet, lint and `go test -race`. It hands the source
-// to github.com/z5labs/devex/daggerverse/z5labs and lets that module's GoLib
-// archetype run them, which is the same standard every other Z5Labs repository
-// runs. A reimplementation here would be a second definition of what "checked"
-// means in a Z5Labs repository, and two definitions drift: a stage added to the
-// standard would silently not apply to avroc, and a difference in how a stage is
-// invoked would show up as this repository disagreeing with every other one for
-// reasons nobody wrote down. Wrapping costs one dependency and keeps that
-// impossible.
+// This module used to build avroc's published images itself, and about 1,900 of
+// its lines existed for that reason alone. The argument was recorded here and in
+// image.go at length: the Z5Labs standard pipeline's image half produced one
+// scratch image per binary with /app/<binaryName> as entrypoint and nothing
+// else — no PATH, no user, no plugin directory — and avroc's image is a
+// documented public contract that has to promise all three (#126, #127, #128).
 //
-// # Why GoLib, when avroc has four commands
+// That premise is gone (#217). github.com/z5labs/devex/daggerverse/z5labs is now
+// a chainable Go -> App -> Publish API, and every one of the three things avroc
+// needed is the archetype's own: /usr/local/bin is its fixed executable
+// directory with PATH composed from the same constant, 65532:65532 is its pinned
+// non-root user, and App.WithApp composes one application's executable into
+// another's plugin directory, which is exactly what a generator image is. So the
+// image, the multi-platform publish, the tag family, the recursive signature and
+// the attestations are all the standard's, and this module states the version and
+// the repositories and gets out of the way.
 //
-// The library archetype is not a claim that avroc is a library. avroc has four
-// `package main` binaries under cmd/, so the usual reason to call GoLib — there
-// being no main package for the image half of the standard to act on — does not
-// apply here. Two reasons that do:
+// Three things did not move, and each is a fact about *this* project rather than
+// about how an image gets built:
 //
-// The check stages are identical either way. GoApp and GoLib route fmt, vet,
-// lint and `go test -race` through the same shared check in the standard, so
-// choosing GoLib costs this pipeline nothing in coverage.
+//   - The contract checks. ImageContract, GeneratorImageContract, Regeneration,
+//     WorkedExample, CompanionModule, TlsEgress, TracePropagation and
+//     IrDescriptorSet are assertions about docs/container/SPEC.md and
+//     docs/plugin/SPEC.md, and every one of them holds against a container
+//     whoever built it. They are also the evidence that adopting the archetype
+//     changed nothing a consumer can see, which is the only thing that makes a
+//     change of this size reviewable.
+//   - Whether this commit is a release. The archetype takes a version from its
+//     caller and derives the tag family from it; reading the refs at HEAD to
+//     decide whether there is a release here at all, refusing two version tags
+//     and refusing `+build` metadata stay in release.go, because they are facts
+//     about this repository's release process. TagScheme is what checks them.
+//   - The set of generators, and what each one is. builtinGenerators is this
+//     repository's list; the archetype has no opinion about it.
 //
-// GoApp's image half is not the image avroc needs. It builds a scratch image
-// per binary with /app/<binaryName> as entrypoint and nothing else: no PATH, no
-// USER, no plugin directory. avroc's published image is a documented public
-// contract that has to promise all three, because generator images are built
-// FROM it and avroc discovers generators on PATH. GoApp's output cannot satisfy
-// that as-is, and deciding how it should is a live design question that belongs
-// to the base-image story rather than being pre-decided here by an archetype.
+// # Why the stage functions exist alongside Ci
 //
-// So this module takes the checks from the standard and builds the image itself,
-// in image.go, which records why that was chosen over extending GoApp upstream
-// or accepting a non-scratch base (#126). Moving the *checks* to GoApp remains a
-// change to which factory New calls, plus dropping .git from the ignore list
-// below; it is not a change to what the pipeline is.
-//
-// # Why the stage functions exist alongside it
-//
-// GoLib exposes only the whole pipeline, and waiting on four stages to learn
-// that one file is unformatted is not the loop to develop in. So Fmt, Vet, Lint
-// and Test are here too. They are not a second implementation: each one drives
-// the same github.com/z5labs/devex/daggerverse/go builder that the standard
-// pipeline drives, with one stage enabled instead of four, against the same lint
-// configuration. Both dependencies are pinned to a single devex commit for that
-// reason — a bump has to move them together, or a stage run on its own stops
-// being the stage Ci runs.
+// GoChain.Ci exposes only the whole pipeline, and waiting on four stages to
+// learn that one file is unformatted is not the loop to develop in. So Fmt, Vet,
+// Lint and Test are here too. They are not a second implementation: each one
+// drives the same github.com/z5labs/devex/daggerverse/go builder that the
+// standard pipeline drives, with one stage enabled instead of four, against the
+// same lint configuration. All four devex dependencies are pinned to a single
+// commit for that reason — a bump has to move them together, or a stage run on
+// its own stops being the stage Ci runs.
 //
 // Ci is what CI calls and what a contributor should run before pushing. The
 // stage functions are for narrowing down what Ci reported.
+//
+// # Why .git is bound separately from the source
+//
+// The archetype stamps every binary with the short HEAD SHA and annotates every
+// image with the commit, its committer time and the origin remote, so building
+// an App needs real git metadata — which the ignore list on New deliberately
+// keeps out of Source, because none of fmt, vet, lint or test reads it and
+// leaving it in would make every commit a cache miss for all four.
+//
+// Both are had by binding it as its own argument, the way Release already took
+// one, and folding it back in on the single path that builds an App
+// (appSource). The check stages keep the tree they always had; the image path
+// gets the metadata it needs; and nothing that was cache-stable per commit
+// became a cache miss per commit. The workflow half of that is
+// .github/workflows/build.yaml, which fetches full history because an image is
+// built on every pull request.
 package main
 
 import (
@@ -75,6 +91,10 @@ type Avroc struct {
 	Source *dagger.Directory
 	// +private
 	LintConfig *dagger.File
+	// GitDir is the repository's .git, bound apart from Source so that the
+	// check stages never see it. Only appSource folds it back in.
+	// +private
+	GitDir *dagger.Directory
 }
 
 // New binds the repository to the pipeline.
@@ -82,15 +102,27 @@ type Avroc struct {
 // source defaults to the repository root, so `dagger call ci` from a checkout
 // needs no arguments. The ignore list drops what no check stage reads: .git is
 // excluded because none of fmt, vet, lint or test looks at git metadata, and
-// leaving it in would make every commit a cache miss for all four. That changes
-// if the archetype ever becomes GoApp — it stamps binaries from the refs at HEAD
-// and does need real git metadata, so .git has to come off this list in the same
-// change that switches factories, and .github/workflows/build.yaml has to stop
-// checking out shallow in that same change.
+// leaving it in would make every commit a cache miss for all four.
+//
+// It stays excluded now that the archetype builds the image (#217), rather than
+// coming off the list as the comment here used to predict. The archetype does
+// need real git metadata — it stamps the short HEAD SHA into every binary and
+// annotates every image with the commit, its committer time and the origin — but
+// it needs it on one path out of nine, and folding .git into Source would have
+// bought that by making fmt, vet, lint and test miss their cache on every
+// commit. gitDir is that metadata bound as its own input, and appSource is the
+// only thing that puts the two back together.
 //
 // bin and the per-issue worktrees under .claude go too: both are local build
 // output, neither is committed, and both would otherwise vary between a
 // contributor's checkout and CI's for no effect on any stage.
+//
+// gitDir defaults to the repository's own .git. It is a *directory* rather than
+// something derived, because git's own answers are what the archetype stamps and
+// anything this module computed would be a build identity a caller could have
+// supplied. Note that a git *worktree* has a .git file rather than a directory,
+// so the stages that build an image are the ones that do not run from one; that
+// was already true of Release and is now true of the image checks too.
 //
 // lintConfig defaults to the repository's own .golangci.yml. It is passed
 // explicitly rather than left to the standard pipeline's bundled default so that
@@ -106,11 +138,14 @@ func New(
 	source *dagger.Directory,
 	// +optional
 	lintConfig *dagger.File,
+	// +optional
+	// +defaultPath="/.git"
+	gitDir *dagger.Directory,
 ) *Avroc {
 	if lintConfig == nil {
 		lintConfig = source.File(".golangci.yml")
 	}
-	return &Avroc{Source: source, LintConfig: lintConfig}
+	return &Avroc{Source: source, LintConfig: lintConfig, GitDir: gitDir}
 }
 
 // Ci runs the whole pipeline: fmt, vet, golangci-lint and `go test -race`, as
@@ -125,9 +160,43 @@ func New(
 // +check
 // +cache="session"
 func (m *Avroc) Ci(ctx context.Context) error {
+	return m.goChain().Ci(ctx)
+}
+
+// goChain is the standard Go chain bound to this repository's source and
+// configured the one way this repository is checked.
+//
+// It is one helper rather than a call at each site because Ci and the App path
+// have to agree about the source they are given and about the lint
+// configuration: a chain configured twice is two definitions of what "checked"
+// means here, which is the thing wrapping the standard exists to prevent.
+//
+// WithTest(true) is written out rather than left to the default. The archetype's
+// race detector is on unless a caller says otherwise, so the argument is
+// redundant today and is stated anyway — avroc runs generators concurrently, and
+// "the race detector is on because nobody turned it off" is not the same claim as
+// "the race detector is on because this repository asked for it".
+//
+// The chain carries no .git: Ci does not build, and the stages it does run are
+// the ones the ignore list on New exists to keep cache-stable. appSource is
+// where the metadata arrives.
+func (m *Avroc) goChain() *dagger.Z5LabsGoChain {
 	return dag.Z5Labs().
-		GoLib(m.Source, dagger.Z5LabsGoLibOpts{LintConfig: m.LintConfig}).
-		Ci(ctx)
+		Go(m.Source).
+		WithLint(dagger.Z5LabsGoChainWithLintOpts{Config: m.LintConfig}).
+		WithTest(true)
+}
+
+// appSource is the source tree an App is built from: this repository's, with
+// its git metadata folded back in.
+//
+// This is the only place the two are put together, and that is the whole of
+// #217's answer to a problem the old comment on New predicted: the archetype
+// stamps binaries and annotates images from the refs at HEAD, so it needs real
+// git metadata, and the check stages need a tree that does not change when a
+// commit is made. One argument, folded in on one path, gives both.
+func (m *Avroc) appSource() *dagger.Directory {
+	return m.Source.WithDirectory(".git", m.GitDir)
 }
 
 // Fmt reports any file that gofmt would rewrite, as a diff.
@@ -379,10 +448,19 @@ func generateWorkedExample(
 		Directory(run.root)
 }
 
-// pluginDir is where the binaries go, and it is docs/container/SPEC.md's plugin
-// directory rather than an arbitrary one: avroc discovers generators on PATH, so
-// the run container's layout is the published image's layout. image.go reads the
-// same constant, which is what makes that sentence true rather than aspirational.
+// pluginDir is docs/container/SPEC.md's plugin directory — the one directory on
+// the published image's PATH that an extension's executables land in, and the one
+// the archetype composes a generator into (#217).
+//
+// The regeneration container below puts all four binaries here, which is not quite
+// the published layout any more: since #217 the archetype puts the *application's
+// own* binary in appDir and names it absolutely in the entrypoint, so the image has
+// avroc in one place and its generators in another. What that container is
+// reproducing is the half that matters to a generation — the generators are found
+// on PATH, by the name a manifest asked for, in a scratch container with no shell —
+// and it names avroc by absolute path for the reason the comment above gives, which
+// is that PATH is one of the things this check varies. image.go reads the same
+// constant for the listing, so the day the plugin directory moves, both move.
 const pluginDir = "/usr/local/bin"
 
 // regenerationRun is one generation's arrangement of everything the output must

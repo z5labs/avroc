@@ -145,34 +145,6 @@ func (m *Avroc) GeneratorBundleImage(
 	return m.generatorBundleImage(p), nil
 }
 
-// PublishGenerator pushes one built-in generator's image to address as a
-// multi-platform index, and returns the digest-qualified reference it pushed.
-//
-// One function and one address per generator rather than a loop over a registry
-// prefix: this pushes one reference, and which references a release consists of
-// is Release's (#128), for the same reason Publish takes a full reference.
-func (m *Avroc) PublishGenerator(
-	ctx context.Context,
-	// The generator to publish, by the name a manifest asks for it by.
-	name string,
-	// The full image reference to push, including the tag.
-	address string,
-	// The registry username to authenticate as. Both this and password are
-	// needed for a registry that requires authentication.
-	// +optional
-	username string,
-	// The registry password or token to authenticate with.
-	// +optional
-	password *dagger.Secret,
-) (string, error) {
-	if !slices.Contains(builtinGenerators(), name) {
-		return "", fmt.Errorf("generator %q is not one avroc ships: %v", name, builtinGenerators())
-	}
-	return publishIndex(ctx, address, username, password, func(p dagger.Platform) *dagger.Container {
-		return m.generatorImage(p, name)
-	})
-}
-
 // GeneratorImageContract checks every published generator image against the
 // contract its base makes (#127).
 //
@@ -224,54 +196,113 @@ func (m *Avroc) GeneratorImageContract(
 	return errors.Join(errs...)
 }
 
-// generatorImage is one generator's image for one platform, and the one
-// definition of it: GeneratorImage, PublishGenerator, the bundle and the contract
-// check all come through here.
+// generatorApp is one generator as an application in its own right, before it is
+// composed into anything.
 //
-// The two calls are FROM and COPY. The owner and the mode are the derived
-// Dockerfile's `--chown=65532:65532 --chmod=0755`, which docs/container/SPEC.md
-// asks for so that the file is the image user's and executable; a world-readable
-// world-executable file would satisfy the contract without them, which is what
-// makes leaving them out a latent bug rather than an immediate one.
+// It is assembled through the archetype's generic App constructor rather than
+// through its Go chain, and that is a consequence of avroc having four commands in
+// one module: the chain names the binary it builds after go.mod's module path, so
+// every one of avroc's four would be called `avroc` and three of them would land
+// on top of each other in the plugin directory. The generic constructor is the
+// sanctioned seam for an executable the chain did not name — it produces the same
+// App, with the same hardening, the same annotations, the same modes and the same
+// publish — and it takes the name as an argument, which is the one thing that has
+// to be `avroc-gen-<name>` for avroc to find it on PATH at all.
 //
-// Nothing else is set. In particular Cmd is left empty even though a derived
-// image MAY set it: a generator image that supplied a default subcommand would be
-// answering a question the caller is entitled to answer, and every invocation in
-// the documentation passes `generate` explicitly anyway.
-func (m *Avroc) generatorImage(platform dagger.Platform, name string) *dagger.Container {
+// What that costs is stated rather than hidden. A prebuilt variant is not stamped
+// with main.version and main.commit, and its image carries the version annotation
+// without the revision, the created time and the source: those are facts the chain
+// observed about a tree it compiled, and a caller asserting them would be
+// asserting a provenance nobody can check. Neither is a loss here — avroc's
+// generators declare no version variables, and the generator *images* are composed
+// onto the base App, whose annotations are the chain's and are what a release
+// carries.
+//
+// The executable arrives with a document like every other byte in an image, and
+// the document is dag.Go().Spdx over that binary: a Go executable's SBOM is
+// derived from the compiled artifact and therefore cannot disagree with what it
+// describes, which is exactly what the archetype uses for its own. The digest is
+// checked against the bytes at publish time, so a document about a different
+// binary fails the release rather than shipping.
+//
+// One variant per published platform, stated rather than inferred: a *dagger.File
+// carries no architecture, and an App whose platform set does not match the base's
+// exactly is refused in both directions — which is the check that stops an arm64
+// index shipping an amd64 generator.
+func (m *Avroc) generatorApp(platform []dagger.Platform, name, version string) *dagger.Z5LabsApp {
 	exe := generatorExecutable(name)
 
-	return m.image(platform).WithFile(
-		pluginDir+"/"+exe,
-		m.binaries(platform).File(exe),
-		dagger.ContainerWithFileOpts{Owner: imageUser, Permissions: executableMode},
-	)
+	app := dag.Z5Labs().App(version)
+	for _, p := range platform {
+		binary := m.binaries(p).File(exe)
+		app = app.WithVariant(p, binary, dag.Go().Spdx(binary, m.Source),
+			dagger.Z5LabsAppBuilderWithVariantOpts{Name: exe})
+	}
+	return app.Build()
 }
 
-// generatorBundleImage is the image holding every built-in generator, built by
-// stacking the published generator images rather than by copying binaries out of
-// the build.
+// generatorImageApp is one generator's published image: the base App with that
+// generator's App composed into it (#127, #217).
 //
-// That is the difference between demonstrating the mechanism and demonstrating
-// that this repository can put four files in a directory: each executable is
-// taken from the image that publishes it, at the promised path, which is exactly
-// what somebody combining two generator images they did not build would write.
-func (m *Avroc) generatorBundleImage(platform dagger.Platform) *dagger.Container {
-	names := builtinGenerators()
+// Composition is what a derived Dockerfile's FROM and COPY were, and it is
+// strictly more than they were: the executable is matched platform by platform, it
+// lands in the plugin directory under its own file name at the mode an executable
+// needs, its document joins the base's so the image's SBOM accounts for it, its
+// version is recorded so something says which release of the generator shipped,
+// and the composed entry is exec'd in every variant before the first byte is
+// pushed. A collision with the base or with a generator composed earlier is
+// refused rather than layered over.
+//
+// Nothing else is set. In particular Cmd stays empty even though a derived image
+// MAY set it: a generator image that supplied a default subcommand would be
+// answering a question the caller is entitled to answer, and every invocation in
+// the documentation passes `generate` explicitly anyway. The archetype makes that
+// structural rather than a discipline — there is no seam on an App for an
+// entrypoint, a Cmd, a user or an environment variable.
+func (m *Avroc) generatorImageApp(name, version string) *dagger.Z5LabsApp {
+	platforms := imagePlatforms()
+	return m.baseApp(version).WithApp(m.generatorApp(platforms, name, version))
+}
 
-	// FROM the first generator's image, so the bundle is a derived image of a
-	// derived image — the case that would break if a generator image had quietly
-	// stopped being a valid base.
-	image := m.generatorImage(platform, names[0])
-	for _, name := range names[1:] {
-		path := pluginDir + "/" + generatorExecutable(name)
-		image = image.WithFile(
-			path,
-			m.generatorImage(platform, name).File(path),
-			dagger.ContainerWithFileOpts{Owner: imageUser, Permissions: executableMode},
-		)
+// generatorImage is one generator's image for one platform.
+//
+// It is an accessor onto the App for the same reason baseImage is: the container
+// it hands back is the one a publish would push, which is what lets a check read
+// it and mean something.
+func (m *Avroc) generatorImage(platform dagger.Platform, name string) *dagger.Container {
+	return m.generatorImageApp(name, devVersion).Container(platform)
+}
+
+// generatorBundleApp is the App holding every built-in generator: the base with
+// all three composed into it.
+//
+// It used to be built by stacking the published generator images — FROM the first
+// and `COPY --from` the rest — on the grounds that copying an executable out of
+// the image that publishes it is what an adopter combining two strangers' images
+// writes. Composition replaces that with something that does more of what the
+// stacking was standing in for: each generator arrives as a whole application with
+// its own document and its own version, the collision surface is checked rather
+// than layered over, and every one of the three is run in the finished image before
+// it is published. What is lost is the transitivity the old shape demonstrated
+// incidentally — a derived image of a derived image — and the archetype states that
+// composition is transitive and refuses nothing about it, so nothing here relies on
+// having shown it.
+//
+// example/ is what it is checked against, since that project's manifest names all
+// three; see checkImageGenerates.
+func (m *Avroc) generatorBundleApp(version string) *dagger.Z5LabsApp {
+	platforms := imagePlatforms()
+
+	app := m.baseApp(version)
+	for _, name := range builtinGenerators() {
+		app = app.WithApp(m.generatorApp(platforms, name, version))
 	}
-	return image
+	return app
+}
+
+// generatorBundleImage is the bundle for one platform, as a container.
+func (m *Avroc) generatorBundleImage(platform dagger.Platform) *dagger.Container {
+	return m.generatorBundleApp(devVersion).Container(platform)
 }
 
 // generatorImageContractOn checks one platform's generator images.
@@ -284,7 +315,7 @@ func (m *Avroc) generatorImageContractOn(ctx context.Context, platform dagger.Pl
 
 	for _, name := range builtinGenerators() {
 		image := m.generatorImage(platform, name)
-		contents := append(baseImageExecutables(), generatorExecutable(name))
+		contents := append(baseImageExecutables(), generatorExecutable(name)) //nolint:gocritic // the base ships none, and appending is what says "the base's plus this one"
 
 		for _, err := range m.checkImageConfig(ctx, image) {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))

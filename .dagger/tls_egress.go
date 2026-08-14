@@ -153,7 +153,7 @@ func (m *Avroc) TlsEgress(
 		name  string
 		image *dagger.Container
 	}{
-		{"the base image", m.image(p)},
+		{"the base image", m.baseImage(p)},
 		{"the bundle image", m.generatorBundleImage(p)},
 	}
 

@@ -66,12 +66,16 @@ rather than read: the plugin directory and its place on `PATH`, the entrypoint,
 the empty `Cmd`, the *absence* of a working directory, the pinned non-root UID,
 the absence of a shell, and the `FileDescriptorSet`'s path.
 
-The base ships the CLI and **no generator**. avroc's own three are images built
-`FROM` it, one `COPY` each, exactly as a stranger's generator image is
-(`generator-image --name go|json|pcf`), and `generator-image-contract` checks
-them: the configuration inherited unchanged, a filesystem that is the base's plus
-exactly one executable, each image generating with its own generator through the
-inherited entrypoint, and the combined image reproducing the committed
+The base ships **no generator**, and since #217 the CLI is not in the plugin
+directory either — the shared archetype puts an application's own binary in its own
+directory and names it absolutely in the entrypoint, and
+[`docs/container/SPEC.md`](docs/container/SPEC.md) had always said the CLI's own
+path was implementation detail. avroc's own three generators are the base image
+with one generator composed into it (`generator-image --name go|json|pcf`), which
+is what a stranger's `COPY` is, and `generator-image-contract` checks them: the
+configuration inherited unchanged, a filesystem that is the base's plus exactly one
+executable, each image generating with its own generator through the inherited
+entrypoint, and the combined image reproducing the committed
 [`example/`](example/) as itself and as an overridden UID.
 
 It is a check because every one of those promises is depended on from a
@@ -90,9 +94,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/example:/work" -w /work \
   <image> generate
 ```
 
-`dagger call publish --address …` and `dagger call publish-generator --name …
---address …` push one multi-platform index to the reference you give them, which
-is how to put an image on a registry of your own.
+There is no `dagger call publish`. Publishing is `dagger call release`'s, and only
+the release workflow can run it: every published digest is signed and carries
+provenance whose identity comes from an OIDC token exchange, and a publish the
+pipeline cannot produce provenance for fails rather than publishing without it. To
+look at an image, export the tarball above; to try one on a registry of your own,
+`docker load` it and `docker push` it under a name you own.
 
 ### The companion Dagger module
 
@@ -161,11 +168,16 @@ so it is a stage of its own:
 dagger call tag-scheme
 ```
 
-Each published digest is signed with `cosign` keyless, with a SLSA provenance
-statement and an SPDX SBOM per executable per platform attached beside it. There
-is no avroc signing key: the identity is the release workflow, certified per run
-from the OIDC token GitHub mints for it. `docs/container/SPEC.md`'s [Verifying a
-signature](docs/container/SPEC.md#verifying-a-signature) is the consumer's half.
+Each published digest is signed keyless, with a SLSA provenance statement and an
+SPDX and a CycloneDX document per platform describing the whole image attached
+beside it as OCI referrers. There is no avroc signing key: the identity is the
+release workflow, certified per run from the OIDC token GitHub mints for it, and a
+publish that cannot produce provenance fails rather than publishing without it.
+`docs/container/SPEC.md`'s [Verifying a
+signature](docs/container/SPEC.md#verifying-a-signature) is the consumer's half, and
+it is where the two things #217 changed for a consumer are written down —
+`cosign verify-attestation` no longer finds anything, and the SBOM's subject is the
+image.
 
 ### Getting the tools
 
@@ -247,7 +259,7 @@ it is the root module calling the companion one.
 
 `ci` does not implement the four stages. It hands the source to
 [`github.com/z5labs/devex/daggerverse/z5labs`](https://github.com/z5labs/devex/tree/main/daggerverse/z5labs)
-and lets that module's `GoLib` archetype run them — the same standard every other
+and lets that module's `Go` chain run them — the same standard every other
 Z5Labs repository runs.
 
 Reimplementing them here would be a second definition of what "checked" means in
@@ -258,32 +270,33 @@ wrote down. Wrapping costs one dependency and makes that impossible. The full
 reasoning, including why the stage functions are not a fork of it, is in
 [`.dagger/main.go`](.dagger/main.go)'s package comment.
 
-Both dependencies in [`dagger.json`](dagger.json) are pinned to one `devex`
+All four `devex` dependencies in [`dagger.json`](dagger.json) are pinned to one
 commit, so a bump has to move them together — otherwise a stage run on its own
 stops being the stage `ci` runs.
 
-### `GoLib`, even though avroc has four commands
+### The images are the archetype's too, since #217
 
-`GoLib` is not a claim that avroc is a library. There are four `package main`
-binaries under [`cmd/`](cmd/), so the usual reason to call `GoLib` — no main
-package for the image half of the standard to act on — does not apply here. Two
-reasons that do:
+This module used to build avroc's published images itself, and about 1,900 of its
+lines existed for that reason: the standard pipeline's image half produced one
+`scratch` image per binary with `/app/<binaryName>` as entrypoint and nothing else —
+no `PATH`, no `USER`, no plugin directory — and avroc's image is a public contract
+that has to promise all three.
 
-- **The check stages are identical either way.** `GoApp` and `GoLib` route fmt,
-  vet, lint and `go test -race` through the same shared check, so the choice
-  costs this pipeline nothing in coverage.
-- **`GoApp`'s image half is not the image avroc needs.** It builds a `scratch`
-  image per binary with `/app/<binaryName>` as entrypoint and nothing else: no
-  `PATH`, no `USER`, no plugin directory. avroc's published image is a documented
-  public contract that has to promise all three, because generator images are
-  built `FROM` it and avroc discovers generators on `PATH`.
+The refactored `z5labs` module makes every one of those the standard's own, so
+`image`, `generator-image`, `generator-bundle-image` and `release` are now thin
+things over its `Go` → `App` → `Publish` chain. What stayed here is the part that is
+about *this* project: the contract checks, the decision about whether a commit is a
+release, and the list of generators avroc ships.
 
-So this module takes the checks, and the base-image work owns how images get
-built — whether by extending `GoApp` upstream in `devex`, building the image
-here, or using a non-`scratch` base. Moving to `GoApp` is a change to which
-factory `New` calls, plus dropping `.git` from its ignore list and restoring
-`fetch-depth: 0` in the workflow, because a `GoApp` stamps binaries from the refs
-at HEAD and does read git metadata.
+One consequence a contributor meets immediately: **the stages that build an image
+need real git metadata**, because the archetype stamps every binary with the short
+HEAD SHA and annotates every image with the commit and the origin. `New` binds
+`.git` as its own argument and folds it in only on the path that builds an App, so
+`fmt`, `vet`, `lint` and `test` keep the cache-stable tree they always had — but a
+git *worktree* has a `.git` file rather than a directory, so `image-contract`,
+`generator-image-contract`, `worked-example`, `companion-module`, `tls-egress` and
+`trace-propagation` do not run from one. Run them from an ordinary clone. That was
+already true of `release`.
 
 ## Linting
 

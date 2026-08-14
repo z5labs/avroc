@@ -88,11 +88,11 @@ stating what each half of it buys. The path is what a `COPY` line writes; the
 manifest asks for. Either one alone is useless, which is why they are one
 requirement here rather than two facts in different sections.
 
-The image **MUST** set `Env` such that `PATH` contains `/usr/local/bin`, and the
-directory **MUST** exist in the base image even when it is empty, so that a
-`COPY` into it never depends on the builder creating it. The base image holds one
-executable in it — the avroc CLI — and **no generator**: avroc's own three are
-images built `FROM` the base, exactly as a stranger's is, and
+The image **MUST** set `Env` such that `PATH` contains `/usr/local/bin`. The base
+image holds **no executable** in it — not a generator, and since #217 not the
+avroc CLI either, whose own path is [implementation
+detail](#the-clis-own-path-is-not-part-of-the-contract). avroc's own three
+generators are images built `FROM` the base, exactly as a stranger's is, and
 [avroc's own generators](#avrocs-own-generators) is where they are described
 (#127). A derived image
 **MUST NOT** remove the directory from `PATH` or shadow it with an earlier entry
@@ -100,6 +100,24 @@ containing an executable of the same name; the plugin contract's rule that
 [the earliest `PATH` match
 wins](../plugin/SPEC.md#discovery) is exactly what makes that a way to silently
 substitute a generator.
+
+**The directory does not exist in the base image until something is copied into
+it**, and a `COPY` is what creates it (#217). This document required its presence
+when empty, on the grounds that a `COPY` should not depend on the builder creating
+its destination; that requirement is **withdrawn**, because the shared pipeline
+avroc's images are now built by refuses to put content in any directory the
+image's `PATH` resolves against — content with no architecture that something
+could find by name is how an `arm64` image comes to run an `amd64` executable —
+and the sanctioned way in is to compose a whole application, which for the base
+would mean shipping a generator in it.
+
+Nothing a derived image does changes: every OCI builder creates a `COPY`'s
+destination directory, `--chown` and `--chmod` on that `COPY` apply to it, and the
+[worked example](#worked-example-adding-a-generator) is built and run by the
+pipeline on every pull request with no instruction added. What is lost is only the
+belt-and-braces promise, and it is called out in the release notes of the release
+that withdraws it rather than left to be discovered — see [how a covered thing
+would change](#how-a-covered-thing-would-change).
 
 An executable copied there **MUST** be executable by the [image's
 user](#the-user) and **MUST** be a statically linked native executable for the
@@ -215,12 +233,12 @@ a path that exists to be mounted over, and [No shell](#no-shell)'s "the base is
 `scratch` plus the files this document names" is a better guarantee without it.
 
 There is a second reason, and it is deliberately *not* stated as a property of
-this image: the shared pipeline this project is moving its build onto sets no
+this image: the shared pipeline this project's build has since moved onto sets no
 working directory and states that as a decision rather than an omission (#217).
 How the image is built is [out of
 scope](#how-the-image-is-built-and-published) here, so that is not a reason a
-consumer can check and it is not offered as one — it is why the promise is being
-spent now, while it can still be, rather than why it was not worth keeping.
+consumer can check and it is not offered as one — it is why the promise was spent
+then, while it still could be, rather than why it was not worth keeping.
 
 > **Breaking change.** This is one. Every `docker run` in this document, in
 > [`README.md`](../../README.md) and in [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
@@ -228,10 +246,13 @@ spent now, while it can still be, rather than why it was not worth keeping.
 >
 > Two things follow, and they are requirements on the release rather than
 > descriptions of one already made. It **MUST NOT** ship in a patch release; it
-> ships in the next minor, beside the other breaks #217 carries — attestation
-> discovery becoming referrers-only, and the SBOM's subject moving from the
-> executable to the image. And that release's notes **MUST** name it, with the
-> invocation a caller has to write instead, which is what [How a covered thing
+> ships in the next minor, beside the other four breaks #217 carries — attestation
+> discovery becoming referrers-only, the SBOM's subject moving from the executable
+> to the image, the [plugin directory](#the-plugin-directory) no longer being
+> present-and-empty in the base, and [no directory being
+> 65532-owned](#what-it-means-for-ownership). And that release's notes **MUST** name
+> every one of them, this one with the invocation a caller has to write instead,
+> which is what [How a covered thing
 > would change](#how-a-covered-thing-would-change) requires of a guarantee that is
 > withdrawn rather than moved.
 >
@@ -267,13 +288,22 @@ the number other people's tooling already expects.
 
 ### What it means for ownership
 
-The [plugin directory](#the-plugin-directory) is owned by 65532:65532 in the base
-image, and is the only directory in it that is: there is no [working
-directory](#the-working-directory) in the image to own. A
-derived image copying a plugin in **SHOULD** use `--chown=65532:65532` and
-**MUST** ensure the result is readable and executable by that user; a
-world-readable, world-executable file satisfies this without the `--chown`,
-which is what makes the omission a latent bug rather than an immediate one.
+**No directory in the image is owned by 65532:65532**, and none needs to be: the
+[plugin directory](#the-plugin-directory) is not in the base image at all until a
+`COPY` creates it, there is no [working directory](#the-working-directory) in the
+image to own, and every directory the image does carry is root-owned and
+world-traversable, which is what an executable inside one needs in order to be
+reachable (#217). The plugin directory was 65532-owned before that; nothing
+depended on it, because a `COPY` in a derived image runs as root in the builder.
+
+What a consumer does depend on is the **executable**. A derived image copying a
+plugin in **SHOULD** use `--chown=65532:65532` and **MUST** ensure the result is
+readable and executable by that user; a world-readable, world-executable file
+satisfies this without the `--chown`, which is what makes the omission a latent bug
+rather than an immediate one. Every file avroc's own images ship is world-readable
+and every executable in them is world-executable, so an
+[overridden UID](#writing-files-a-caller-can-read) runs the same image the same
+way.
 
 Files avroc writes are created by the process, so they are owned by whatever UID
 the container is actually running as — 65532 by default.
@@ -564,10 +594,31 @@ about which of the two things a signature is on (#128):
   under it, so the manifest a consumer's runtime actually pulls is signed too,
   not only the one their tag named.
 - **Attestations** — a [SLSA v1](https://slsa.dev/spec/v1.0/provenance)
-  provenance statement, and an SPDX SBOM per executable per platform — are
-  attached to the **published index digest**, and to that alone. They are
-  statements about the release, and the release is the index; a per-platform
-  manifest carries none of its own, and looking for one there finds nothing.
+  provenance statement, and an **SPDX and a CycloneDX document per platform
+  describing the whole image** — are attached to the **published index digest**,
+  and to that alone. They are statements about the release, and the release is
+  the index; a per-platform manifest carries none of its own, and looking for one
+  there finds nothing.
+
+Two things about the attestations changed in the release that adopted the shared
+publishing pipeline (#217), and both are visible to somebody running a command
+this document used to print:
+
+- **The SBOM's subject is the image, not an executable.** It was one SPDX document
+  per executable per platform, each tied to that binary's SHA-256. It is now one
+  SPDX document and one CycloneDX document per platform, each describing every byte
+  in that platform's image — the executables and the
+  [`FileDescriptorSet`](#the-ir-filedescriptorset) alike — assembled from one
+  document per thing that entered the image. That is a strictly larger claim about
+  a strictly larger subject, and a consumer reading an SBOM to find out what is in
+  the image now gets an answer about the image.
+- **They are discoverable as OCI referrers and by no other route.** They were
+  attached under cosign's tag convention as well, which is what let
+  `cosign verify-attestation` find them. They are not any more, so that command
+  reports `no matching attestations` even though the documents are there —
+  cosign looks under the tag convention and they are not under it. The signature
+  is unaffected: it is still in cosign's own layout, and `cosign verify` is
+  unchanged.
 
 Signing is **keyless**: there is no
 avroc public key to obtain or trust. The signing identity is the release workflow
@@ -600,21 +651,36 @@ $ cosign verify \
     ghcr.io/z5labs/avroc:v0
 ```
 
-The same two flags verify the attestations, with the predicate type naming which
-one is wanted — `slsaprovenance1` for the provenance and `spdxjson` for the
-SBOMs:
+`cosign verify-attestation` **does not find the attestations**, and this is worth
+stating rather than leaving a reader to conclude the release did not produce any.
+This document printed a `cosign verify-attestation --type slsaprovenance1` example
+until #217; that command now exits non-zero with `no matching attestations`,
+because it looks for them under cosign's tag convention and they are attached as
+[OCI
+referrers](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#listing-referrers)
+alone.
+
+What finds them is a client that speaks referrers, including the fallback tag
+scheme that registries with no referrers API — `ghcr.io` among them — are read
+through:
 
 ```console
-$ cosign verify-attestation --type slsaprovenance1 \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    --certificate-identity 'https://github.com/z5labs/avroc/.github/workflows/release.yaml@refs/tags/v0.2.0' \
-    ghcr.io/z5labs/avroc:v0.2.0
+$ oras discover ghcr.io/z5labs/avroc:v0.2.0
 ```
 
-Every one of these works identically against a [generator
-image](#avrocs-own-generators) — substitute `ghcr.io/z5labs/avroc-gen-go` — and
-against a digest, which is the reference to verify when the answer has to stay
-true afterwards.
+That lists one referrer per document, each with an artifact type saying which it
+is: `application/vnd.in-toto+json` for the provenance,
+`application/spdx+json` and `application/vnd.cyclonedx+json` for the two SBOMs
+per platform. Each referrer manifest holds one layer, whose
+`org.opencontainers.image.title` annotation names the platform it describes —
+`avroc-linux-amd64.spdx.json` — which is how the right one of several is chosen.
+Pull one by digest with `oras pull`, and anchor it to a digest `cosign verify` has
+already checked rather than to a tag, because a tag moves.
+
+`cosign verify` above and `oras discover` here work identically against a
+[generator image](#avrocs-own-generators) — substitute
+`ghcr.io/z5labs/avroc-gen-go` — and against a digest, which is the reference to use
+when the answer has to stay true afterwards.
 
 Nothing is attached to a **tag**, only ever to a digest. An attestation about a
 name that moves would say nothing, and this is why verifying a moving tag is
@@ -881,7 +947,7 @@ to any of them is a breaking change:
 
 | Guarantee | Value |
 | --- | --- |
-| [The plugin directory](#the-plugin-directory) | `/usr/local/bin`, on `PATH` |
+| [The plugin directory](#the-plugin-directory) | `/usr/local/bin`, on `PATH`; created by the `COPY` that fills it |
 | [The entrypoint](#the-entrypoint) | Is the avroc CLI, and takes its arguments |
 | [The working directory](#the-working-directory) | None: `WorkingDir` is empty, and the caller points it at the mount |
 | [The user](#the-user) | UID 65532, GID 65532, non-root, overridable |
@@ -889,16 +955,17 @@ to any of them is a breaking change:
 | [No certificate authorities](#no-certificate-authorities) | Absent; TLS egress verifies against nothing, and plaintext to a collector on the local network is the supported shape |
 | [The `FileDescriptorSet`](#the-ir-filedescriptorset) | `/usr/local/share/avroc/ir.binpb` |
 | [Tags](#tags-and-what-pinning-one-buys) | A published full-version tag never moves |
-| [Signatures](#verifying-a-signature) | The published index and each manifest under it are signed; the index digest carries provenance and an SBOM |
+| [Signatures](#verifying-a-signature) | The published index and each manifest under it are signed; the index digest carries provenance and an SBOM per platform, discoverable as OCI referrers |
 | [avroc's own generators](#avrocs-own-generators) | One image each, `FROM` the base, adding one executable and changing nothing else |
 
 Not covered, and explicitly implementation detail. Depending on any of it is
 depending on something that may change in a patch release, with no notice:
 
 - The base image and everything in the filesystem other than the files named
-  above — their existence, their contents and their paths.
+  above — their existence, their contents and their paths. `HOME`'s directory is
+  one of them, and so is the directory the CLI lives in.
 - The path of the `avroc` executable itself, and the literal value of
-  `Entrypoint`.
+  `Entrypoint`. It moved out of the plugin directory in #217 and may move again.
 - The value of `PATH` beyond its containing `/usr/local/bin`, and the value of
   any other environment variable.
 - Layer count, layer ordering, image size, build timestamps and every other
@@ -930,6 +997,22 @@ patch release. What replaces the overlap is that the new invocation works agains
 both the old image and the new one — a `docker run` carrying `-w /work` behaves
 identically on an image that already set it — so a consumer can make the change
 before taking the release rather than after.
+
+Three more withdrawals ship on those terms in #217, and each is here rather than
+only in its own section because a withdrawal is the change a reader of this table
+is most likely to miss. None of them is a path or a value a `FROM` line resolves,
+which is why none takes a new major version:
+
+- The [plugin directory](#the-plugin-directory) is no longer present-and-empty in
+  the base image. Nothing a derived image writes changes, because a `COPY` creates
+  its destination.
+- No directory is [owned by 65532:65532](#what-it-means-for-ownership) any more.
+  Nothing depended on it, and every executable's own ownership and mode are
+  unchanged in substance.
+- `cosign verify-attestation` [no longer finds the
+  attestations](#verifying-a-signature), which is the one of the three a consumer
+  may have automated. `oras discover` is what replaces it, and the *signature*
+  verification this document leans on is untouched.
 
 ## Out of Scope
 
@@ -997,19 +1080,19 @@ found there and what happens to it.
 | --- | --- |
 | _Document shape and stub_ | [#103](https://github.com/z5labs/avroc/issues/103) |
 | _This document_ | [#107](https://github.com/z5labs/avroc/issues/107) |
-| [The plugin directory](#the-plugin-directory) | [#126](https://github.com/z5labs/avroc/issues/126) |
+| [The plugin directory](#the-plugin-directory) | [#126](https://github.com/z5labs/avroc/issues/126), [#217](https://github.com/z5labs/avroc/issues/217) |
 | [The entrypoint](#the-entrypoint) | [#126](https://github.com/z5labs/avroc/issues/126), [#127](https://github.com/z5labs/avroc/issues/127) |
 | [The working directory](#the-working-directory) | [#126](https://github.com/z5labs/avroc/issues/126), [#219](https://github.com/z5labs/avroc/issues/219) |
-| [The user](#the-user) | [#126](https://github.com/z5labs/avroc/issues/126) |
+| [The user](#the-user) | [#126](https://github.com/z5labs/avroc/issues/126), [#217](https://github.com/z5labs/avroc/issues/217) |
 | [No shell](#no-shell) | [#126](https://github.com/z5labs/avroc/issues/126) |
 | [No certificate authorities](#no-certificate-authorities) | [#198](https://github.com/z5labs/avroc/issues/198) |
 | [The IR `FileDescriptorSet`](#the-ir-filedescriptorset) | [#113](https://github.com/z5labs/avroc/issues/113), [#126](https://github.com/z5labs/avroc/issues/126) |
-| [Tags and what pinning one buys](#tags-and-what-pinning-one-buys) | [#128](https://github.com/z5labs/avroc/issues/128) |
-| [Verifying a signature](#verifying-a-signature) | [#128](https://github.com/z5labs/avroc/issues/128) |
+| [Tags and what pinning one buys](#tags-and-what-pinning-one-buys) | [#128](https://github.com/z5labs/avroc/issues/128), [#217](https://github.com/z5labs/avroc/issues/217) |
+| [Verifying a signature](#verifying-a-signature) | [#128](https://github.com/z5labs/avroc/issues/128), [#217](https://github.com/z5labs/avroc/issues/217) |
 | [avroc's own generators](#avrocs-own-generators) | [#127](https://github.com/z5labs/avroc/issues/127) |
 | [Worked example: adding a generator](#worked-example-adding-a-generator) | [#129](https://github.com/z5labs/avroc/issues/129) |
-| [Compatibility guarantees](#compatibility-guarantees) | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128) |
-| Multi-platform build and publishing — out of scope, see above | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128) |
+| [Compatibility guarantees](#compatibility-guarantees) | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128), [#217](https://github.com/z5labs/avroc/issues/217) |
+| Multi-platform build and publishing — out of scope, see above | [#126](https://github.com/z5labs/avroc/issues/126), [#128](https://github.com/z5labs/avroc/issues/128), [#217](https://github.com/z5labs/avroc/issues/217) |
 | A convenience over this contract, with no spec of its own | [#130](https://github.com/z5labs/avroc/issues/130) |
 | The plugin contract this one is the deployment half of | [#106](https://github.com/z5labs/avroc/issues/106) |
 | Conventions this document follows | [#103](https://github.com/z5labs/avroc/issues/103) |

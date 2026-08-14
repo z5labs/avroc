@@ -127,14 +127,14 @@ jobs:
       # this is the only job that pushes or signs anything, and a grant held in
       # advance is one nothing accounts for. `id-token: write` arrives in the
       # same change as the signing step that needs it: it is what lets the run
-      # ask GitHub for the workload identity token cosign exchanges for a
+      # ask GitHub for the workload identity token the publish exchanges for a
       # short-lived certificate, and it is also what puts
       # ACTIONS_ID_TOKEN_REQUEST_URL and ACTIONS_ID_TOKEN_REQUEST_TOKEN in the
       # step environment below.
       contents: read
       packages: write
       id-token: write
-    # The three `dagger call`s below publish their traces, for the reason the
+    # The `dagger call` below publishes its trace, for the reason the
     # job above gives and with the same one-time setup — the account of what
     # this secret is and where an operator gets one is on that job, a screen up
     # in this file. It is repeated per job rather than hoisted to the workflow
@@ -178,19 +178,18 @@ jobs:
           this release publishes no trace. See the comment on this job for where an \
           operator gets one."
 
-      # The same contract check CI runs on every pull request, run once more
-      # against the tag before anything is pushed. A tag is published once and
-      # never repointed, so this is the last moment at which a broken promise
-      # costs nothing.
-      - name: Check the base image against its contract
-        run: dagger call image-contract
-
-      # And the images built FROM it, for the same reason: a tag is published
-      # once and never repointed, so this is the last moment at which a generator
-      # image that had stopped inheriting the entrypoint costs nothing.
-      - name: Check the generator images against the contract
-        run: dagger call generator-image-contract
-
+      # The contract check used to be two steps here, run against the tag before
+      # anything was pushed. It is a gate *inside* `dagger call release` now
+      # (#217), and the reason is the seam the archetype gives: the guarantee that
+      # the container a check read is the very container that will be pushed holds
+      # only within one chained call, so two separate `dagger call`s were a
+      # second, cache-identical build that merely agreed with the first. A
+      # published version tag is never repointed here, so "it was checked, and
+      # then an identical one was pushed" is not a property worth resting a
+      # release on. `dagger call image-contract` and
+      # `dagger call generator-image-contract` stay in build.yaml, where a pull
+      # request has no release to gate.
+      #
       # One call publishes all four images — the base and one per built-in
       # generator — as multi-platform indexes covering linux/amd64 and
       # linux/arm64, under every tag docs/container/SPEC.md's tag table gives
@@ -201,14 +200,23 @@ jobs:
       # generators come from the module, because that is where the set is
       # defined; a `for name in go json pcf` in this file would be forgotten
       # exactly once, at the release where a fourth generator silently did not
-      # get published. The tags come from the refs at HEAD, for the reason this
-      # job's comment gives. What this step supplies is the base repository —
-      # the generator repositories derive from it as `<base>-gen-<name>`, the
-      # naming that document already uses — and the credentials.
+      # get published. The tags come from the refs at HEAD by way of the shared
+      # archetype's tag family, for the reason this job's comment gives. What this
+      # step supplies is *where* — the registry and the base repository, the
+      # generator repositories deriving from it as `<base>-gen-<name>`, the naming
+      # docs/container/SPEC.md already uses — and the credentials.
+      #
+      # The registry and the repository are two arguments rather than one
+      # reference (#217), because the archetype separates them so that a mirror or
+      # an internal registry serves the same release by changing one of the two.
+      # `--builder` and `--invocation` are gone with the provenance predicate this
+      # module used to render: every identifying field now comes out of the
+      # exchanged OIDC token's claims, on the grounds that anything a caller could
+      # have supplied attests to nothing.
       #
       # The two ACTIONS_ID_TOKEN_REQUEST_* variables are put in the environment
-      # by `id-token: write` above. They are the workload identity exchange:
-      # cosign trades a token minted from them for a short-lived sigstore
+      # by `id-token: write` above. They are the workload identity exchange: the
+      # publish trades a token minted from them for a short-lived sigstore
       # certificate, so the signature says which workflow at which ref produced
       # the image rather than which key somebody is holding. The token is passed
       # as a secret because it mints identity tokens for this repository.
@@ -217,10 +225,9 @@ jobs:
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           dagger call release \
-            --repository "ghcr.io/${{ github.repository }}" \
+            --registry ghcr.io \
+            --repository "${{ github.repository }}" \
             --username "${{ github.actor }}" \
             --password env://REGISTRY_PASSWORD \
             --id-token-request-url "$ACTIONS_ID_TOKEN_REQUEST_URL" \
-            --id-token-request-token env://ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            --builder "${{ github.server_url }}/${{ github.workflow_ref }}" \
-            --invocation "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            --id-token-request-token env://ACTIONS_ID_TOKEN_REQUEST_TOKEN

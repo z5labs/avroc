@@ -10,7 +10,7 @@ import (
 )
 
 // Retrieve the binding value, as type GrafanaStack
-func (r *Binding) AsGrafanaStack() *GrafanaStack { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L34)
+func (r *Binding) AsGrafanaStack() *GrafanaStack { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L34)
 	q := r.query.Select("asGrafanaStack")
 
 	return &GrafanaStack{
@@ -19,7 +19,7 @@ func (r *Binding) AsGrafanaStack() *GrafanaStack { // grafana-stack (https://git
 }
 
 // Retrieve the binding value, as type GrafanaStackGrafana
-func (r *Binding) AsGrafanaStackGrafana() *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L543)
+func (r *Binding) AsGrafanaStackGrafana() *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L543)
 	q := r.query.Select("asGrafanaStackGrafana")
 
 	return &GrafanaStackGrafana{
@@ -28,7 +28,7 @@ func (r *Binding) AsGrafanaStackGrafana() *GrafanaStackGrafana { // grafana-stac
 }
 
 // Retrieve the binding value, as type GrafanaStackLoki
-func (r *Binding) AsGrafanaStackLoki() *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L96)
+func (r *Binding) AsGrafanaStackLoki() *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L96)
 	q := r.query.Select("asGrafanaStackLoki")
 
 	return &GrafanaStackLoki{
@@ -37,7 +37,7 @@ func (r *Binding) AsGrafanaStackLoki() *GrafanaStackLoki { // grafana-stack (htt
 }
 
 // Retrieve the binding value, as type GrafanaStackMimir
-func (r *Binding) AsGrafanaStackMimir() *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L400)
+func (r *Binding) AsGrafanaStackMimir() *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L400)
 	q := r.query.Select("asGrafanaStackMimir")
 
 	return &GrafanaStackMimir{
@@ -46,7 +46,7 @@ func (r *Binding) AsGrafanaStackMimir() *GrafanaStackMimir { // grafana-stack (h
 }
 
 // Retrieve the binding value, as type GrafanaStackTempo
-func (r *Binding) AsGrafanaStackTempo() *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L241)
+func (r *Binding) AsGrafanaStackTempo() *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L241)
 	q := r.query.Select("asGrafanaStackTempo")
 
 	return &GrafanaStackTempo{
@@ -55,7 +55,7 @@ func (r *Binding) AsGrafanaStackTempo() *GrafanaStackTempo { // grafana-stack (h
 }
 
 // Create or update a binding of type GrafanaStackGrafana in the environment
-func (r *Env) WithGrafanaStackGrafanaInput(name string, value *GrafanaStackGrafana, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L543)
+func (r *Env) WithGrafanaStackGrafanaInput(name string, value *GrafanaStackGrafana, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L543)
 	assertNotNil("value", value)
 	q := r.query.Select("withGrafanaStackGrafanaInput")
 	q = q.Arg("name", name)
@@ -68,7 +68,7 @@ func (r *Env) WithGrafanaStackGrafanaInput(name string, value *GrafanaStackGrafa
 }
 
 // Declare a desired GrafanaStackGrafana output to be assigned in the environment
-func (r *Env) WithGrafanaStackGrafanaOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L543)
+func (r *Env) WithGrafanaStackGrafanaOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L543)
 	q := r.query.Select("withGrafanaStackGrafanaOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -79,7 +79,7 @@ func (r *Env) WithGrafanaStackGrafanaOutput(name string, description string) *En
 }
 
 // Create or update a binding of type GrafanaStack in the environment
-func (r *Env) WithGrafanaStackInput(name string, value *GrafanaStack, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L34)
+func (r *Env) WithGrafanaStackInput(name string, value *GrafanaStack, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L34)
 	assertNotNil("value", value)
 	q := r.query.Select("withGrafanaStackInput")
 	q = q.Arg("name", name)
@@ -92,7 +92,7 @@ func (r *Env) WithGrafanaStackInput(name string, value *GrafanaStack, descriptio
 }
 
 // Create or update a binding of type GrafanaStackLoki in the environment
-func (r *Env) WithGrafanaStackLokiInput(name string, value *GrafanaStackLoki, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L96)
+func (r *Env) WithGrafanaStackLokiInput(name string, value *GrafanaStackLoki, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L96)
 	assertNotNil("value", value)
 	q := r.query.Select("withGrafanaStackLokiInput")
 	q = q.Arg("name", name)
@@ -105,7 +105,7 @@ func (r *Env) WithGrafanaStackLokiInput(name string, value *GrafanaStackLoki, de
 }
 
 // Declare a desired GrafanaStackLoki output to be assigned in the environment
-func (r *Env) WithGrafanaStackLokiOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L96)
+func (r *Env) WithGrafanaStackLokiOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L96)
 	q := r.query.Select("withGrafanaStackLokiOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -116,7 +116,7 @@ func (r *Env) WithGrafanaStackLokiOutput(name string, description string) *Env {
 }
 
 // Create or update a binding of type GrafanaStackMimir in the environment
-func (r *Env) WithGrafanaStackMimirInput(name string, value *GrafanaStackMimir, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L400)
+func (r *Env) WithGrafanaStackMimirInput(name string, value *GrafanaStackMimir, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L400)
 	assertNotNil("value", value)
 	q := r.query.Select("withGrafanaStackMimirInput")
 	q = q.Arg("name", name)
@@ -129,7 +129,7 @@ func (r *Env) WithGrafanaStackMimirInput(name string, value *GrafanaStackMimir, 
 }
 
 // Declare a desired GrafanaStackMimir output to be assigned in the environment
-func (r *Env) WithGrafanaStackMimirOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L400)
+func (r *Env) WithGrafanaStackMimirOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L400)
 	q := r.query.Select("withGrafanaStackMimirOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -140,7 +140,7 @@ func (r *Env) WithGrafanaStackMimirOutput(name string, description string) *Env 
 }
 
 // Declare a desired GrafanaStack output to be assigned in the environment
-func (r *Env) WithGrafanaStackOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L34)
+func (r *Env) WithGrafanaStackOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L34)
 	q := r.query.Select("withGrafanaStackOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -151,7 +151,7 @@ func (r *Env) WithGrafanaStackOutput(name string, description string) *Env { // 
 }
 
 // Create or update a binding of type GrafanaStackTempo in the environment
-func (r *Env) WithGrafanaStackTempoInput(name string, value *GrafanaStackTempo, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L241)
+func (r *Env) WithGrafanaStackTempoInput(name string, value *GrafanaStackTempo, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L241)
 	assertNotNil("value", value)
 	q := r.query.Select("withGrafanaStackTempoInput")
 	q = q.Arg("name", name)
@@ -164,7 +164,7 @@ func (r *Env) WithGrafanaStackTempoInput(name string, value *GrafanaStackTempo, 
 }
 
 // Declare a desired GrafanaStackTempo output to be assigned in the environment
-func (r *Env) WithGrafanaStackTempoOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L241)
+func (r *Env) WithGrafanaStackTempoOutput(name string, description string) *Env { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L241)
 	q := r.query.Select("withGrafanaStackTempoOutput")
 	q = q.Arg("name", name)
 	q = q.Arg("description", description)
@@ -176,7 +176,7 @@ func (r *Env) WithGrafanaStackTempoOutput(name string, description string) *Env 
 
 // GrafanaStack is the module entry point. Use the per-backend constructor
 // functions (Loki, Tempo, Mimir) to obtain a service handle.
-type GrafanaStack struct { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L34)
+type GrafanaStack struct { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L34)
 	query *querybuilder.Selection
 
 	id *ID
@@ -195,22 +195,22 @@ type GrafanaStackGrafanaOpts struct {
 	//
 	//
 	// Default: "docker.io"
-	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L643)
+	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L643)
 	//
 	// Image tag for grafana/grafana.
 	//
 	//
 	// Default: "12.0.0"
-	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L646)
+	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L646)
 	//
 	// grafana.ini config; replaces the embedded default when supplied.
 	//
-	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L649)
+	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L649)
 	//
 	// Persistence volume mounted at /var/lib/grafana. When nil the data
 	// dir is ephemeral.
 	//
-	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L655)
+	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L655)
 }
 
 // Grafana configures a grafana/grafana service with file-based datasource
@@ -223,7 +223,7 @@ type GrafanaStackGrafanaOpts struct {
 // plaintext never enters generated bindings. storage, when non-nil, is
 // mounted at /var/lib/grafana for persistence; when nil, an ephemeral
 // empty Directory is mounted instead.
-func (r *GrafanaStack) Grafana(adminPassword *Secret, opts ...GrafanaStackGrafanaOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L640)
+func (r *GrafanaStack) Grafana(adminPassword *Secret, opts ...GrafanaStackGrafanaOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L640)
 	assertNotNil("adminPassword", adminPassword)
 	q := r.query.Select("grafana")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -307,22 +307,22 @@ type GrafanaStackLokiOpts struct {
 	//
 	//
 	// Default: "docker.io"
-	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L132)
+	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L132)
 	//
 	// Image tag for grafana/loki.
 	//
 	//
 	// Default: "3.4.1"
-	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L135)
+	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L135)
 	//
 	// Loki YAML config; replaces the embedded default when supplied.
 	//
-	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L138)
+	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L138)
 	//
 	// Persistence volume mounted at /var/lib/loki. When nil the data
 	// dir is ephemeral.
 	//
-	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L142)
+	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L142)
 }
 
 // Loki configures a grafana/loki service running in monolithic mode with
@@ -333,7 +333,7 @@ type GrafanaStackLokiOpts struct {
 // version. configFile fully replaces the embedded default when supplied.
 // storage, when non-nil, is mounted at /var/lib/loki for persistence;
 // when nil, an ephemeral empty Directory is mounted instead.
-func (r *GrafanaStack) Loki(opts ...GrafanaStackLokiOpts) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L129)
+func (r *GrafanaStack) Loki(opts ...GrafanaStackLokiOpts) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L129)
 	q := r.query.Select("loki")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `registry` optional argument
@@ -366,22 +366,22 @@ type GrafanaStackMimirOpts struct {
 	//
 	//
 	// Default: "docker.io"
-	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L435)
+	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L435)
 	//
 	// Image tag for grafana/mimir.
 	//
 	//
 	// Default: "2.15.1"
-	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L438)
+	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L438)
 	//
 	// Mimir YAML config; replaces the embedded default when supplied.
 	//
-	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L441)
+	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L441)
 	//
 	// Persistence volume mounted at /var/lib/mimir. When nil the data
 	// dir is ephemeral.
 	//
-	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L445)
+	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L445)
 }
 
 // Mimir configures a grafana/mimir service in monolithic mode (the binary
@@ -394,7 +394,7 @@ type GrafanaStackMimirOpts struct {
 // version. configFile fully replaces the embedded default when supplied.
 // storage, when non-nil, is mounted at /var/lib/mimir for persistence;
 // when nil, an ephemeral empty Directory is mounted instead.
-func (r *GrafanaStack) Mimir(opts ...GrafanaStackMimirOpts) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L432)
+func (r *GrafanaStack) Mimir(opts ...GrafanaStackMimirOpts) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L432)
 	q := r.query.Select("mimir")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `registry` optional argument
@@ -427,22 +427,22 @@ type GrafanaStackTempoOpts struct {
 	//
 	//
 	// Default: "docker.io"
-	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L274)
+	Registry string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L274)
 	//
 	// Image tag for grafana/tempo.
 	//
 	//
 	// Default: "2.7.1"
-	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L277)
+	Tag string // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L277)
 	//
 	// Tempo YAML config; replaces the embedded default when supplied.
 	//
-	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L280)
+	ConfigFile *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L280)
 	//
 	// Persistence volume mounted at /var/lib/tempo. When nil the data
 	// dir is ephemeral.
 	//
-	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L284)
+	Storage *CacheVolume // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L284)
 }
 
 // Tempo configures a grafana/tempo service running in monolithic mode
@@ -453,7 +453,7 @@ type GrafanaStackTempoOpts struct {
 // version. configFile fully replaces the embedded default when supplied.
 // storage, when non-nil, is mounted at /var/lib/tempo for persistence;
 // when nil, an ephemeral empty Directory is mounted instead.
-func (r *GrafanaStack) Tempo(opts ...GrafanaStackTempoOpts) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L271)
+func (r *GrafanaStack) Tempo(opts ...GrafanaStackTempoOpts) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L271)
 	q := r.query.Select("tempo")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `registry` optional argument
@@ -491,7 +491,7 @@ func (r *GrafanaStack) AsNode() Node {
 // datasource and dashboard provisioning. Datasources and dashboards are
 // accumulated via the WithX builder methods and rendered into the
 // container's /etc/grafana/provisioning tree at Service() time.
-type GrafanaStackGrafana struct { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L543)
+type GrafanaStackGrafana struct { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L543)
 	query *querybuilder.Selection
 
 	endpoint *string
@@ -516,7 +516,7 @@ func (r *GrafanaStackGrafana) WithGraphQLQuery(q *querybuilder.Selection) *Grafa
 // AdminPassword is mounted into the container as a file and pointed
 // at via GF_SECURITY_ADMIN_PASSWORD__FILE so plaintext never enters
 // generated bindings.
-func (r *GrafanaStackGrafana) AdminPassword() *Secret { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L552)
+func (r *GrafanaStackGrafana) AdminPassword() *Secret { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L552)
 	q := r.query.Select("adminPassword")
 
 	return &Secret{
@@ -526,7 +526,7 @@ func (r *GrafanaStackGrafana) AdminPassword() *Secret { // grafana-stack (https:
 
 // ConfigFile is the grafana.ini config: caller-supplied override or
 // the embedded default.
-func (r *GrafanaStackGrafana) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L548)
+func (r *GrafanaStackGrafana) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L548)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -537,7 +537,7 @@ func (r *GrafanaStackGrafana) ConfigFile() *File { // grafana-stack (https://git
 // Dashboards is the accumulated set of dashboard JSON files, mounted
 // at /var/lib/grafana/dashboards on the Grafana container at
 // Service() time. Starts empty.
-func (r *GrafanaStackGrafana) Dashboards() *Directory { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L582)
+func (r *GrafanaStackGrafana) Dashboards() *Directory { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L582)
 	q := r.query.Select("dashboards")
 
 	return &Directory{
@@ -547,7 +547,7 @@ func (r *GrafanaStackGrafana) Dashboards() *Directory { // grafana-stack (https:
 
 // Endpoint returns the Grafana HTTP base URL, e.g. http://<host>:3000, or
 // https://<host>:3000 once WithTls has been called.
-func (r *GrafanaStackGrafana) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L887)
+func (r *GrafanaStackGrafana) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L887)
 	if r.endpoint != nil {
 		return *r.endpoint, nil
 	}
@@ -609,7 +609,7 @@ func (r *GrafanaStackGrafana) UnmarshalJSON(bs []byte) error {
 }
 
 // Image is the resolved <registry>/grafana/grafana:<tag> reference.
-func (r *GrafanaStackGrafana) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L545)
+func (r *GrafanaStackGrafana) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L545)
 	if r.image != nil {
 		return *r.image, nil
 	}
@@ -626,7 +626,7 @@ func (r *GrafanaStackGrafana) Image(ctx context.Context) (string, error) { // gr
 // and dashboard state is rendered into the container's provisioning
 // tree at this point — subsequent WithX calls on the same *Grafana
 // receiver are not visible to the returned service.
-func (r *GrafanaStackGrafana) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L804)
+func (r *GrafanaStackGrafana) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L804)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -635,7 +635,7 @@ func (r *GrafanaStackGrafana) Service() *Service { // grafana-stack (https://git
 }
 
 // Storage is the optional persistence volume for /var/lib/grafana.
-func (r *GrafanaStackGrafana) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L554)
+func (r *GrafanaStackGrafana) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L554)
 	q := r.query.Select("storage")
 
 	return &CacheVolume{
@@ -646,7 +646,7 @@ func (r *GrafanaStackGrafana) Storage() *CacheVolume { // grafana-stack (https:/
 // WithDashboard adds a single dashboard JSON file to the provisioned
 // dashboards directory under the supplied name. `.json` is appended if
 // the supplied name does not already end with it.
-func (r *GrafanaStackGrafana) WithDashboard(name string, file *File) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L780)
+func (r *GrafanaStackGrafana) WithDashboard(name string, file *File) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L780)
 	assertNotNil("file", file)
 	q := r.query.Select("withDashboard")
 	q = q.Arg("name", name)
@@ -659,7 +659,7 @@ func (r *GrafanaStackGrafana) WithDashboard(name string, file *File) *GrafanaSta
 
 // WithDashboards adds every *.json entry in dir to the provisioned
 // dashboards directory, preserving filenames.
-func (r *GrafanaStackGrafana) WithDashboards(dir *Directory) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L791)
+func (r *GrafanaStackGrafana) WithDashboards(dir *Directory) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L791)
 	assertNotNil("dir", dir)
 	q := r.query.Select("withDashboards")
 	q = q.Arg("dir", dir)
@@ -674,15 +674,15 @@ type GrafanaStackGrafanaWithLokiDatasourceOpts struct {
 	//
 	// PEM CA that signed the backend's server certificate.
 	//
-	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L709)
+	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L709)
 	//
 	// PEM client certificate Grafana presents to an mTLS backend.
 	//
-	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L712)
+	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L712)
 	//
 	// PEM client private key paired with clientCert.
 	//
-	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L715)
+	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L715)
 }
 
 // WithLokiDatasource binds loki into Grafana's network at hostname `name`
@@ -701,7 +701,7 @@ type GrafanaStackGrafanaWithLokiDatasourceOpts struct {
 // (correct only for a self-signed server cert). When loki has WithMtls, also
 // supply clientCert / clientKey (the PEM certificate + key Grafana presents to
 // the backend); Service returns an error if they are missing.
-func (r *GrafanaStackGrafana) WithLokiDatasource(name string, loki *GrafanaStackLoki, opts ...GrafanaStackGrafanaWithLokiDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L704)
+func (r *GrafanaStackGrafana) WithLokiDatasource(name string, loki *GrafanaStackLoki, opts ...GrafanaStackGrafanaWithLokiDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L704)
 	assertNotNil("loki", loki)
 	q := r.query.Select("withLokiDatasource")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -728,18 +728,18 @@ func (r *GrafanaStackGrafana) WithLokiDatasource(name string, loki *GrafanaStack
 
 // GrafanaStackGrafanaWithMimirDatasourceOpts contains options for GrafanaStackGrafana.WithMimirDatasource
 type GrafanaStackGrafanaWithMimirDatasourceOpts struct {
-	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L760)
+	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L760)
 
-	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L762)
+	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L762)
 
-	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L764)
+	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L764)
 }
 
 // WithMimirDatasource binds mimir into Grafana's network at hostname `name`
 // and accumulates a Prometheus-type datasource entry pointing at
 // Mimir's Prometheus-compatible API endpoint. See WithLokiDatasource
 // for the constraints on `name` and the TLS args.
-func (r *GrafanaStackGrafana) WithMimirDatasource(name string, mimir *GrafanaStackMimir, opts ...GrafanaStackGrafanaWithMimirDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L756)
+func (r *GrafanaStackGrafana) WithMimirDatasource(name string, mimir *GrafanaStackMimir, opts ...GrafanaStackGrafanaWithMimirDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L756)
 	assertNotNil("mimir", mimir)
 	q := r.query.Select("withMimirDatasource")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -766,17 +766,17 @@ func (r *GrafanaStackGrafana) WithMimirDatasource(name string, mimir *GrafanaSta
 
 // GrafanaStackGrafanaWithTempoDatasourceOpts contains options for GrafanaStackGrafana.WithTempoDatasource
 type GrafanaStackGrafanaWithTempoDatasourceOpts struct {
-	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L735)
+	CaCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L735)
 
-	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L737)
+	ClientCert *File // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L737)
 
-	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L739)
+	ClientKey *Secret // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L739)
 }
 
 // WithTempoDatasource binds tempo into Grafana's network at hostname
 // `name` and accumulates a Tempo datasource entry under the same name.
 // See WithLokiDatasource for the constraints on `name` and the TLS args.
-func (r *GrafanaStackGrafana) WithTempoDatasource(name string, tempo *GrafanaStackTempo, opts ...GrafanaStackGrafanaWithTempoDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L731)
+func (r *GrafanaStackGrafana) WithTempoDatasource(name string, tempo *GrafanaStackTempo, opts ...GrafanaStackGrafanaWithTempoDatasourceOpts) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L731)
 	assertNotNil("tempo", tempo)
 	q := r.query.Select("withTempoDatasource")
 	for i := len(opts) - 1; i >= 0; i-- {
@@ -811,7 +811,7 @@ func (r *GrafanaStackGrafana) WithTempoDatasource(name string, tempo *GrafanaSta
 // backend, supply the client certificate to the datasource instead (see
 // WithLokiDatasource). Ignored when a custom config file was supplied to
 // Grafana().
-func (r *GrafanaStackGrafana) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L681)
+func (r *GrafanaStackGrafana) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackGrafana { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L681)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -834,7 +834,7 @@ func (r *GrafanaStackGrafana) AsNode() Node {
 // Loki wraps a configured grafana/loki container. Use Service() to obtain
 // the *dagger.Service for binding into other containers, and Endpoint() /
 // OtlpHttpEndpoint() to derive client URLs.
-type GrafanaStackLoki struct { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L96)
+type GrafanaStackLoki struct { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L96)
 	query *querybuilder.Selection
 
 	endpoint         *string
@@ -859,7 +859,7 @@ func (r *GrafanaStackLoki) WithGraphQLQuery(q *querybuilder.Selection) *GrafanaS
 
 // ConfigFile is the Loki YAML config: either the caller-supplied
 // override or the embedded default staged into the module workdir.
-func (r *GrafanaStackLoki) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L101)
+func (r *GrafanaStackLoki) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L101)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -869,7 +869,7 @@ func (r *GrafanaStackLoki) ConfigFile() *File { // grafana-stack (https://github
 
 // Endpoint returns the Loki HTTP base URL, e.g. http://<host>:3100, or
 // https://<host>:3100 once WithTls has been called.
-func (r *GrafanaStackLoki) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L214)
+func (r *GrafanaStackLoki) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L214)
 	if r.endpoint != nil {
 		return *r.endpoint, nil
 	}
@@ -931,7 +931,7 @@ func (r *GrafanaStackLoki) UnmarshalJSON(bs []byte) error {
 }
 
 // Image is the resolved <registry>/grafana/loki:<tag> reference.
-func (r *GrafanaStackLoki) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L98)
+func (r *GrafanaStackLoki) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L98)
 	if r.image != nil {
 		return *r.image, nil
 	}
@@ -946,7 +946,7 @@ func (r *GrafanaStackLoki) Image(ctx context.Context) (string, error) { // grafa
 // OtlpHttpEndpoint returns the Loki OTLP/HTTP logs receiver URL, suitable
 // as the `endpoint` for an OpenTelemetry exporter posting log data. The
 // scheme is https once WithTls has been called.
-func (r *GrafanaStackLoki) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L230)
+func (r *GrafanaStackLoki) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L230)
 	if r.otlpHttpEndpoint != nil {
 		return *r.otlpHttpEndpoint, nil
 	}
@@ -965,7 +965,7 @@ func (r *GrafanaStackLoki) OtlpHTTPEndpoint(ctx context.Context) (string, error)
 // without us having to second-guess the upstream image's USER. This is
 // safe for ephemeral dev/test services and avoids per-image UID drift
 // across Loki / Tempo / Mimir.
-func (r *GrafanaStackLoki) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L186)
+func (r *GrafanaStackLoki) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L186)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -975,7 +975,7 @@ func (r *GrafanaStackLoki) Service() *Service { // grafana-stack (https://github
 
 // Storage is the optional persistence volume for /var/lib/loki.
 // When nil the data dir is mounted as an empty Directory (ephemeral).
-func (r *GrafanaStackLoki) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L104)
+func (r *GrafanaStackLoki) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L104)
 	q := r.query.Select("storage")
 
 	return &CacheVolume{
@@ -986,7 +986,7 @@ func (r *GrafanaStackLoki) Storage() *CacheVolume { // grafana-stack (https://gi
 // WithMtls additionally requires every client to present a certificate signed
 // by clientCa (PEM). Must be combined with WithTls; Service returns an error
 // otherwise.
-func (r *GrafanaStackLoki) WithMtls(clientCa *File) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L173)
+func (r *GrafanaStackLoki) WithMtls(clientCa *File) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L173)
 	assertNotNil("clientCa", clientCa)
 	q := r.query.Select("withMtls")
 	q = q.Arg("clientCa", clientCa)
@@ -1003,7 +1003,7 @@ func (r *GrafanaStackLoki) WithMtls(clientCa *File) *GrafanaStackLoki { // grafa
 // PEM private key. After this call Endpoint / OtlpHttpEndpoint return https://
 // URLs. Ignored when a custom config file was supplied to Loki(); that config
 // owns its own TLS.
-func (r *GrafanaStackLoki) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L163)
+func (r *GrafanaStackLoki) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackLoki { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L163)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -1026,7 +1026,7 @@ func (r *GrafanaStackLoki) AsNode() Node {
 // Mimir wraps a configured grafana/mimir container running in monolithic
 // (single-binary, target=all) mode with the OTLP HTTP ingester enabled,
 // anonymous tenant, and filesystem block storage.
-type GrafanaStackMimir struct { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L400)
+type GrafanaStackMimir struct { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L400)
 	query *querybuilder.Selection
 
 	endpoint         *string
@@ -1051,7 +1051,7 @@ func (r *GrafanaStackMimir) WithGraphQLQuery(q *querybuilder.Selection) *Grafana
 
 // ConfigFile is the Mimir YAML config: either the caller-supplied
 // override or the embedded default.
-func (r *GrafanaStackMimir) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L405)
+func (r *GrafanaStackMimir) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L405)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -1063,7 +1063,7 @@ func (r *GrafanaStackMimir) ConfigFile() *File { // grafana-stack (https://githu
 // https://<host>:9009 once WithTls has been called. This endpoint serves
 // both the Prometheus-compatible query API and the OTLP HTTP metrics
 // ingester.
-func (r *GrafanaStackMimir) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L515)
+func (r *GrafanaStackMimir) Endpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L515)
 	if r.endpoint != nil {
 		return *r.endpoint, nil
 	}
@@ -1125,7 +1125,7 @@ func (r *GrafanaStackMimir) UnmarshalJSON(bs []byte) error {
 }
 
 // Image is the resolved <registry>/grafana/mimir:<tag> reference.
-func (r *GrafanaStackMimir) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L402)
+func (r *GrafanaStackMimir) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L402)
 	if r.image != nil {
 		return *r.image, nil
 	}
@@ -1140,7 +1140,7 @@ func (r *GrafanaStackMimir) Image(ctx context.Context) (string, error) { // graf
 // OtlpHttpEndpoint returns the Mimir OTLP/HTTP metrics receiver URL,
 // suitable as the `endpoint` for an OpenTelemetry exporter posting
 // metric data. The scheme is https once WithTls has been called.
-func (r *GrafanaStackMimir) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L531)
+func (r *GrafanaStackMimir) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L531)
 	if r.otlpHttpEndpoint != nil {
 		return *r.otlpHttpEndpoint, nil
 	}
@@ -1156,7 +1156,7 @@ func (r *GrafanaStackMimir) OtlpHTTPEndpoint(ctx context.Context) (string, error
 // `-target=all` so the binary runs in monolithic mode regardless of the
 // upstream image's default CMD. See Loki.Service for notes on the
 // WithUser("0:0") choice.
-func (r *GrafanaStackMimir) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L485)
+func (r *GrafanaStackMimir) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L485)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -1165,7 +1165,7 @@ func (r *GrafanaStackMimir) Service() *Service { // grafana-stack (https://githu
 }
 
 // Storage is the optional persistence volume for /var/lib/mimir.
-func (r *GrafanaStackMimir) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L407)
+func (r *GrafanaStackMimir) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L407)
 	q := r.query.Select("storage")
 
 	return &CacheVolume{
@@ -1176,7 +1176,7 @@ func (r *GrafanaStackMimir) Storage() *CacheVolume { // grafana-stack (https://g
 // WithMtls additionally requires every client to present a certificate signed
 // by clientCa (PEM). Must be combined with WithTls; Service returns an error
 // otherwise.
-func (r *GrafanaStackMimir) WithMtls(clientCa *File) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L475)
+func (r *GrafanaStackMimir) WithMtls(clientCa *File) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L475)
 	assertNotNil("clientCa", clientCa)
 	q := r.query.Select("withMtls")
 	q = q.Arg("clientCa", clientCa)
@@ -1192,7 +1192,7 @@ func (r *GrafanaStackMimir) WithMtls(clientCa *File) *GrafanaStackMimir { // gra
 // certificate and serverKey its PEM private key. After this call Endpoint /
 // OtlpHttpEndpoint return https:// URLs. Ignored when a custom config file was
 // supplied to Mimir().
-func (r *GrafanaStackMimir) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L465)
+func (r *GrafanaStackMimir) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackMimir { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L465)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -1215,7 +1215,7 @@ func (r *GrafanaStackMimir) AsNode() Node {
 // Tempo wraps a configured grafana/tempo container running in monolithic
 // mode with the OTLP gRPC and HTTP receivers enabled and local filesystem
 // trace storage.
-type GrafanaStackTempo struct { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L241)
+type GrafanaStackTempo struct { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L241)
 	query *querybuilder.Selection
 
 	httpEndpoint     *string
@@ -1241,7 +1241,7 @@ func (r *GrafanaStackTempo) WithGraphQLQuery(q *querybuilder.Selection) *Grafana
 
 // ConfigFile is the Tempo YAML config: either the caller-supplied
 // override or the embedded default.
-func (r *GrafanaStackTempo) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L246)
+func (r *GrafanaStackTempo) ConfigFile() *File { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L246)
 	q := r.query.Select("configFile")
 
 	return &File{
@@ -1252,7 +1252,7 @@ func (r *GrafanaStackTempo) ConfigFile() *File { // grafana-stack (https://githu
 // HttpEndpoint returns the Tempo HTTP query/push base URL,
 // e.g. http://<host>:3200, or https://<host>:3200 once WithTls has been
 // called.
-func (r *GrafanaStackTempo) HTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L354)
+func (r *GrafanaStackTempo) HTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L354)
 	if r.httpEndpoint != nil {
 		return *r.httpEndpoint, nil
 	}
@@ -1314,7 +1314,7 @@ func (r *GrafanaStackTempo) UnmarshalJSON(bs []byte) error {
 }
 
 // Image is the resolved <registry>/grafana/tempo:<tag> reference.
-func (r *GrafanaStackTempo) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L243)
+func (r *GrafanaStackTempo) Image(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L243)
 	if r.image != nil {
 		return *r.image, nil
 	}
@@ -1329,7 +1329,7 @@ func (r *GrafanaStackTempo) Image(ctx context.Context) (string, error) { // graf
 // OtlpGrpcEndpoint returns the Tempo OTLP/gRPC receiver address,
 // e.g. <host>:4317. No URL scheme — gRPC clients want host:port and must
 // configure TLS themselves (the receiver enforces it once WithTls is set).
-func (r *GrafanaStackTempo) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L370)
+func (r *GrafanaStackTempo) OtlpGrpcEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L370)
 	if r.otlpGrpcEndpoint != nil {
 		return *r.otlpGrpcEndpoint, nil
 	}
@@ -1345,7 +1345,7 @@ func (r *GrafanaStackTempo) OtlpGrpcEndpoint(ctx context.Context) (string, error
 // e.g. http://<host>:4318, or https://<host>:4318 once WithTls has been
 // called. The OpenTelemetry HTTP exporter appends the per-signal path
 // itself (e.g. /v1/traces).
-func (r *GrafanaStackTempo) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L386)
+func (r *GrafanaStackTempo) OtlpHTTPEndpoint(ctx context.Context) (string, error) { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L386)
 	if r.otlpHttpEndpoint != nil {
 		return *r.otlpHttpEndpoint, nil
 	}
@@ -1359,7 +1359,7 @@ func (r *GrafanaStackTempo) OtlpHTTPEndpoint(ctx context.Context) (string, error
 
 // Service returns the Tempo Dagger service. See Loki.Service for notes
 // on the WithUser("0:0") choice.
-func (r *GrafanaStackTempo) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L323)
+func (r *GrafanaStackTempo) Service() *Service { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L323)
 	q := r.query.Select("service")
 
 	return &Service{
@@ -1368,7 +1368,7 @@ func (r *GrafanaStackTempo) Service() *Service { // grafana-stack (https://githu
 }
 
 // Storage is the optional persistence volume for /var/lib/tempo.
-func (r *GrafanaStackTempo) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L248)
+func (r *GrafanaStackTempo) Storage() *CacheVolume { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L248)
 	q := r.query.Select("storage")
 
 	return &CacheVolume{
@@ -1379,7 +1379,7 @@ func (r *GrafanaStackTempo) Storage() *CacheVolume { // grafana-stack (https://g
 // WithMtls additionally requires every client to present a certificate signed
 // by clientCa (PEM) on every listener. Must be combined with WithTls; Service
 // returns an error otherwise.
-func (r *GrafanaStackTempo) WithMtls(clientCa *File) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L315)
+func (r *GrafanaStackTempo) WithMtls(clientCa *File) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L315)
 	assertNotNil("clientCa", clientCa)
 	q := r.query.Select("withMtls")
 	q = q.Arg("clientCa", clientCa)
@@ -1396,7 +1396,7 @@ func (r *GrafanaStackTempo) WithMtls(clientCa *File) *GrafanaStackTempo { // gra
 // After this call HttpEndpoint / OtlpHttpEndpoint return https:// URLs;
 // OtlpGrpcEndpoint stays scheme-less (gRPC callers configure TLS themselves).
 // Ignored when a custom config file was supplied to Tempo().
-func (r *GrafanaStackTempo) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L305)
+func (r *GrafanaStackTempo) WithTLS(serverCert *File, serverKey *Secret) *GrafanaStackTempo { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L305)
 	assertNotNil("serverCert", serverCert)
 	assertNotNil("serverKey", serverKey)
 	q := r.query.Select("withTls")
@@ -1418,7 +1418,7 @@ func (r *GrafanaStackTempo) AsNode() Node {
 
 // GrafanaStack is the module entry point. Use the per-backend constructor
 // functions (Loki, Tempo, Mimir) to obtain a service handle.
-func (r *Query) GrafanaStack() *GrafanaStack { // grafana-stack (https://github.com/z5labs/devex/tree/47e25f065653c481a6d1567537307f2565bfa316/daggerverse/grafana-stack/main.go#L34)
+func (r *Query) GrafanaStack() *GrafanaStack { // grafana-stack (https://github.com/z5labs/devex/tree/c10a12007999eb807f68cd9af9000fbaeab159cb/daggerverse/grafana-stack/main.go#L34)
 	q := r.query.Select("grafanaStack")
 
 	return &GrafanaStack{
