@@ -544,6 +544,16 @@ digest is the fifth way to name the image:
 | Rolling tag | `latest` | On each release |
 | Digest | `@sha256:…` | Never, by construction |
 
+The family is derived and published by the shared pipeline avroc's images are
+built by, not by this repository, and that is where it is checked — this document's
+table is the requirement and the check that a version implies exactly these four
+tags lives with the code that derives them (#217). What avroc still decides, and
+still checks on every pull request, is whether a commit is a release at all and
+under which version: one canonical version tag at HEAD, no tag or a tag that is not
+a canonical version publishing nothing, two version tags an error, and `+build`
+metadata refused. A reader should not conclude from that split that the table below
+is unenforced, nor that avroc enforces it.
+
 A published full-version tag **MUST NOT** be repointed at a different manifest
 after it is published — not for a rebuild, not for a base-image refresh, not to
 correct a broken release. A release that has to be corrected gets a new version

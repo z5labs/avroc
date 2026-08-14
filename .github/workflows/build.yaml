@@ -98,11 +98,13 @@ jobs:
       # that does not change when a commit is made — full history costs this job a
       # slower checkout and costs those four stages nothing.
       #
-      # Tags are not fetched. The refs at HEAD decide whether a commit is a
-      # release, and that decision is release.yaml's; a pull request has no
-      # release in it, and `fetch-tags: true` here would only make `dagger call
-      # tag-scheme` look as though it were reading this commit, which it is not —
-      # it runs the derivation over a literal table.
+      # `fetch-depth: 0` brings tag refs with it, and that is fine rather than
+      # intended — do not read this as a checkout with no tags in it. Nothing here
+      # looks at them: `dagger call tag-scheme` runs the release derivation over a
+      # literal table and reads no repository at all, and the decision that a commit
+      # *is* a release belongs to release.yaml, which does its own checkout. A tag
+      # that happens to point at a pull request's HEAD therefore changes nothing
+      # this workflow does.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

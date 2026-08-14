@@ -67,11 +67,17 @@
 //
 // Both are had by binding it as its own argument, the way Release already took
 // one, and folding it back in on the single path that builds an App
-// (appSource). The check stages keep the tree they always had; the image path
-// gets the metadata it needs; and nothing that was cache-stable per commit
-// became a cache miss per commit. The workflow half of that is
-// .github/workflows/build.yaml, which fetches full history because an image is
-// built on every pull request.
+// (appSource). The check stages keep the tree they always had, and the image path
+// gets the metadata it needs.
+//
+// Stated precisely, because the loose version of it is wrong: fmt, vet, lint and
+// test are cache-stable per commit exactly as before, and the image stages now key
+// on git metadata, which is what they have to do to stamp a commit into a binary.
+// What that does not have to include is the part of a .git directory that is *not*
+// a function of the commit — a reflog, a FETCH_HEAD, an index — so New's gitDir
+// argument carries an ignore list of its own, and that comment is where the
+// reasoning is. The workflow half is .github/workflows/build.yaml, which fetches
+// full history because an image is built on every pull request.
 package main
 
 import (
@@ -124,6 +130,16 @@ type Avroc struct {
 // so the stages that build an image are the ones that do not run from one; that
 // was already true of Release and is now true of the image checks too.
 //
+// Its own ignore list is the other half of the caching argument, and it is not
+// decoration. Everything read out of here is a function of the commit — HEAD, the
+// refs pointing at it, the commit object's committer time, and the origin in
+// config — while a .git directory also holds a great deal that is not: the reflog
+// under logs/, FETCH_HEAD and ORIG_HEAD, the staging index, the hooks, and whatever
+// gc last repacked. Folded in whole, two builds of one commit could hash
+// differently — a re-run, a second job, or any local `git fetch` — and the image
+// stages would miss their cache for reasons nothing in the tree explains. What is
+// excluded is chosen to be exactly what none of those four reads.
+//
 // lintConfig defaults to the repository's own .golangci.yml. It is passed
 // explicitly rather than left to the standard pipeline's bundled default so that
 // the configuration committed to this repository is the configuration CI lints
@@ -140,6 +156,7 @@ func New(
 	lintConfig *dagger.File,
 	// +optional
 	// +defaultPath="/.git"
+	// +ignore=["logs", "hooks", "index", "FETCH_HEAD", "ORIG_HEAD", "COMMIT_EDITMSG"]
 	gitDir *dagger.Directory,
 ) *Avroc {
 	if lintConfig == nil {
@@ -196,6 +213,20 @@ func (m *Avroc) goChain() *dagger.Z5LabsGoChain {
 // git metadata, and the check stages need a tree that does not change when a
 // commit is made. One argument, folded in on one path, gives both.
 func (m *Avroc) appSource() *dagger.Directory {
+	// A nil GitDir is handed on rather than dereferenced. It is not reachable from
+	// the command line — the argument carries a default path — but it is reachable
+	// from a module-to-module call and from any struct literal, and
+	// Directory.WithDirectory asserts its argument is non-nil and *panics*, a long
+	// way from whoever left it out. Returning the source unchanged instead puts the
+	// failure where it belongs: the archetype refuses a tree with no .git in it, in
+	// its own words, naming what it was looking for.
+	//
+	// That is also the message somebody running an image stage from a git worktree
+	// gets, where .git is a file and the default path resolves to nothing useful.
+	// CONTRIBUTING.md says to run those from an ordinary clone.
+	if m.GitDir == nil {
+		return m.Source
+	}
 	return m.Source.WithDirectory(".git", m.GitDir)
 }
 

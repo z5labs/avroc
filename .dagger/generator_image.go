@@ -328,16 +328,7 @@ func (m *Avroc) generatorImageContractOn(ctx context.Context, platform dagger.Pl
 	var errs []error
 
 	for _, name := range builtinGenerators() {
-		image := m.generatorImage(platform, name)
-		contents := append(baseImageExecutables(), generatorExecutable(name))
-
-		for _, err := range m.checkImageConfig(ctx, image) {
-			errs = append(errs, fmt.Errorf("%s: %w", name, err))
-		}
-		for _, err := range m.checkImageFilesystem(ctx, image, contents) {
-			errs = append(errs, fmt.Errorf("%s: %w", name, err))
-		}
-		if err := m.checkGeneratorRuns(ctx, image, name); err != nil {
+		for _, err := range m.checkGeneratorImage(ctx, m.generatorImage(platform, name), name) {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 		}
 	}
@@ -359,6 +350,35 @@ func (m *Avroc) generatorImageContractOn(ctx context.Context, platform dagger.Pl
 	}
 
 	return errors.Join(errs...)
+}
+
+// checkGeneratorImage is every assertion one generator's image is held to, over a
+// container somebody else chose.
+//
+// It is image.go's checkBaseImage for a derived image, and it exists for the same
+// reason: GeneratorImageContract builds one container per published platform and
+// the release gate passes the very container it is about to push, and both have to
+// be the same list of checks or the gate is weaker than the pull request that
+// preceded it.
+//
+// It is deliberately *not* checkBaseImage plus one row. A generator image inherits
+// its configuration and is checked for that, its filesystem is the base's plus one
+// executable, and what replaces the base's two behavioural checks is
+// checkGeneratorRuns — the base's `help`-through-the-entrypoint is all an image
+// with no generator can be asked to do, and an image with one can be asked to
+// generate instead, which is strictly more. checkAMissingWorkingDirectoryIsLegible
+// stays the base's alone for the reason its own comment gives: it depends on
+// loadManifest running before the capability handshake, so it is a statement about
+// an image that ships no generator.
+func (m *Avroc) checkGeneratorImage(ctx context.Context, image *dagger.Container, name string) []error {
+	contents := append(baseImageExecutables(), generatorExecutable(name))
+
+	errs := m.checkImageConfig(ctx, image)
+	errs = append(errs, m.checkImageFilesystem(ctx, image, contents)...)
+	if err := m.checkGeneratorRuns(ctx, image, name); err != nil {
+		errs = append(errs, err)
+	}
+	return errs
 }
 
 // checkGeneratorRuns requires the image to generate with its own generator and

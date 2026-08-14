@@ -494,13 +494,24 @@ func (e *workedExample) contents() (map[string]imageEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The copied file is named as a plugin-directory executable so that the
-	// directory itself gets a row: since #217 the base image carries no
-	// /usr/local/bin, and this example's COPY is what creates it — which is
-	// exactly the sentence docs/container/SPEC.md now makes about a derived image.
-	// The entry is then overwritten with what the document actually asked for,
-	// which is the whole point of reading it rather than assuming it.
-	contents := imageContents([]string{path.Base(e.copy.dst)})
+	// The plugin directory gets a row of its own, because since #217 the base image
+	// carries no /usr/local/bin and this example's COPY is what creates it — which
+	// is exactly the sentence docs/container/SPEC.md now makes about a derived
+	// image.
+	//
+	// It is keyed off the destination the document wrote rather than off a name
+	// round-tripped through path.Base: `dst` is already known to be a file directly
+	// inside pluginDir, because dockerfileCopy refuses anything else and says so
+	// naming the path, and asking path.Dir here rather than assuming it is what
+	// keeps this from quietly expecting `/usr/local/bin/bin` the day the document
+	// writes a directory destination. The entry itself is the document's own, which
+	// is the whole point of reading the COPY rather than assuming it; the directory
+	// is the builder's, and that its owner and mode are the base listing's rather
+	// than the COPY's `--chown` is something the stage passing is the evidence for.
+	contents := imageContents(nil)
+	if path.Dir(e.copy.dst) == pluginDir {
+		contents[pluginDir] = imageEntry{0, 0, 0o755}
+	}
 	contents[e.copy.dst] = entry
 	return contents, nil
 }

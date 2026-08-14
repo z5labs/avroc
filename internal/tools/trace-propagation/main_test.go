@@ -174,7 +174,7 @@ func TestTheModesAreNotInterchangeable(t *testing.T) {
 		"both modes":             {"-launch", "-fetch"},
 		"launch with no command": {"-launch", "-endpoint", "http://collector:4318"},
 		"launch with no endpoint": {
-			"-launch", "--", "/usr/local/bin/avroc", "generate",
+			"-launch", "--", "/app/avroc", "generate",
 		},
 		"fetch with no tempo": {"-fetch", "-trace", "abc123"},
 		"fetch with no trace": {"-fetch", "-tempo", "http://tempo:3200"},

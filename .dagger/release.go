@@ -101,16 +101,20 @@ import (
 // here and why there is no `dagger call publish` beside this one — the only caller
 // with a token to exchange is the workflow.
 //
-// It returns a report naming every reference published, which is one line per tag
-// per repository, each pinned to the digest it resolved to.
+// The git metadata is New's, not an argument here. It used to be one, because the
+// release was the only thing in this module that read git; since #217 every image
+// build reads it too, so New binds it once and this reads m.GitDir. Two independent
+// inputs for one fact is what that avoids, and the way it would have gone wrong is
+// specific: `dagger call --git-dir=A release --git-dir=B` was accepted, and would
+// have taken the release *decision* from one tree while the archetype stamped and
+// annotated the images from the other.
+//
+// It returns a report naming every reference published, grouped by repository, each
+// pinned to the digest it resolved to.
 //
 // +cache="never"
 func (m *Avroc) Release(
 	ctx context.Context,
-	// The repository's git metadata. The refs at HEAD are what decides whether
-	// this commit is a release, so a checkout without tags publishes nothing.
-	// +defaultPath="/.git"
-	gitDir *dagger.Directory,
 	// The registry to publish to, without a repository path — `ghcr.io`.
 	registry string,
 	// The base image's repository within that registry, without a tag —
@@ -131,7 +135,7 @@ func (m *Avroc) Release(
 	// The refs are read before the arguments are checked, because "this commit is
 	// not a release" is the common answer and reaching it should not depend on a
 	// credential nobody is going to use.
-	refs, err := headRefs(ctx, m.Source, gitDir)
+	refs, err := headRefs(ctx, m.Source, m.GitDir)
 	if err != nil {
 		return "", err
 	}
@@ -170,15 +174,24 @@ func (m *Avroc) Release(
 
 	var report strings.Builder
 	for _, image := range images {
-		refs, err := image.app.
+		published, err := image.app.
 			WithRegistry(registry, username, password).
 			WithOidc(idTokenRequestUrl, idTokenRequestToken).
 			Publish(ctx, []string{image.repository})
 		if err != nil {
 			return report.String(), fmt.Errorf("publishing %s/%s: %w", registry, image.repository, err)
 		}
-		for _, ref := range refs {
-			fmt.Fprintf(&report, "%s\n", ref)
+
+		// Grouped by repository, one reference per line beneath it. Publish returns
+		// its references repository-major in tag-family order and this passes one
+		// repository per call, so the grouping is this loop's rather than an
+		// assumption about that ordering — which matters, because the archetype's
+		// own documentation calls the grouping a thing it may yet give a structured
+		// return type. A flat list of `<ref>@<digest>` lines is what a person reads
+		// this for, and the repository heading is what makes four of them legible.
+		fmt.Fprintf(&report, "%s/%s\n", registry, image.repository)
+		for _, ref := range published {
+			fmt.Fprintf(&report, "  %s\n", ref)
 		}
 	}
 	return report.String(), nil
@@ -279,13 +292,25 @@ func planRelease(refs []string) (string, error) {
 		return "", fmt.Errorf("HEAD carries more than one version tag (%s): which release this is, and which of them the moving tags should follow, is not a question this pipeline can answer", strings.Join(versions, ", "))
 	}
 
+	// Parsed a second time rather than carried out of the loop, and the `ok` is
+	// checked rather than discarded. It cannot be false today — the loop above only
+	// kept refs parseVersion already accepted — and that is exactly why it is worth
+	// a branch: `versionTags` used to be the thing that refused an unparseable tag,
+	// and without this the day the filter above admits something looser is the day a
+	// zero `version` passes the build-metadata check and an unrecognised tag reaches
+	// App.Publish as the release's version.
+	v, ok := parseVersion(versions[0])
+	if !ok {
+		return "", fmt.Errorf("%q reached the release plan without being a canonical version tag, which is a bug in this function", versions[0])
+	}
+
 	// An OCI tag is [A-Za-z0-9_.-], which has no `+` in it. Refusing is the only
 	// honest answer: mangling the metadata away would publish `v0.2.0` and
 	// `v0.2.0+build.5` as the same tag, and this project's contract says a
 	// published version tag is never repointed. The archetype refuses it as well;
 	// refusing it here is what keeps the answer the same for a commit nobody was
 	// ever going to publish.
-	if v, _ := parseVersion(versions[0]); v.build != "" {
+	if v.build != "" {
 		return "", fmt.Errorf("version tag %q carries build metadata, which cannot be spelled in an OCI tag: release it under a version without one", versions[0])
 	}
 	return versions[0], nil
@@ -374,39 +399,30 @@ func (m *Avroc) releaseImages(repository, version string) []releaseImage {
 // releaseContract holds every image a release is about to publish to
 // docs/container/SPEC.md, on every platform, before anything is pushed.
 //
-// It is the same assertions ImageContract and GeneratorImageContract make, over
-// the containers these Apps carry rather than over a second build of them — see
-// this file's comment. Every image and every platform is checked and every failure
-// collected: a release that is wrong is wrong on both architectures, and one run
-// should say so once for each.
+// It runs `checkBaseImage` and `checkGeneratorImage` — the *same* functions
+// ImageContract and GeneratorImageContract run, not a list assembled here — over
+// the containers these Apps carry rather than over a second build of them. That is
+// the whole point, and it is a mechanism rather than an intention: a check added to
+// either of those two is a check this gate acquires, where a hand-copied sequence
+// would have let one be added and the release stop short of it. It was a
+// hand-copied sequence in the first draft of #217, and a reviewer caught it.
+//
+// Every image and every platform is checked and every failure collected: a release
+// that is wrong is wrong on both architectures, and one run should say so once for
+// each.
 func (m *Avroc) releaseContract(ctx context.Context, images []releaseImage) error {
 	var errs []error
 	for _, image := range images {
 		for _, platform := range imagePlatforms() {
 			container := image.app.Container(platform)
 
-			contents := baseImageExecutables()
-			if image.generator != "" {
-				contents = append(contents, generatorExecutable(image.generator))
-			}
-
-			for _, err := range m.checkImageConfig(ctx, container) {
-				errs = append(errs, fmt.Errorf("%s on %s: %w", image.repository, platform, err))
-			}
-			for _, err := range m.checkImageFilesystem(ctx, container, contents) {
-				errs = append(errs, fmt.Errorf("%s on %s: %w", image.repository, platform, err))
-			}
-
+			var found []error
 			if image.generator == "" {
-				if err := m.checkImageIsTheCLI(ctx, container); err != nil {
-					errs = append(errs, fmt.Errorf("%s on %s: %w", image.repository, platform, err))
-				}
-				if err := m.checkAMissingWorkingDirectoryIsLegible(ctx, container); err != nil {
-					errs = append(errs, fmt.Errorf("%s on %s: %w", image.repository, platform, err))
-				}
-				continue
+				found = m.checkBaseImage(ctx, container)
+			} else {
+				found = m.checkGeneratorImage(ctx, container, image.generator)
 			}
-			if err := m.checkGeneratorRuns(ctx, container, image.generator); err != nil {
+			for _, err := range found {
 				errs = append(errs, fmt.Errorf("%s on %s: %w", image.repository, platform, err))
 			}
 		}

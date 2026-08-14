@@ -345,13 +345,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 			if err != nil {
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
-			var gitDir *dagger.Directory
-			if inputArgs["gitDir"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["gitDir"]), &gitDir)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg gitDir", err))
-				}
-			}
 			var registry string
 			if inputArgs["registry"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["registry"]), &registry)
@@ -394,7 +387,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg idTokenRequestToken", err))
 				}
 			}
-			return (*Avroc).Release(&parent, ctx, gitDir, registry, repository, username, password, idTokenRequestUrl, idTokenRequestToken)
+			return (*Avroc).Release(&parent, ctx, registry, repository, username, password, idTokenRequestUrl, idTokenRequestToken)
 		case "TagScheme":
 			var parent Avroc
 			err = json.Unmarshal(parentJSON, &parent)

@@ -79,7 +79,9 @@ import (
 // without changing it there is the drift ImageContract exists to catch.
 //
 // pluginDir lives in main.go, because the regeneration stage's scratch container
-// is deliberately the same layout as the published image and both read it.
+// resolves generators on PATH out of the same directory the published image does
+// and both read the constant; that container is no longer the published layout in
+// full, and main.go's comment on the constant says which half it reproduces.
 // Two of the rows that used to be here are gone, and each absence is a decision
 // rather than an omission. They are recorded as comments in the block below,
 // where the constant they replace used to be, because a deleted constant leaves
@@ -107,6 +109,24 @@ const (
 	// lines docs/container/SPEC.md and the README print need no
 	// `--tmpfs /tmp:mode=1777`, and the image is once again exactly scratch plus
 	// the files that document names.
+	//
+	// Since #217 the archetype nonetheless sets TMPDIR=/tmp, as part of a
+	// standardized environment whose whole point is that what a process reads out of
+	// HOME and TMPDIR is a property of the image rather than of the runtime. So the
+	// published image names a temporary directory it does not contain, and that is
+	// worth writing down rather than leaving to be discovered: a program that read
+	// it would get ENOENT on a path the configuration plainly advertises. What makes
+	// it harmless is #218 — avroc reads no ambient temporary directory at all, and
+	// internal/avroc.TestAvrocReadsNoAmbientTemporaryDirectory holds that as a
+	// property of the source across internal/, cmd/ and avrocpb/, so the thing that
+	// would break is a thing the tests refuse. Both halves are checked, and by
+	// different checks: that nothing reads it is that test's, and that the image
+	// does not carry it is imageContents' — the listing below is exhaustive, so a
+	// /tmp appearing in the image is a failure, in either direction.
+	//
+	// A deployment that wants one mounts a tmpfs or an emptyDir over it, which is
+	// what the archetype documents and is the reason nothing may be contributed
+	// under that path.
 
 	// imageUID and imageGID are the pinned non-root identity the image runs as.
 	// They are numbers rather than a name because the image has no /etc/passwd
@@ -385,8 +405,25 @@ func (m *Avroc) binaries(platform dagger.Platform) *dagger.Directory {
 // first: a change that broke the entrypoint most likely broke the user and the
 // working directory too, and one run should say so.
 func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) error {
-	image := m.baseImage(platform)
+	return errors.Join(m.checkBaseImage(ctx, m.baseImage(platform))...)
+}
 
+// checkBaseImage is every assertion the base image is held to, over a container
+// somebody else chose.
+//
+// It takes the container rather than a platform so that there is exactly one
+// definition of "the base image is correct" and three call sites for it:
+// ImageContract, which builds one per published platform; the release gate, which
+// passes the very container it is about to push (release.go's releaseContract);
+// and nothing else. The reviewer of #217 caught the release gate having grown a
+// second, hand-copied list — which would have meant a check added here silently
+// stopping short of a release, the exact hole putting the gate inside Release was
+// meant to close.
+//
+// Every group is run and every failure collected rather than stopping at the
+// first: a change that broke the entrypoint most likely broke the user and the
+// working directory too, and one run should say so.
+func (m *Avroc) checkBaseImage(ctx context.Context, image *dagger.Container) []error {
 	errs := m.checkImageConfig(ctx, image)
 	errs = append(errs, m.checkImageFilesystem(ctx, image, baseImageExecutables())...)
 	if err := m.checkImageIsTheCLI(ctx, image); err != nil {
@@ -395,7 +432,7 @@ func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) e
 	if err := m.checkAMissingWorkingDirectoryIsLegible(ctx, image); err != nil {
 		errs = append(errs, err)
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 // checkImageIsTheCLI runs the entrypoint and requires avroc's usage back.
