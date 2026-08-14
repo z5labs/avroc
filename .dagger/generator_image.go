@@ -379,7 +379,7 @@ func generatorProbe(schema *dagger.File, name, outDir string) (*dagger.Directory
 
 	return dag.Directory().
 		WithFile("schema.avdl", schema).
-		WithNewFile("avroc.json", string(manifest)), nil
+		WithNewFile(manifestFilename, string(manifest)), nil
 }
 
 // probeOptions is the least configuration a built-in generator needs to run at

@@ -171,7 +171,7 @@ func (m *Avroc) WorkedExample(ctx context.Context) error {
 	}
 	errs = append(errs, m.checkImageConfig(ctx, image)...)
 	errs = append(errs, m.checkImageContents(ctx, image, want)...)
-	errs = append(errs, m.checkWorkedExampleGenerates(ctx, image, example.generator)...)
+	errs = append(errs, m.checkWorkedExampleGenerates(ctx, image, example.generator, example.mount)...)
 	return errors.Join(errs...)
 }
 
@@ -186,7 +186,18 @@ func (m *Avroc) workedExample(ctx context.Context) (*workedExample, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newWorkedExample(dockerfile)
+	mount, err := workedExampleMount(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	example, err := newWorkedExample(dockerfile)
+	if err != nil {
+		return nil, err
+	}
+	example.mount = mount
+	example.spec = spec
+	return example, nil
 }
 
 // workedExample is the document's Dockerfile, parsed and judged.
@@ -206,6 +217,20 @@ type workedExample struct {
 	// manifest asks for it by.
 	executable string
 	generator  string
+	// mount is where the document's own `docker run` mounts the project and
+	// points the working directory, read out of the console block beside the
+	// Dockerfile rather than written here (#219).
+	//
+	// It is extracted for the reason the Dockerfile is: since the image declares
+	// no working directory, the `-w` in that command is load bearing, and a copy
+	// of it in this file would be the one that is checked while the one in the
+	// document is the one people read.
+	mount string
+	// spec is the whole document, kept so that rules can break the console block
+	// the way it breaks the Dockerfile. mount is extracted from the document
+	// rather than from the Dockerfile, so its failure path is not reachable from
+	// the dockerfile field alone.
+	spec string
 }
 
 // newWorkedExample parses text and requires it to be the shape
@@ -383,6 +408,51 @@ func (e *workedExample) rules() error {
 		}
 	}
 
+	// The mount point comes out of the document's console block rather than out of
+	// its Dockerfile (#219, workedExampleMount), so its failure path is not
+	// reachable by editing e.dockerfile and needs cases of its own. Same rule as
+	// above: the edit must change something, or the case is re-checking the
+	// committed document.
+	mounts := []struct {
+		broken string
+		edit   func(string) string
+	}{{
+		// The one this story creates. A `docker run` printed without `-w` is a
+		// command that lands in / and cannot find the manifest, and it is the first
+		// thing an adopter copies.
+		broken: "the documented `docker run` losing its -w",
+		edit:   func(s string) string { return strings.Replace(s, " -w "+e.mount, "", 1) },
+	}, {
+		// The other half of "correct as printed": a command whose -w and -v have
+		// drifted apart runs, finds no manifest, and reads as the caller's mistake.
+		broken: "the documented `docker run` pointing -w somewhere it did not mount",
+		edit:   func(s string) string { return strings.Replace(s, "-w "+e.mount, "-w /elsewhere", 1) },
+	}, {
+		broken: "the console block the invocation is printed in being removed",
+		edit: func(s string) string {
+			return strings.Replace(s, "```console\n$ docker build", "```text\n$ docker build", 1)
+		},
+	}}
+	for _, c := range mounts {
+		// The edit is applied to the worked example's section alone. This document
+		// prints the same `docker run` in several sections, so an unscoped Replace
+		// edits an *earlier* one, leaves the extracted command untouched and reports
+		// the committed value back — a case that passes while checking nothing. The
+		// negative control caught exactly that, which is what it is for.
+		edited, err := editWorkedExampleSection(e.spec, c.edit)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", c.broken, err))
+			continue
+		}
+		if edited == e.spec {
+			errs = append(errs, fmt.Errorf("%s: the case changed nothing, so it is checking the committed document rather than a broken one", c.broken))
+			continue
+		}
+		if got, err := workedExampleMount(edited); err == nil {
+			errs = append(errs, fmt.Errorf("%s: accepted (as %q), want rejected", c.broken, got))
+		}
+	}
+
 	return errors.Join(errs...)
 }
 
@@ -444,7 +514,12 @@ func (e *workedExample) contents() (map[string]imageEntry, error) {
 // files — what the example's generator writes is the document's business, and a
 // pipeline asserting its bytes would be a second copy of a Go program nobody
 // would think to update.
-func (m *Avroc) checkWorkedExampleGenerates(ctx context.Context, image *dagger.Container, generator string) []error {
+// mount is the path the document's own `docker run` mounts at and points `-w`
+// at, extracted from the console block rather than written here (#219,
+// workedExampleMount). That is what makes the flag in that command checked as
+// printed: a `-w` dropped from the document changes where this check mounts, and a
+// `-w` removed from it altogether fails the extraction outright.
+func (m *Avroc) checkWorkedExampleGenerates(ctx context.Context, image *dagger.Container, generator, mount string) []error {
 	const outDir = "out"
 
 	project, err := generatorProbe(m.Source.File("example/schema.avdl"), generator, outDir)
@@ -457,14 +532,13 @@ func (m *Avroc) checkWorkedExampleGenerates(ctx context.Context, image *dagger.C
 	var errs []error
 	for _, user := range []string{imageUser, "1234:1234"} {
 		// WithWorkdir as well as mounting there: since #219 the image declares no
-		// working directory, and the document's own invocations carry the `-w`
-		// this is. See projectMount.
+		// working directory, and the `-w` this is came out of the document.
 		generated := image.
 			WithUser(user).
-			WithDirectory(projectMount, project, dagger.ContainerWithDirectoryOpts{Owner: user}).
-			WithWorkdir(projectMount).
+			WithDirectory(mount, project, dagger.ContainerWithDirectoryOpts{Owner: user}).
+			WithWorkdir(mount).
 			WithExec([]string{"generate"}, dagger.ContainerWithExecOpts{UseEntrypoint: true}).
-			Directory(projectMount + "/" + outDir)
+			Directory(mount + "/" + outDir)
 
 		entries, err := generated.Entries(ctx)
 		switch {
@@ -512,6 +586,133 @@ func workedExampleDockerfile(spec string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s's %q section contains no ```dockerfile block", containerSpec, workedExampleHeading)
+}
+
+// workedExampleMount reads the mount point out of the `docker run` the worked
+// example's section prints, taking it from the `-w` flag that command carries.
+//
+// It exists because the image declares no working directory since #219, which
+// makes that flag part of the documented invocation rather than decoration: a
+// reader who copies the command without it lands in / and gets an error about a
+// manifest they can see. So the flag is *extracted* and used as this check's mount
+// point, exactly as the Dockerfile is extracted and built — a `-w` hard-coded here
+// would be the copy that is checked while the document's is the copy that is read,
+// and the two would drift the moment somebody reflowed the command.
+//
+// Both ends are located rather than assumed and every failure names what was
+// missing, for workedExampleDockerfile's reason: a section whose console block has
+// been reworded and one whose `docker run` has genuinely lost its `-w` are
+// different findings, and a check that quietly found nothing has stopped running.
+func workedExampleMount(spec string) (string, error) {
+	const fence = "```"
+
+	lines := strings.Split(spec, "\n")
+	start := slices.Index(lines, workedExampleHeading)
+	if start < 0 {
+		return "", fmt.Errorf("%s has no %q section", containerSpec, workedExampleHeading)
+	}
+
+	for i := start + 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "## ") {
+			break
+		}
+		if strings.TrimSpace(lines[i]) != fence+"console" {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			if strings.TrimSpace(lines[j]) == fence {
+				break
+			}
+			if !strings.Contains(lines[j], "docker run") {
+				continue
+			}
+			// The command is wrapped across lines with a trailing backslash, so
+			// the flag and its value are not reliably on the line `docker run` is
+			// on. Join the continuations before looking.
+			command := lines[j]
+			for strings.HasSuffix(strings.TrimSpace(command), `\`) && j+1 < len(lines) {
+				j++
+				command = strings.TrimSuffix(strings.TrimSpace(command), `\`) + " " + lines[j]
+			}
+
+			return dockerRunMount(strings.TrimSpace(command))
+		}
+	}
+	return "", fmt.Errorf("%s's %q section contains no ```console block running `docker run`", containerSpec, workedExampleHeading)
+}
+
+// editWorkedExampleSection applies edit to the worked example's section of the
+// document and returns the whole document with that section replaced.
+//
+// It exists because this document prints `docker run` in several places, so an
+// edit meant to break the worked example's invocation will silently break an
+// earlier section's instead — leaving the command under test untouched and the
+// case passing on a document it did not change in the way it claimed to.
+func editWorkedExampleSection(spec string, edit func(string) string) (string, error) {
+	head, section, found := strings.Cut(spec, workedExampleHeading)
+	if !found {
+		return "", fmt.Errorf("%s has no %q section", containerSpec, workedExampleHeading)
+	}
+	return head + workedExampleHeading + edit(section), nil
+}
+
+// dockerRunMount reads the project mount point out of one `docker run` command
+// line, and requires the command to be internally consistent: the path `-w` names
+// has to be the path `-v` mounts the project at.
+//
+// Both halves matter, and the second is the one worth having. Since #219 the image
+// declares no working directory, so `-v` and `-w` are two statements of the same
+// path that a person edits separately — the shape of mistake this catches is a
+// mount point changed in one of them, which produces a command that runs, finds no
+// manifest at the working directory, and fails in a way the document says is a
+// caller's error rather than the document's.
+//
+// It returns the mount point, which is what the check then generates at, so a
+// document that renamed its mount is followed rather than contradicted.
+func dockerRunMount(command string) (string, error) {
+	fields := strings.Fields(command)
+
+	value := func(flag string) (string, bool) {
+		for k, field := range fields {
+			if field == flag && k+1 < len(fields) {
+				return fields[k+1], true
+			}
+			// The joined form, `-w=/work`, which docker also accepts.
+			if after, ok := strings.CutPrefix(field, flag+"="); ok {
+				return after, true
+			}
+		}
+		return "", false
+	}
+
+	workdir, ok := value("-w")
+	if !ok {
+		workdir, ok = value("--workdir")
+	}
+	if !ok {
+		return "", fmt.Errorf("%s's worked example runs `%s`, which carries no -w: the image declares no working directory (#219), so that command lands in / and cannot find %s. Add the flag to the document rather than to this check", containerSpec, command, manifestFilename)
+	}
+
+	volume, ok := value("-v")
+	if !ok {
+		volume, ok = value("--volume")
+	}
+	if !ok {
+		return "", fmt.Errorf("%s's worked example runs `%s`, which mounts nothing: there is no project for -w %s to point at", containerSpec, command, workdir)
+	}
+
+	// `-v <host>:<container>[:<options>]`; the container path is what -w has to
+	// agree with. The host side may itself be quoted and contain no colon here.
+	parts := strings.Split(strings.Trim(volume, `"'`), ":")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("%s's worked example runs `%s`, whose -v %s names no container path", containerSpec, command, volume)
+	}
+	target := parts[1]
+
+	if target != workdir {
+		return "", fmt.Errorf("%s's worked example runs `%s`, which mounts the project at %s and sets the working directory to %s: the two have to be the same path, or avroc starts somewhere there is no %s", containerSpec, command, target, workdir, manifestFilename)
+	}
+	return workdir, nil
 }
 
 // dockerfileInstruction is one instruction, with its keyword upper-cased and

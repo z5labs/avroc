@@ -545,22 +545,48 @@ overturn it; and the writable half dies independently, because a contributed
 directory is mode `0555` and a `/work` that is not writable is not one a
 generation can write into. What made it affordable is that `-w /work` is a path
 the invocation already contains, where #218's `--tmpfs /tmp:mode=1777` was a fact
-an adopter had no way to possess. It is a **break**, deliberately, and it rides
-in #217's release notes beside the two already there. Three things about the way
-it landed are decisions rather than mechanics. `ImageContract` asserts
-`WorkingDir` is *empty* rather than dropping the assertion, because an unasserted
-field is how a base layer's inherited value arrives unnoticed. `projectMount` in
-`image.go` is the checks' own mount point and is deliberately **not** in the block
-of contract constants, because nothing about the image depends on it and a check
-that mounted at `/project` would be equally correct — it is `/work` only so the
-checks run the command the documents print. And every check that reached
-`avroc.json` through the image's working directory now names one explicitly
-(`image.go`, `generator_image.go`, `worked_example.go`, `trace_propagation.go`),
-which is what `.dagger/main.go` and `daggerverse/avroc` had already written for
-exactly this reason — the latter defending against this image before it existed.
-`daggerverse/avroc`'s `projectDir` stays `/work` and its behaviour is unchanged:
-the mount point is still this project's convention, and the module is what names
-it now rather than the image.
+an adopter had no way to possess. It is a **break**, deliberately, and the SPEC
+requires the next minor release's notes to name it beside #217's two rather than
+claiming they already do.
+
+Every check that reached `avroc.json` through the image's working directory now
+names one explicitly (`image.go`, `generator_image.go`, `worked_example.go`,
+`trace_propagation.go`), which is what `.dagger/main.go` and `daggerverse/avroc`
+had already written for exactly this reason — the latter defending against this
+image before it existed. `daggerverse/avroc`'s `projectDir` stays `/work` and its
+behaviour is unchanged: the mount point is still this project's convention, and
+the module is what names it now rather than the image.
+
+Four things about the way it landed are decisions rather than mechanics, and three
+of them exist because **an absence is the easiest thing to leave unchecked**.
+
+- `ImageContract` asserts `WorkingDir` is *empty* rather than dropping the
+  assertion, because an unasserted field is how a base layer's inherited value
+  arrives unnoticed.
+- `checkAMissingWorkingDirectoryIsLegible` runs `generate` with no working
+  directory and requires a non-zero exit whose stderr names `avroc.json`. The new
+  way to hold this image wrong is to mount a project and forget the `-w`, and
+  every other stage passes the flag — so without this the one failure mode the
+  release creates is the one path nothing runs. It sits on the *base* image, which
+  ships no generator, because `loadManifest` runs before the capability handshake:
+  a run from `/` fails on the missing manifest and never reaches the point where
+  having no generator would matter. That ordering is what the check depends on,
+  which is why it asserts the message and not merely the status.
+- `projectMount` in `image.go` is the checks' own mount point and is deliberately
+  **not** in the block of contract constants, because nothing about the image
+  depends on it. That it is not privileged is *asserted* rather than stated:
+  `generateInImage` takes the mount as an argument, and `checkImageGenerates`
+  gives its two runs different ones — `/work` with the image's UID (the documented
+  invocation) and `/srv/somewhere-else` with an overridden UID. A suite that only
+  ever mounted at `/work` would go on passing the day something grew a dependence
+  on that literal, and the empty-`WorkingDir` assertion would not see it.
+- The worked example's `-w` is **extracted from the document** rather than written
+  in `worked_example.go` (`workedExampleMount`), the way its Dockerfile already
+  was, and `dockerRunMount` additionally requires the `-w` path to equal the path
+  `-v` mounts at. A hard-coded flag would have been the copy that is checked while
+  the document's is the copy that is read. `workedExample.rules` breaks the console
+  block three ways and requires each to be refused, because the failure path of an
+  extractor nobody has broken is a check nobody knows the state of.
 
 `.dagger/generator_image.go` builds the three images that carry avroc's own
 generators, each of them the base plus one executable in the plugin directory
@@ -679,8 +705,8 @@ generator that has no image yet. `Image` exposes what those composed.
 
 It is a **convenience over `docs/container/SPEC.md`, not a contract**, so it gets
 no `SPEC.md` (`docs/CONVENTIONS.md`, "What belongs here"): everything it does can
-be written as `docker run --rm -v "$PWD:/work" -w /work`, and a spec for it would imply
-the contract were a property of the module. What it needs to say it says in its
+be written as `docker run --rm -v "$PWD:/work" -w /work`, and a spec for it would
+imply the contract were a property of the module. What it needs to say it says in its
 module comment and in `dagger call --help`. It is a separate module rather than
 more functions on the root one because a caller who installs it should get the
 one function they came for and not this repository's `ci`, `release` and

@@ -337,19 +337,25 @@ func (m *Avroc) tracedGeneration(platform dagger.Platform, collector *dagger.Ser
 			Permissions: executableMode,
 		}).
 		WithServiceBinding(collectorHostname, collector).
-		// WithWorkdir as well as mounting there: since #219 the image declares no
-		// working directory, and the launcher re-execs avroc in place rather than
-		// naming a project, so the exec's own working directory is the only thing
-		// that puts avroc where avroc.json is. See projectMount.
 		WithDirectory(projectMount, m.Source.Directory("example"), dagger.ContainerWithDirectoryOpts{
 			Owner: imageUser,
 		}).
-		WithWorkdir(projectMount).
 		// The launcher's own scratch directory, owned by the image's user so it
 		// can write the record into it. See traceparentRecord.
 		WithDirectory(traceRecordDir, dag.Directory(), dagger.ContainerWithDirectoryOpts{
 			Owner: imageUser,
 		}).
+		// WithWorkdir as well as mounting there: since #219 the image declares no
+		// working directory, and the launcher re-execs avroc in place rather than
+		// naming a project, so the exec's own working directory is the only thing
+		// that puts avroc where avroc.json is. See projectMount.
+		//
+		// It is set **last**, immediately before the exec, and deliberately: every
+		// path above is absolute today, but a relative one added after a WithWorkdir
+		// would resolve inside the project mount — which is the one tree this check
+		// byte-compares against the committed example/, so a file landing there is a
+		// failure whose cause is nowhere near the line that caused it.
+		WithWorkdir(projectMount).
 		WithExec([]string{
 			traceLauncher,
 			"-launch",

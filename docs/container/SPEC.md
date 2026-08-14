@@ -198,31 +198,46 @@ layout reasonably does. A caller **MUST NOT** rely on the base image setting one
 
 ### Why the image sets none
 
-Because the pipeline that builds it does not, and the response to that gap is to
-delete avroc's need for the thing rather than to ask for it upstream (#217, #218).
-The shared archetype states the absence as a decision rather than an omission,
-and it is load bearing there: a relative contribution path is refused on the
-grounds that it would resolve against a working directory the pipeline never
-sets. The writable half dies with it independently — a contributed directory is
-mode `0555`, so a `/work` created in the image would not be one generation could
-write into, and "generation into an unmounted `/work` works" would stop being
-true whatever happened to the configuration field.
+Because a working directory is not something a consumer needs the image to hold.
+It is the one part of the invocation the caller has already written down: `-v
+"$PWD:/work"` types the path once, so `-w /work` types a path the command
+contains rather than teaching the reader a fact they had no way to possess. A
+baked-in default saves one flag and, in exchange, makes a mount point a promise —
+and promises are what this document is for spending carefully.
 
-The flag is cheap in a way the argument turned on: `-v "$PWD:/work"` already
-types the path once, so `-w /work` types a path the invocation contains rather
-than teaching the reader a fact they had no way to possess. That is the
-difference between this and the `--tmpfs /tmp:mode=1777` #218 removed, and it is
-why this promise was worth spending and that one was not.
+The **writable** half of the old guarantee could not have survived in any case,
+and that is a fact about the image rather than about how it is built. Generation
+needs to write into the working directory, so `/work` had to be a directory this
+image's user owned and could write to; a `/work` that is not writable makes
+"generation into an unmounted `/work` works" false whatever the configuration
+field says. Once the writable half is gone, an empty `/work` in the filesystem is
+a path that exists to be mounted over, and [No shell](#no-shell)'s "the base is
+`scratch` plus the files this document names" is a better guarantee without it.
 
-> **Breaking change.** This is one, and it is called out as one: every `docker
-> run` in this document, in [`README.md`](../../README.md) and in
-> [`CONTRIBUTING.md`](../../CONTRIBUTING.md) grew a `-w`, and a documented command
-> that stops working does not ship in a patch release. It lands in the next minor
-> release beside the other breaks #217 carries — attestation discovery becoming
-> referrers-only, and the SBOM's subject moving from the executable to the image
-> — and the release notes name all three together. See [How a covered thing would
-> change](#how-a-covered-thing-would-change) for why a removal cannot be shipped
-> as an overlap the way a move can.
+There is a second reason, and it is deliberately *not* stated as a property of
+this image: the shared pipeline this project is moving its build onto sets no
+working directory and states that as a decision rather than an omission (#217).
+How the image is built is [out of
+scope](#how-the-image-is-built-and-published) here, so that is not a reason a
+consumer can check and it is not offered as one — it is why the promise is being
+spent now, while it can still be, rather than why it was not worth keeping.
+
+> **Breaking change.** This is one. Every `docker run` in this document, in
+> [`README.md`](../../README.md) and in [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
+> grew a `-w`, and a command a previous release documented now fails without it.
+>
+> Two things follow, and they are requirements on the release rather than
+> descriptions of one already made. It **MUST NOT** ship in a patch release; it
+> ships in the next minor, beside the other breaks #217 carries — attestation
+> discovery becoming referrers-only, and the SBOM's subject moving from the
+> executable to the image. And that release's notes **MUST** name it, with the
+> invocation a caller has to write instead, which is what [How a covered thing
+> would change](#how-a-covered-thing-would-change) requires of a guarantee that is
+> withdrawn rather than moved.
+>
+> The migration is safe to make early: `-w /work` behaves identically on an image
+> that already sets `WorkingDir`, so a caller can add the flag before taking the
+> release rather than after.
 
 ## The user
 
@@ -327,13 +342,19 @@ hard way by somebody:
   arguments, or against an image built `FROM` this one with a busybox copied in
   for the purpose.
 
-Two things the image does **not** have are worth naming, and neither is needed.
-There is no temporary directory in it: avroc writes each invocation's descriptor
-into a directory beneath the output tree the generator is writing to, so a
-`docker run` that mounts a project needs no `--tmpfs`, no volume and
-no writable path anywhere else. And there is no [working
-directory](#the-working-directory) — nothing is created to be one, so the mounted
-project is the only writable path a generation touches. Where the descriptor goes is
+Two things the image does **not** have are worth naming, because the exhaustive
+listing above reads as exhaustive and neither absence is guessable from it.
+
+**No temporary directory, and none is needed.** avroc writes each invocation's
+descriptor into a directory beneath the output tree the generator is writing to,
+so a `docker run` that mounts a project needs no `--tmpfs`, no volume and no
+writable path anywhere else.
+
+**No working directory, and the caller supplies one.** Nothing in the image is
+created to be one, which is why the mounted project is the only writable path a
+generation touches — but unlike the temporary directory, this one is not simply
+absent from the invocation too: a caller **MUST** pass `-w`, as [The working
+directory](#the-working-directory) requires. Where the descriptor goes is
 [implementation detail](#compatibility-guarantees) like everything else in the
 filesystem that is not named above, and a derived image that wrote into it by
 path would be depending on something that may change in a patch release.
