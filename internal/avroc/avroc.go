@@ -257,12 +257,29 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 
 	desc := newDescriptor(options, schemas)
 
+	// The project's own output tree, which avroc owns and creates: a generator
+	// never learns where it is, and it has to exist before either of this
+	// invocation's two private directories can be made inside it. It is resolved
+	// to an absolute path first, which is what makes both of the paths on the
+	// child's argument vector absolute — so that two runs of the same generator
+	// from different working directories are the same invocation.
+	outputDir, err := filepath.Abs(output)
+	if err != nil {
+		g.log.ErrorContext(ctx, "failed to resolve output directory", slog.String("generator", g.name), slog.Any("error", err))
+		return nil, err
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		g.log.ErrorContext(ctx, "failed to create output directory", slog.String("generator", g.name), slog.Any("error", err))
+		return nil, err
+	}
+
 	// One descriptor file per generator invocation, in a directory created for
 	// that invocation and nothing else, removed once the generator has exited.
 	// docs/plugin/SPEC.md's "Location and lifetime" is normative for all three,
-	// and this defer is registered first so that it unwinds last — after the
-	// generator process has been waited on, never while it may still be reading.
-	descriptorDir, err := os.MkdirTemp("", g.name+"-descriptor-*")
+	// and this defer is registered first of the two removals so that it unwinds
+	// last — after the generator process has been waited on, never while it may
+	// still be reading.
+	descriptorDir, err := newDescriptorDir(outputDir, g.name)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to create descriptor directory", slog.String("generator", g.name), slog.Any("error", err))
 		return nil, err
@@ -274,27 +291,6 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 	descriptorPath, err := writeDescriptor(descriptorDir, desc)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to write descriptor", slog.String("generator", g.name), slog.Any("error", err))
-		return nil, err
-	}
-
-	// Both paths go across as absolute ones, so that two runs of the same
-	// generator from different working directories are the same invocation.
-	descriptorPath, err = filepath.Abs(descriptorPath)
-	if err != nil {
-		g.log.ErrorContext(ctx, "failed to resolve descriptor path", slog.String("generator", g.name), slog.Any("error", err))
-		return nil, err
-	}
-	outputDir, err := filepath.Abs(output)
-	if err != nil {
-		g.log.ErrorContext(ctx, "failed to resolve output directory", slog.String("generator", g.name), slog.Any("error", err))
-		return nil, err
-	}
-
-	// The project's own output tree, which avroc owns and creates: a generator
-	// never learns where it is, and it has to exist before a scratch directory
-	// can be made inside it.
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		g.log.ErrorContext(ctx, "failed to create output directory", slog.String("generator", g.name), slog.Any("error", err))
 		return nil, err
 	}
 

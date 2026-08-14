@@ -115,6 +115,32 @@ directory created for that invocation alone, read-only, complete before the
 generator starts and removed once it has exited. `docs/plugin/SPEC.md`'s
 "Location and lifetime" is normative; nothing may derive meaning from the path.
 
+**Where the descriptor is written** is the generator's own output tree, in a
+hidden per-invocation directory beside the scratch directory `--out` names
+(`newDescriptorDir`, #218). It used to be `os.MkdirTemp("", …)`, and that one line
+was the whole reason `.dagger/image.go` grafted a 1777 `/tmp` into a `scratch`
+image. Keeping it would have cost every `docker run` line in `README.md`, in
+`docs/container/SPEC.md` and in the worked example a `--tmpfs /tmp:mode=1777` —
+and an adopter who forgot it a Go standard library message about a directory they
+never asked for, from a program that has not reached its own argument parsing — so
+the requirement was removed instead. **avroc reads no ambient temporary directory
+at all**, which `internal/avroc.TestAvrocReadsNoAmbientTemporaryDirectory` holds
+as a property of the source across `internal/`, `cmd/` and `avrocpb/`: no
+`os.TempDir`, no `MkdirTemp`/`CreateTemp` without a parent, and no `TMPDIR` by
+name. It is a source scan for the same reason the determinism ban is one — every
+machine the tests run on has a temporary directory, and only the published image
+does not. `dagger call regeneration` runs in scratch containers that now have no
+`/tmp` while still disagreeing about `TMPDIR`, so a read put back anywhere fails
+the stage outright; the axis that carries the descriptor's absolute path is
+`regenerationRun.root`, which is the prefix of both paths on the vector.
+
+Nothing in `docs/plugin/SPEC.md` changed for it: the path is implementation, and
+a plugin that noticed the move had already broken the rule forbidding it to derive
+anything from the descriptor's name or its directory. The consequence accepted
+rather than discovered is that a `SIGKILL` now leaves a dot-directory in the
+project's output tree instead of in `/tmp` — which `merge.go` already accepts for
+the scratch directory, and the name says what left it.
+
 The file **is** the value the generator received: its path is what `--descriptor`
 names, so there is no second encoding of the same inputs that could drift from
 it. The generator's options travel twice — in the descriptor, which
@@ -503,8 +529,9 @@ generator**, the CLI as `Entrypoint` with an empty `Cmd`, `/work` as
 `WorkingDir`, UID and GID 65532 owning both directories and running the process,
 the IR `FileDescriptorSet` at `/usr/local/share/avroc/ir.binpb`, and a `scratch`
 base — no shell, no libc, no package manager, so extension is `COPY`-only. The
-one thing in the filesystem the document does not name is a 1777 `/tmp`, which
-avroc needs because it writes each invocation's descriptor under `os.TempDir`.
+filesystem is now exactly the files that document names and nothing else: a 1777
+`/tmp` used to be grafted on for the descriptor, and #218 removed the reason for
+it rather than the mount that carried it (see "Where the descriptor is written").
 
 `.dagger/generator_image.go` builds the three images that carry avroc's own
 generators, each of them the base plus one executable in the plugin directory

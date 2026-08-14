@@ -415,13 +415,10 @@ func TestGeneratorGenerate(t *testing.T) {
 	}
 	schema := testSchema("User")
 
-	// The descriptor's lifetime ends when the generator exits, so the set of
-	// descriptor directories on disk must not grow across an invocation. Taken
-	// before rather than asserted as "none afterwards", because a crashed
-	// earlier run may have left one and that is not this test's failure.
-	before := descriptorDirs(t)
-
-	// A directory avroc has to create: a plugin may assume --out exists.
+	// A directory avroc has to create: a plugin may assume --out exists. Since
+	// #218 it is also where the descriptor's own private directory is made, so
+	// avroc creating it is a precondition of the descriptor rather than only of
+	// the scratch directory.
 	projectRoot, outputDir := newProject(t)
 
 	if err := generateOne(ctx, g, projectRoot, outputDir, options, schema); err != nil {
@@ -447,6 +444,20 @@ func TestGeneratorGenerate(t *testing.T) {
 	absOutput, err := filepath.Abs(outputDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The descriptor lives in a directory of its own beneath the same output tree
+	// (#218), which is what lets the published image be scratch with no /tmp in
+	// it. It is a sibling of the scratch directory and never inside it, so a
+	// generator walking its own --out never finds the descriptor there.
+	descriptorDir := filepath.Dir(args[1])
+	if filepath.Dir(descriptorDir) != absOutput {
+		t.Errorf("--descriptor %q is not in a directory beneath %q", args[1], absOutput)
+	}
+	if within(descriptorDir, args[3]) {
+		t.Errorf("the descriptor directory %q is inside the scratch directory %q", descriptorDir, args[3])
+	}
+	if within(args[3], descriptorDir) {
+		t.Errorf("--out %q resolves inside the descriptor directory %q", args[3], descriptorDir)
 	}
 	if !filepath.IsAbs(args[3]) {
 		t.Errorf("--out %q is not an absolute path", args[3])
@@ -500,10 +511,8 @@ func TestGeneratorGenerate(t *testing.T) {
 		t.Errorf("the output directory holds %v, want just the merged pkg directory", entries)
 	}
 
-	for dir := range descriptorDirs(t) {
-		if _, ok := before[dir]; !ok {
-			t.Errorf("descriptor directory %q survived the invocation that created it", dir)
-		}
+	if dirs := descriptorDirs(t, outputDir); len(dirs) != 0 {
+		t.Errorf("descriptor directories %v survived the invocation that created them", dirs)
 	}
 }
 
@@ -535,8 +544,6 @@ printf 'package half\n' > "$out/half.go"
 exit 3
 `))
 	g.log = log
-
-	before := descriptorDirs(t)
 
 	projectRoot, outputDir := newProject(t)
 	err := generateOne(ctx, g, projectRoot, outputDir, nil, testSchema("User"))
@@ -585,10 +592,8 @@ exit 3
 		t.Errorf("nothing in the log reports the exit status: %v", records())
 	}
 
-	for dir := range descriptorDirs(t) {
-		if _, ok := before[dir]; !ok {
-			t.Errorf("descriptor directory %q survived a failed invocation", dir)
-		}
+	if dirs := descriptorDirs(t, outputDir); len(dirs) != 0 {
+		t.Errorf("descriptor directories %v survived a failed invocation", dirs)
 	}
 }
 
@@ -1513,8 +1518,6 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 	// streams, and the test binary would then outlive its own generator.
 	g := testGenerator(t, writeShellGenerator(t, fmt.Sprintf(": > '%s'\nexec sleep 300\n", started)))
 
-	before := descriptorDirs(t)
-
 	projectRoot, outputDir := newProject(t)
 	done := make(chan error, 1)
 	go func() {
@@ -1545,10 +1548,8 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 		t.Fatal("generate did not return after its context was cancelled")
 	}
 
-	for dir := range descriptorDirs(t) {
-		if _, ok := before[dir]; !ok {
-			t.Errorf("descriptor directory %q survived a cancelled invocation", dir)
-		}
+	if dirs := descriptorDirs(t, outputDir); len(dirs) != 0 {
+		t.Errorf("descriptor directories %v survived a cancelled invocation", dirs)
 	}
 
 	// The scratch directory goes with it. Cancellation is the case that used to
@@ -1564,20 +1565,28 @@ func TestGeneratorGenerateCancellation(t *testing.T) {
 	}
 }
 
-// descriptorDirs is the set of per-invocation descriptor directories currently
-// on disk for the stand-in generator.
-func descriptorDirs(t *testing.T) map[string]struct{} {
+// descriptorDirs is every per-invocation descriptor directory the stand-in
+// generator has left in one output tree.
+//
+// It looks in the output tree rather than under os.TempDir since #218, and the
+// assertion it supports got stronger for it: the output tree is created by the
+// test that asks, so "none of these" is a claim about this invocation alone.
+// Under the old location a leftover from a crashed earlier run — or from another
+// package's temporary files — had to be subtracted first.
+func descriptorDirs(t *testing.T, output string) []string {
 	t.Helper()
 
-	matches, err := filepath.Glob(filepath.Join(os.TempDir(), testGeneratorName+"-descriptor-*"))
+	matches, err := filepath.Glob(filepath.Join(output, "."+testGeneratorName+"-descriptor-*"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dirs := make(map[string]struct{}, len(matches))
-	for _, m := range matches {
-		dirs[m] = struct{}{}
-	}
-	return dirs
+	slices.Sort(matches)
+	return matches
+}
+
+// within reports whether path is dir or is beneath it.
+func within(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, dir+string(filepath.Separator))
 }
 
 // TestGeneratorArgs pins the vector docs/plugin/SPEC.md specifies, including
