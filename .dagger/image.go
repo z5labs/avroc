@@ -71,9 +71,22 @@ import (
 //
 // pluginDir lives in main.go, because the regeneration stage's scratch container
 // is deliberately the same layout as the published image and both read it.
+// Two of the rows that used to be here are gone, and each absence is a decision
+// rather than an omission. They are recorded as comments in the block below,
+// where the constant they replace used to be, because a deleted constant leaves
+// nothing for a reader to find and both deletions are things a future change
+// would otherwise re-add in good faith.
 const (
-	// workDir is the working directory a caller mounts a project at.
-	workDir = "/work"
+	// There is no working directory in this image, and its absence is a decision
+	// (#219). WorkingDir was /work and /work was created here owned by the image's
+	// user, so that a caller could mount a project over it and pass no further
+	// arguments. Both are gone: the caller names the mount point on the command
+	// line — `-v "$PWD:/work" -w /work` — and the image declares nothing, which is
+	// what docs/container/SPEC.md's "The working directory" now says. Nothing here
+	// stands in for it, and in particular projectMount — which is where the checks
+	// in this module mount a project — is defined beside the check that uses it
+	// rather than in this block, because it is the caller's choice and not the
+	// image's contract.
 
 	// There is no temporary directory in this image, and its absence is a
 	// decision (#218). A 1777 /tmp used to be grafted on here, because avroc
@@ -128,8 +141,8 @@ func imagePlatforms() []dagger.Platform {
 //
 // It is the image docs/container/SPEC.md describes, and every promise that
 // document makes is made here: the CLI in /usr/local/bin with that directory on
-// PATH, the CLI as the entrypoint with an empty Cmd, /work as the working
-// directory, UID and GID 65532 owning both directories and running the process,
+// PATH, the CLI as the entrypoint with an empty Cmd, no working directory at all
+// (#219), UID and GID 65532 owning the plugin directory and running the process,
 // the IR FileDescriptorSet at its documented path, and nothing else in the
 // filesystem at all.
 //
@@ -243,6 +256,9 @@ func publishIndex(
 //     rather than to some other executable is `help` through the entrypoint and
 //     the usage avroc prints. Generation is checked where generation is
 //     possible, on the images that carry a generator (GeneratorImageContract).
+//   - The consequence of declaring no working directory (#219): a `generate` run
+//     with none set fails naming the manifest it could not find, rather than
+//     succeeding silently or failing in words a caller cannot act on.
 //
 // platform restricts the check to one of the published platforms; empty runs
 // every one of them, and every failure is reported rather than the first,
@@ -304,17 +320,23 @@ func (m *Avroc) image(platform dagger.Platform) *dagger.Container {
 			Owner:       imageUser,
 			Permissions: 0o644,
 		}).
-		// The working directory has to exist in the base image and be owned by
-		// the image's user: a caller who mounts over it inherits nothing
-		// surprising, and one who does not can still generate into it.
-		WithDirectory(workDir, dag.Directory(), dagger.ContainerWithDirectoryOpts{
-			Owner: imageUser,
-		}).
 		// PATH is set outright rather than appended to, because a scratch image
 		// has no PATH to append to. Only the guarantee that it contains the
 		// plugin directory is covered; the rest of the value is not.
 		WithEnvVariable("PATH", pluginDir).
-		WithWorkdir(workDir).
+		// No working directory, and no directory created to be one (#219): there is
+		// deliberately no WithWorkdir and no WithDirectory for one anywhere in this
+		// chain, and checkImageConfig asserts the field is empty so that a value
+		// arriving from anywhere — here or a future base layer — is a failure.
+		//
+		// The reason is not that this function could not set one; it plainly could,
+		// and did until #219. It is that a working directory is not a property a
+		// consumer needs the image to hold — the caller already types the mount
+		// point in -v and can type it again in -w — and that this pipeline is being
+		// adopted onto a shared archetype which sets none and states that as a
+		// decision (#217). Spending the promise now, while the hand-rolled pipeline
+		// is still standing and every check here can be run against it, is what
+		// makes the adoption a change nothing consumer-visible rides on.
 		WithUser(imageUser).
 		WithEntrypoint([]string{pluginDir + "/" + cliExecutable}).
 		WithoutDefaultArgs()
@@ -350,6 +372,9 @@ func (m *Avroc) imageContractOn(ctx context.Context, platform dagger.Platform) e
 	if err := m.checkImageIsTheCLI(ctx, image); err != nil {
 		errs = append(errs, err)
 	}
+	if err := m.checkAMissingWorkingDirectoryIsLegible(ctx, image); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
@@ -377,6 +402,51 @@ func (m *Avroc) checkImageIsTheCLI(ctx context.Context, image *dagger.Container)
 	}
 	if !strings.Contains(out, want) {
 		return fmt.Errorf("`help` through the image's entrypoint printed %q, which does not contain %q: the entrypoint is not the avroc CLI", out, want)
+	}
+	return nil
+}
+
+// checkAMissingWorkingDirectoryIsLegible runs `generate` with no working directory
+// and no project, and requires the run to fail saying it could not find the
+// manifest.
+//
+// This is the other half of the working directory guarantee (#219), and it is the
+// half that is easy to leave unchecked. Since the image declares no WorkingDir, an
+// unset one lands the process in / — so the new way to hold this image wrong is to
+// mount a project and forget the `-w`, which is now the single most likely mistake
+// a caller of this release makes. docs/container/SPEC.md promises what happens
+// then: the run "fails in avroc's own words, naming the manifest it could not
+// find, before it has done any work". Every other stage in this module passes the
+// flag, so without this the one new failure mode is the one path nothing runs.
+//
+// The base image is where it belongs even though the base ships no generator,
+// because loadManifest runs before the capability handshake: a run from / fails on
+// the missing avroc.json and never reaches the point where having no generator
+// would matter. That ordering is the thing being relied on, and it is why the
+// assertion is on the message and not merely on the exit code — a future change
+// that moved the manifest read after the handshake, or that failed with something
+// a person cannot act on, would leave the document's sentence wrong with the exit
+// code still non-zero.
+func (m *Avroc) checkAMissingWorkingDirectoryIsLegible(ctx context.Context, image *dagger.Container) error {
+	run := image.WithExec(
+		[]string{"generate"},
+		dagger.ContainerWithExecOpts{UseEntrypoint: true, Expect: dagger.ReturnTypeAny},
+	)
+
+	code, err := run.ExitCode(ctx)
+	if err != nil {
+		return fmt.Errorf("running `generate` with no working directory: %w", err)
+	}
+	if code == 0 {
+		return errors.New("`generate` with no working directory and no project exited 0: the image declares no WorkingDir, so this run started in / where there is no avroc.json, and a success there means a caller who forgets `-w` is told nothing")
+	}
+
+	stderr, err := run.Stderr(ctx)
+	if err != nil {
+		return fmt.Errorf("reading stderr from `generate` with no working directory: %w", err)
+	}
+	if !strings.Contains(stderr, manifestFilename) {
+		return fmt.Errorf("`generate` with no working directory exited %d but its stderr never mentions %s, so a caller who forgot `-w` cannot tell what went wrong; it said: %s", code, manifestFilename, stderr)
 	}
 	return nil
 }
@@ -434,12 +504,18 @@ func (m *Avroc) checkImageConfig(ctx context.Context, image *dagger.Container) [
 		errs = append(errs, fmt.Errorf("the image's User is %q, want %q", user, imageUser))
 	}
 
+	// WorkingDir is asserted *empty* rather than not asserted at all (#219). The
+	// image no longer declares one, and the temptation is to delete the check
+	// with the value — but an unasserted field is exactly how a base layer's
+	// inherited value arrives unnoticed, which is what this whole file exists to
+	// stop. So the assertion flips from a value to its absence: the day something
+	// sets a working directory again, here or upstream, this says so.
 	workdir, err := image.Workdir(ctx)
 	switch {
 	case err != nil:
 		errs = append(errs, fmt.Errorf("reading WorkingDir: %w", err))
-	case workdir != workDir:
-		errs = append(errs, fmt.Errorf("the image's WorkingDir is %q, want %q", workdir, workDir))
+	case workdir != "":
+		errs = append(errs, fmt.Errorf("the image's WorkingDir is %q, want it empty: since #219 the caller names the mount point and points the working directory at it, and the image declares none", workdir))
 	}
 
 	path, err := image.EnvVariable(ctx, "PATH")
@@ -461,10 +537,14 @@ func (m *Avroc) checkImageConfig(ctx context.Context, image *dagger.Container) [
 // only form of that claim which stays true when somebody adds a file: a spot
 // check for /bin/sh passes on an image carrying a busybox under another name.
 //
-// The parent directories are root-owned and that is intentional — only the
-// plugin directory and the working directory are promised to the image's user,
-// and a root-owned parent with mode 0755 is what stops the running user
-// replacing the tree above them.
+// The parent directories are root-owned and that is intentional — the plugin
+// directory is the only one promised to the image's user, and a root-owned parent
+// with mode 0755 is what stops the running user replacing the tree above it.
+//
+// There is no working directory row (#219). The image declares no WorkingDir and
+// creates no directory to be one, so the listing loses /work and gains nothing:
+// where a project is mounted is the caller's, and a path the caller chooses is
+// not a path this image can be exhaustive about.
 //
 // executables is what is expected in the plugin directory, which is the one
 // thing that differs between the base image and an image built FROM it: the
@@ -484,7 +564,6 @@ func imageContents(executables []string) map[string]imageEntry {
 		"/usr/local/share/avroc": {0, 0, dirMode},
 		descriptorSetPath:        {imageUID, imageGID, dataMode},
 		pluginDir:                {imageUID, imageGID, dirMode},
-		workDir:                  {imageUID, imageGID, dirMode},
 	}
 	for _, name := range executables {
 		contents[pluginDir+"/"+name] = imageEntry{imageUID, imageGID, executableMode}
@@ -633,53 +712,117 @@ func parseFindLine(line, prefix string) (imageEntry, string, error) {
 // committed worked example, produced through the same entrypoint, by generators
 // that reached the image the way a stranger's generator reaches theirs.
 //
-// Twice, as two different users. The first run is the documented default. The
-// second overrides the UID the way a caller writing output into a bind mount is
-// told to, and is what turns "an overridden UID is an ordinary configuration"
-// from a sentence into something that fails when it stops being true.
+// Twice, and the two runs differ along both axes a caller can vary. The first is
+// the documented invocation: the image's own UID, mounted at the path every
+// `docker run` in the documents prints. The second overrides the UID the way a
+// caller writing output into a bind mount is told to — which is what turns "an
+// overridden UID is an ordinary configuration" from a sentence into something
+// that fails when it stops being true — *and* mounts somewhere else entirely,
+// which is the same treatment for docs/container/SPEC.md's "`/work` there is the
+// caller's choice and nothing more" (#219).
+//
+// The second mount point is what stops projectMount becoming the old workDir
+// under a new name. Since the image declares no working directory, the claim is
+// that no path is privileged; a suite that only ever mounted at /work would go on
+// passing the day something in avroc, in a check helper or in a `Directory(…)`
+// read grew a dependence on that literal, and checkImageConfig's `workdir != ""`
+// would not see it — an image with an empty WorkingDir and a hard-coded /work
+// somewhere below is exactly the state this asserts against.
 func (m *Avroc) checkImageGenerates(ctx context.Context, image *dagger.Container) []error {
 	committed := m.Source.Directory("example")
 
-	var errs []error
-	for _, user := range []string{imageUser, "1234:1234"} {
-		generated := generateInImage(image, committed, user)
+	runs := []struct {
+		user  string
+		mount string
+	}{
+		{imageUser, projectMount},
+		{"1234:1234", "/srv/somewhere-else"},
+	}
 
-		if err := m.diffAgainstCommitted(ctx, committed, generated, user); err != nil {
+	var errs []error
+	for _, run := range runs {
+		generated := generateInImage(image, committed, run.user, run.mount)
+
+		if err := m.diffAgainstCommitted(ctx, committed, generated, run.user, run.mount); err != nil {
 			errs = append(errs, err)
 		}
-		if err := m.checkOutputOwnership(ctx, generated, user); err != nil {
+		if err := m.checkOutputOwnership(ctx, generated, run.user); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errs
 }
 
+// projectMount is the path the checks in this module mount a project at when they
+// are running the *documented* invocation, and it is the **caller's** choice
+// rather than the image's (#219).
+//
+// It is deliberately not in the block of contract constants at the top of this
+// file, and that placement is the point of the story: the image declares no
+// WorkingDir and creates no directory to be one, so nothing about the image
+// depends on this value. /work is chosen because it is the path
+// docs/container/SPEC.md's invocations print and the daggerverse module defaults
+// to, so a check using it runs the documented command rather than a private
+// variant of it.
+//
+// That it is not privileged is asserted rather than stated: generateInImage takes
+// the mount point as an argument and checkImageGenerates gives one of its two runs
+// a different one. See the comment there.
+const projectMount = "/work"
+
+// manifestFilename is the file `avroc generate` reads out of the working
+// directory, and the string a run that could not find it has to name.
+//
+// It is written here rather than imported from internal/avroc: .dagger is a
+// separate Go module, and this is a check reading avroc's output the way a person
+// does. The duplication is the same kind internal/plugin.OutputPath keeps against
+// avroc's own path check — a value asserted from the outside, not shared with the
+// thing being asserted about.
+const manifestFilename = "avroc.json"
+
 // generateInImage runs `generate` through the image's own entrypoint over a
-// copy of the worked example mounted at the working directory, and returns the
-// tree it left behind.
+// copy of the worked example mounted at mount, and returns the tree it left
+// behind.
 //
 // UseEntrypoint is what makes this the same invocation as
-// `docker run --rm -v "$PWD:/work" <image> generate`: the arguments are avroc's
-// arguments, and nothing here names the CLI by path. No environment is set
-// either — the image's own PATH is what has to resolve the generators copied
+// `docker run --rm -v "$PWD:<mount>" -w <mount> <image> generate`: the arguments
+// are avroc's arguments, and nothing here names the CLI by path. No environment is
+// set either — the image's own PATH is what has to resolve the generators copied
 // into it, which is the one job it has.
-func generateInImage(image *dagger.Container, example *dagger.Directory, user string) *dagger.Directory {
+//
+// mount is a parameter rather than projectMount read directly, because since #219
+// the image declares no working directory and the document therefore promises that
+// any mount point does. A function that could only mount at one path would make
+// that promise uncheckable.
+//
+// WithWorkdir as well as mounting there, for the same reason: without it the
+// process runs from /, where there is no avroc.json, and the mount alone would
+// leave the project somewhere avroc never looks. That is the `-w` in the command
+// line above, and daggerverse/avroc and .dagger/main.go had both already written it
+// for this reason.
+func generateInImage(image *dagger.Container, example *dagger.Directory, user, mount string) *dagger.Directory {
 	return image.
 		WithUser(user).
-		WithDirectory(workDir, example, dagger.ContainerWithDirectoryOpts{Owner: user}).
+		WithDirectory(mount, example, dagger.ContainerWithDirectoryOpts{Owner: user}).
+		WithWorkdir(mount).
 		WithExec([]string{"generate"}, dagger.ContainerWithExecOpts{UseEntrypoint: true}).
-		Directory(workDir)
+		Directory(mount)
 }
 
 // diffAgainstCommitted requires the generated tree to be byte-identical to the
 // committed worked example.
+//
+// mount is in the message because the two runs differ by it as well as by user
+// (#219): "the image did not reproduce the committed example" is a different
+// finding when it happened at a mount point other than the documented one, and a
+// report that named only the user would send the reader looking at the UID.
 func (m *Avroc) diffAgainstCommitted(
 	ctx context.Context,
 	committed, generated *dagger.Directory,
-	user string,
+	user, mount string,
 ) error {
 	if err := m.diffTrees(ctx, committed, generated, "/image-contract"); err != nil {
-		return fmt.Errorf("as user %s, the image did not reproduce the committed example: %w", user, err)
+		return fmt.Errorf("as user %s, mounted at %s, the image did not reproduce the committed example: %w", user, mount, err)
 	}
 	return nil
 }

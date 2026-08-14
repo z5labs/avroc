@@ -98,11 +98,13 @@ developer's laptop; it makes no reproducibility guarantee.
 ### The published image
 
 avroc is published as a container image, and each built-in generator as an image
-built `FROM` it. Run one over the project in the working directory — `/work` is
-where the image expects it:
+built `FROM` it. Run one over the project in the current directory. Mount that
+directory wherever you like and point `-w` at the same path — the image declares
+no working directory of its own, so both flags are needed, and `/work` below is
+this project's convention and nothing more:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
   ghcr.io/z5labs/avroc-gen-go:v0 generate
 ```
 

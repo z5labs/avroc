@@ -20,10 +20,11 @@
 // # This is a convenience, not a contract
 //
 // The contract is the published image: docs/container/SPEC.md says what is on
-// PATH, what the entrypoint is, which directory a project is mounted at and which
-// UID the process runs as, and it is that document a third party builds against.
-// Everything here is those promises spelled as Dagger calls, and every one of
-// them can be written by hand as `docker run --rm -v "$PWD:/work"` instead.
+// PATH, what the entrypoint is, that the caller chooses where a project is mounted
+// and which UID the process runs as, and it is that document a third party builds
+// against. Everything here is those promises spelled as Dagger calls, and every
+// one of them can be written by hand as `docker run --rm -v "$PWD:/work" -w /work`
+// instead.
 //
 // So this module gets no SPEC.md, deliberately (docs/CONVENTIONS.md, "What
 // belongs here"). A specification for it would imply the contract is a property
@@ -81,10 +82,14 @@ const (
 	pluginDir = "/usr/local/bin"
 
 	// projectDir is where a project is mounted when the image does not say
-	// otherwise. docs/container/SPEC.md pins /work as the published image's
-	// working directory; this is the fallback for a container built some other
-	// way, since `avroc generate` reads avroc.json from the working directory and
-	// a project mounted anywhere else is a project avroc will not find.
+	// otherwise, and since #219 the published image says nothing: it declares no
+	// WorkingDir, so this is the path that is actually used rather than a fallback
+	// for a container built some other way. /work is unchanged, because the mount
+	// point is this project's convention either way — what moved is which side
+	// names it, and it is this module now rather than the image.
+	//
+	// A container that *does* declare a working directory still wins, which is what
+	// keeps New able to accept an image this module did not build.
 	projectDir = "/work"
 
 	// executableMode is the mode a generator lands with. It is the derived
@@ -288,14 +293,15 @@ func (m *Avroc) Generate(
 		workdir = projectDir
 	}
 
-	// WithWorkdir as well as mounting there, because the two are only the same
-	// call when the image already declared one. An image that declared none runs
-	// from / — where there is no avroc.json — and the mount alone would leave the
-	// project somewhere avroc never looks.
+	// WithWorkdir as well as mounting there, because the published image declares
+	// no working directory (#219) and therefore runs from / — where there is no
+	// avroc.json — so the mount alone would leave the project somewhere avroc
+	// never looks. This was written against a hypothetical image that declared
+	// none; it is now the image this module pulls by default.
 	//
 	// UseEntrypoint, so this is the same invocation as
-	// `docker run --rm -v "$PWD:/work" <image> generate`: the arguments are
-	// avroc's, and nothing here names the CLI by path.
+	// `docker run --rm -v "$PWD:/work" -w /work <image> generate`: the arguments
+	// are avroc's, and nothing here names the CLI by path.
 	return c.
 		WithDirectory(workdir, source, dagger.ContainerWithDirectoryOpts{Owner: owner}).
 		WithWorkdir(workdir).
