@@ -291,6 +291,12 @@ func TestEitherDirectoryFailingIsReportedAsItself(t *testing.T) {
 
 	t.Run("the descriptor directory cannot be created", func(t *testing.T) {
 		if os.Geteuid() == 0 {
+			// Root ignores the missing write bit, and no portable arrangement makes
+			// MkdirTemp fail where MkdirAll has just succeeded without one. So this
+			// half of the pair — the end-to-end ordering — is unexercised for a test
+			// binary running as root, which includes the containerised check stages;
+			// TestNewDescriptorDirNamesTheParentItCouldNotUse below is the part of it
+			// that runs everywhere.
 			t.Skip("running as root, which writes into a directory with no write bit")
 		}
 
@@ -324,6 +330,37 @@ func TestEitherDirectoryFailingIsReportedAsItself(t *testing.T) {
 		assertReported(t, records, "failed to create descriptor directory")
 		assertNotReported(t, records, "failed to create output directory")
 	})
+}
+
+// TestNewDescriptorDirNamesTheParentItCouldNotUse is the root-proof half of the
+// pair above: a parent it cannot make a directory in is reported as a failure to
+// create the *descriptor* directory, whatever the test binary's privileges.
+//
+// It is a unit test of the one function rather than a run through generator.run,
+// because reaching this failure through run means getting MkdirAll to succeed and
+// MkdirTemp to fail, and the only portable way to arrange that is a write bit —
+// which root ignores. What it gives up is the ordering, and what it keeps is the
+// classification, which is the half that would silently become "failed to create
+// output directory" if the two calls were ever collapsed into one report.
+func TestNewDescriptorDirNamesTheParentItCouldNotUse(t *testing.T) {
+	notADirectory := filepath.Join(t.TempDir(), "gen")
+	if err := os.WriteFile(notADirectory, []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir, err := newDescriptorDir(notADirectory, testGeneratorName)
+	if err == nil {
+		t.Fatalf("newDescriptorDir returned %q for a parent that is a regular file", dir)
+	}
+	if !strings.Contains(err.Error(), "failed to create descriptor directory") {
+		t.Errorf("error %q does not say the descriptor directory could not be created", err)
+	}
+	// The parent is named, because the two directories are now one inside the
+	// other and "it could not be created" without saying where is a report that
+	// sends its reader to the wrong end of the problem.
+	if !strings.Contains(err.Error(), notADirectory) {
+		t.Errorf("error %q does not name the parent %q it could not use", err, notADirectory)
+	}
 }
 
 // assertReported requires message to be among what was logged.

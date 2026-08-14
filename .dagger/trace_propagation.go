@@ -115,11 +115,21 @@ const (
 	// It is in a directory this check adds to the image, at a path that is part
 	// of nothing: the image carries no temporary directory since #218, and the
 	// two directories it does carry are both wrong for this — /work is the tree
-	// the generated output is compared against, so a record left in it would fail
-	// that comparison, and the plugin directory is where a file is a generator.
-	// A derived image adding a directory of its own is what any adopter does, and
-	// it is not the image gaining a writable path to make avroc work: avroc needs
-	// none.
+	// checkOneConnectedTrace byte-compares against the committed example/, so a
+	// record left in it would fail that comparison, and the plugin directory is
+	// where a file is a generator. A derived image adding a directory of its own
+	// is what any adopter does, and it is not the image gaining a writable path
+	// to make avroc work: avroc needs none, which is the whole of #218.
+	//
+	// The negative control gets it too, because it goes through the same
+	// tracedGeneration — which is what keeps it able to reach a *fetched trace*
+	// before the assertions reject it, rather than failing on a missing record and
+	// checking nothing.
+	//
+	// Standard output would need no directory at all and was rejected: the
+	// launcher re-execs avroc with its streams inherited, so the record would have
+	// to be picked back out of avroc's own output, and a generator writing to
+	// stdout (which the contract permits for --plugin-info) would corrupt it.
 	traceRecordDir    = "/record"
 	traceparentRecord = traceRecordDir + "/traceparent"
 

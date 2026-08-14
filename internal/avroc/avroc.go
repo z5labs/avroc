@@ -263,6 +263,16 @@ func (g generator) run(ctx context.Context, output string, options []*avrocpb.Op
 	// to an absolute path first, which is what makes both of the paths on the
 	// child's argument vector absolute — so that two runs of the same generator
 	// from different working directories are the same invocation.
+	//
+	// Creating it this early means an invocation that then fails — on the
+	// descriptor's directory, or on writing the descriptor — leaves the directory
+	// tree behind, and that is accepted rather than unwound. It is a directory and
+	// never a file, which is the line the merge already draws (mergeOutputs
+	// creates destination directories in a phase a later collision can still
+	// refuse); it may be a directory the project already had, since avroc cannot
+	// tell one it created from one a person did; and it is shared with every other
+	// generator the manifest points at the same tree, all of which run
+	// concurrently, so removing it here would race a generator writing into it.
 	outputDir, err := filepath.Abs(output)
 	if err != nil {
 		g.log.ErrorContext(ctx, "failed to resolve output directory", slog.String("generator", g.name), slog.Any("error", err))
