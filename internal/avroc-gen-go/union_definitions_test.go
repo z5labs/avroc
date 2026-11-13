@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/z5labs/avroc/avrocpb"
@@ -224,6 +225,16 @@ func unionHolderSchema() *avrocpb.Schema {
 // as a union as an array's items or a map's values, which only a descriptor
 // built by hand reaches.
 func TestUnionBranchDefinitionsCompileAndRoundTrip(t *testing.T) {
+	testGeneratedPackage(t, "holder", filepath.Join("testdata", "unionholder", "holder_test.go"), unionHolderSchema())
+}
+
+// testGeneratedPackage generates schemas as the Go package pkg in a module of
+// its own, copies testFile beside the generated code, and runs go test there.
+//
+// It is how this package checks generated code compiles and behaves, rather
+// than only that a declaration was written.
+func testGeneratedPackage(t *testing.T, pkg string, testFile string, schemas ...*avrocpb.Schema) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("builds and tests a module of its own")
 	}
@@ -235,39 +246,44 @@ func TestUnionBranchDefinitionsCompileAndRoundTrip(t *testing.T) {
 	root := unionTestModuleRoot(t)
 	dir := t.TempDir()
 
-	res, err := generateToDir(t, filepath.Join(dir, "holder"), &avrocpb.GenerateRequest{
-		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("holder")}},
-		Schemas: []*avrocpb.Schema{unionHolderSchema()},
+	res, err := generateToDir(t, filepath.Join(dir, pkg), &avrocpb.GenerateRequest{
+		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String(pkg)}},
+		Schemas: schemas,
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
-	if len(res.OutputFiles) != 1 {
-		t.Fatalf("generated %v, want one file", res.OutputFiles)
+	if len(res.OutputFiles) != len(schemas) {
+		t.Fatalf("generated %v, want one file per schema", res.OutputFiles)
 	}
 
 	// The module requires this one through a replace, so the avro-go it
 	// builds against is the version this repository pins rather than a
 	// version written down a second time here; -mod=mod below lets it record
 	// that requirement for itself, as avrocpb's out-of-tree build does.
-	writeTestFile(t, filepath.Join(dir, "go.mod"), "module example.com/unionholder\n\ngo 1.26.0\n\nrequire github.com/z5labs/avroc v0.0.0\n\nreplace github.com/z5labs/avroc => "+root+"\n")
+	writeTestFile(t, filepath.Join(dir, "go.mod"), "module example.com/"+pkg+"\n\ngo 1.26.0\n\nrequire github.com/z5labs/avroc v0.0.0\n\nreplace github.com/z5labs/avroc => "+root+"\n")
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatalf("read go.sum: %v", err)
 	}
 	writeTestFile(t, filepath.Join(dir, "go.sum"), string(sum))
 
-	roundTrip, err := os.ReadFile(filepath.Join("testdata", "unionholder", "holder_test.go"))
+	behaviour, err := os.ReadFile(testFile)
 	if err != nil {
-		t.Fatalf("read round-trip test: %v", err)
+		t.Fatalf("read %s: %v", testFile, err)
 	}
-	writeTestFile(t, filepath.Join(dir, "holder", "holder_test.go"), string(roundTrip))
+	writeTestFile(t, filepath.Join(dir, pkg, filepath.Base(testFile)), string(behaviour))
 
 	cmd := exec.Command(goBin, "test", "-mod=mod", "-count=1", "./...")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		code, _ := os.ReadFile(res.OutputFiles[0])
-		t.Fatalf("generated code failed to build or round-trip: %v\n%s\n\ngenerated:\n%s", err, out, code)
+		var code strings.Builder
+		for _, f := range res.OutputFiles {
+			b, _ := os.ReadFile(f)
+			code.WriteString("\n// " + filepath.Base(f) + "\n")
+			code.Write(b)
+		}
+		t.Fatalf("generated code failed to build or pass %s: %v\n%s\n\ngenerated:%s", filepath.Base(testFile), err, out, code.String())
 	}
 }
 
