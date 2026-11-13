@@ -6,6 +6,7 @@
     "pcf/event.avsc",
     "pcf/test_record.avsc",
     "stream/event.go",
-    "test_record.avsc"
+    "test_record.avsc",
+    "unions/outer.go"
   ]
 }

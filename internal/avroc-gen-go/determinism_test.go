@@ -173,8 +173,9 @@ func TestGenerateIsDeterministic(t *testing.T) {
 }
 
 // determinismSchemas is the widest resolved input this generator has a code
-// path for: every type constructor, a named type referred to twice, and two
-// schemas, so that a run has more than one file and more than one type to order.
+// path for: every type constructor, a named type referred to twice, named types
+// defined inside unions, and more than one schema, so that a run has more than
+// one file and more than one type to order.
 func determinismSchemas() []*avrocpb.Schema {
 	const ns = "com.example"
 
@@ -272,5 +273,8 @@ func determinismSchemas() []*avrocpb.Schema {
 				},
 			},
 		},
+		// Named types defined in union branches, as items, as values and
+		// inside a record that is itself a branch (#235).
+		unionHolderSchema(),
 	}
 }

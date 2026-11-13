@@ -224,11 +224,16 @@ func collectTypeAndNested(t *avrocpb.Type, recordName string, parentFieldName st
 		types = append(types, typeToGenerate{typ: t})
 
 	case *avrocpb.Type_Union:
+		types = append(types, collectUnionDefinitions(v.Union)...)
 		types = append(types, typeToGenerate{typ: t, recordName: recordName, fieldName: parentFieldName})
 
 	case *avrocpb.Type_Array:
 		// Check if items contain nested types
 		nested := collectNestedTypes(v.Array.Items, recordName, "")
+		types = append(types, nested...)
+
+	case *avrocpb.Type_MapType:
+		nested := collectNestedTypes(v.MapType.Values, recordName, "")
 		types = append(types, nested...)
 	}
 
@@ -243,10 +248,19 @@ func collectNestedTypes(t *avrocpb.Type, recordName string, fieldName string) []
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Union:
-		return []typeToGenerate{{typ: t, recordName: recordName, fieldName: fieldName}}
+		// A named type is written out in full at its first reference from the
+		// root (docs/ir/SPEC.md), and that reference can be a union branch.
+		// The definitions come before the union for the reason a record's
+		// nested types come before the record: a person reading the file
+		// meets a type before the thing built from it.
+		types := collectUnionDefinitions(v.Union)
+		return append(types, typeToGenerate{typ: t, recordName: recordName, fieldName: fieldName})
 
 	case *avrocpb.Type_Array:
 		return collectNestedTypes(v.Array.Items, recordName, fieldName)
+
+	case *avrocpb.Type_MapType:
+		return collectNestedTypes(v.MapType.Values, recordName, fieldName)
 
 	case *avrocpb.Type_Record:
 		return collectTypeAndNested(t, recordName, fieldName)
@@ -258,6 +272,41 @@ func collectNestedTypes(t *avrocpb.Type, recordName string, fieldName string) []
 		return collectTypeAndNested(t, recordName, fieldName)
 	}
 
+	return nil
+}
+
+// collectUnionDefinitions collects the named types a union's branches define,
+// in branch order, together with whatever those definitions need generated in
+// turn.
+//
+// A union reachable through an array or a map in a branch is deliberately not
+// collected itself: a union is named after the record field it belongs to, so
+// one nested in a branch would be named exactly as the union holding it, and
+// collecting it would declare that name twice. Such a branch generates what it
+// always did. The named types *its* branches define are still collected, since
+// a later reference to one of them names a type that is defined nowhere else.
+func collectUnionDefinitions(u *avrocpb.Union) []typeToGenerate {
+	var types []typeToGenerate
+	for _, branch := range u.GetTypes() {
+		types = append(types, collectDefinitions(branch)...)
+	}
+	return types
+}
+
+// collectDefinitions collects the named types defined anywhere within t, so
+// that a definition reached through an array's items or a map's values is
+// generated as it would be from a record field.
+func collectDefinitions(t *avrocpb.Type) []typeToGenerate {
+	switch v := t.GetType().(type) {
+	case *avrocpb.Type_Record, *avrocpb.Type_EnumType, *avrocpb.Type_Fixed:
+		return collectTypeAndNested(t, "", "")
+	case *avrocpb.Type_Array:
+		return collectDefinitions(v.Array.GetItems())
+	case *avrocpb.Type_MapType:
+		return collectDefinitions(v.MapType.GetValues())
+	case *avrocpb.Type_Union:
+		return collectUnionDefinitions(v.Union)
+	}
 	return nil
 }
 
@@ -365,5 +414,5 @@ func fieldTypeString(f *avrocpb.Field, recordName string) string {
 		return unionTypeName(recordName, f.GetName())
 	}
 
-	return goTypeForType(f.Type, "")
+	return goTypeForType(f.Type, unionTypeName(recordName, f.GetName()))
 }

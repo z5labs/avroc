@@ -69,6 +69,10 @@ func isPrimitiveRef(t *avrocpb.Type) bool {
 }
 
 // goTypeForType returns the Go type string for an Avro Type.
+//
+// unionName is the name of the union a record field's type holds, if it holds
+// one. It reaches through an array's items and a map's values, because a
+// union there belongs to the same field and is generated under the same name.
 func goTypeForType(t *avrocpb.Type, unionName string) string {
 	if t == nil {
 		return ""
@@ -84,10 +88,10 @@ func goTypeForType(t *avrocpb.Type, unionName string) string {
 	case *avrocpb.Type_Fixed:
 		return toPascalCase(v.Fixed.GetName())
 	case *avrocpb.Type_Array:
-		itemType := goTypeForType(v.Array.GetItems(), "")
+		itemType := goTypeForType(v.Array.GetItems(), unionName)
 		return "[]" + itemType
 	case *avrocpb.Type_MapType:
-		valueType := goTypeForType(v.MapType.GetValues(), "")
+		valueType := goTypeForType(v.MapType.GetValues(), unionName)
 		return "map[string]" + valueType
 	case *avrocpb.Type_Union:
 		// Union types are represented as interfaces. If no union name is
