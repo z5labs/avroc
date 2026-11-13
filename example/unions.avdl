@@ -1,0 +1,28 @@
+/*
+ * A schema whose named types are first referenced from a union branch.
+ *
+ * avroc writes a named type out in full at its first reference from the root,
+ * so Tone and Inner are defined inside the unions below rather than beside
+ * Outer. It is here so that the Go generator's handling of a definition in that
+ * position is generated, committed and round-tripped like everything else in
+ * this example (#235).
+ */
+
+namespace org.apache.avro.test;
+
+schema Outer;
+
+enum Tone {
+  LOW,
+  HIGH
+}
+
+record Inner {
+  int x;
+}
+
+record Outer {
+  long id;
+  union { null, Tone } tone = null;
+  union { null, Inner } inner = null;
+}

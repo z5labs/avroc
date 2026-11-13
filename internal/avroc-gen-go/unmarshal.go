@@ -70,15 +70,16 @@ func generateFieldRead(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 		return
 	}
 
+	unionName := unionTypeName(recordName, f.GetName())
+
 	switch v := fieldType.Type.(type) {
 	case *avrocpb.Type_Reference:
 		generateReferenceRead(cb, v.Reference, fieldName)
 	case *avrocpb.Type_Array:
-		generateArrayFieldRead(cb, v.Array, fieldName)
+		generateArrayFieldRead(cb, v.Array, fieldName, unionName)
 	case *avrocpb.Type_MapType:
-		generateMapFieldRead(cb, v.MapType, fieldName)
+		generateMapFieldRead(cb, v.MapType, fieldName, unionName)
 	case *avrocpb.Type_Union:
-		unionName := unionTypeName(recordName, f.GetName())
 		cb.writef("\tx.%s, err = unmarshal%s(r)\n", fieldName, unionName)
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
@@ -107,8 +108,9 @@ func generateReferenceRead(cb *codeBuilder, ref *avrocpb.Reference, fieldName st
 	}
 }
 
-// generateArrayFieldRead generates read code for an array field.
-func generateArrayFieldRead(cb *codeBuilder, arr *avrocpb.Array, fieldName string) {
+// generateArrayFieldRead generates read code for an array field. unionName is
+// the field's union, which the items are when they are a union.
+func generateArrayFieldRead(cb *codeBuilder, arr *avrocpb.Array, fieldName string, unionName string) {
 	cb.writef("\tx.%s = nil\n", fieldName)
 	cb.writeln("\tfor {")
 	cb.writeln("\t\tvar blkCount int64")
@@ -130,7 +132,7 @@ func generateArrayFieldRead(cb *codeBuilder, arr *avrocpb.Array, fieldName strin
 
 	itemType := arr.GetItems()
 	if itemType != nil {
-		generateArrayItemRead(cb, itemType, fieldName, "\t\t\t")
+		generateArrayItemRead(cb, itemType, fieldName, unionName, "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -138,12 +140,19 @@ func generateArrayFieldRead(cb *codeBuilder, arr *avrocpb.Array, fieldName strin
 }
 
 // generateArrayItemRead generates read code for an individual array item.
-func generateArrayItemRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, indent string) {
+func generateArrayItemRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, unionName string, indent string) {
 	if t == nil {
 		return
 	}
 
 	switch v := t.Type.(type) {
+	case *avrocpb.Type_Union:
+		cb.writef("%svar v %s\n", indent, unionName)
+		cb.writef("%sv, err = unmarshal%s(r)\n", indent, unionName)
+		cb.writef("%sif err != nil {\n", indent)
+		cb.writef("%s\treturn err\n", indent)
+		cb.writef("%s}\n", indent)
+		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
 	case *avrocpb.Type_Reference:
 		generateArrayItemReferenceRead(cb, v.Reference, fieldName, indent)
 	case *avrocpb.Type_Record:
@@ -194,10 +203,11 @@ func generateArrayItemReferenceRead(cb *codeBuilder, ref *avrocpb.Reference, fie
 	}
 }
 
-// generateMapFieldRead generates read code for a map field.
-func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
+// generateMapFieldRead generates read code for a map field. unionName is the
+// field's union, which the values are when they are a union.
+func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string, unionName string) {
 	valueType := m.GetValues()
-	valueGoType := goTypeForType(valueType, "")
+	valueGoType := goTypeForType(valueType, unionName)
 
 	cb.writef("\tx.%s = make(map[string]%s)\n", fieldName, valueGoType)
 	cb.writeln("\tfor {")
@@ -227,7 +237,7 @@ func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 
 	// Read value
 	if valueType != nil {
-		generateMapValueRead(cb, valueType, fieldName, "\t\t\t")
+		generateMapValueRead(cb, valueType, fieldName, unionName, "\t\t\t")
 	}
 
 	cb.writeln("\t\t}")
@@ -235,7 +245,17 @@ func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 }
 
 // generateMapValueRead generates read code for a map value.
-func generateMapValueRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, indent string) {
+func generateMapValueRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, unionName string, indent string) {
+	if t.GetUnion() != nil {
+		cb.writef("%svar v %s\n", indent, unionName)
+		cb.writef("%sv, err = unmarshal%s(r)\n", indent, unionName)
+		cb.writef("%sif err != nil {\n", indent)
+		cb.writef("%s\treturn err\n", indent)
+		cb.writef("%s}\n", indent)
+		cb.writef("%sx.%s[k] = v\n", indent, fieldName)
+		return
+	}
+
 	if method, ok := readMethodFor(t.GetReference()); ok {
 		cb.writef("%svar v %s\n", indent, primitiveGoTypes[t.GetReference().GetName()])
 		cb.writef("%sv, err = r.%s()\n", indent, method)

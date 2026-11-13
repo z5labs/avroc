@@ -4,8 +4,8 @@ This example demonstrates using `avroc` to generate code from an Avro IDL schema
 
 ## Schemas
 
-There are two, because a schema's **root type** changes what a generator has to produce for
-it:
+There are three. Two differ in their **root type**, which changes what a generator has to
+produce for it:
 
 - [`schema.avdl`](schema.avdl) is a record root, based on the
   [Apache Avro documentation](https://avro.apache.org/docs/1.12.0/idl-language/#schemaavdl).
@@ -13,18 +13,24 @@ it:
 - [`events.avdl`](events.avdl) is an array root, `schema array<Event>;`. It describes a
   *stream* of `Event`, and the Go generator emits a streaming reader for it.
 
+The third, [`unions.avdl`](unions.avdl), is a record root like the first, and is here for
+*where* its named types are defined: avroc writes a named type out in full at its first
+reference from the root, and both of `Outer`'s named types are first referenced from a union
+branch.
+
 ## Manifest
 
 The generators and their configuration are declared in [`avroc.json`](avroc.json): a `go`,
 `json` and `pcf` generator, each with its output directory, its options and the inputs it
 reads. `avroc init` scaffolds a starter manifest; this example ships a ready-made one.
 
-There are **two `go` entries** rather than one, because `encoding=single_object` is a
+There are **three `go` entries** rather than one. The first two are separate because `encoding=single_object` is a
 per-generator option and single-object encoding frames a single value: it requires a record
 at the schema root and refuses an array one. So `schema.avdl` goes to a `go` generator with
 that option and `events.avdl` to one without, into separate packages. That is also why the
 inputs are declared per generator here instead of once at the top level — a top-level input
-is read by every generator.
+is read by every generator. `unions.avdl` gets its own package so that its types live beside
+the test that round-trips them.
 
 ## Generating Code
 
@@ -39,7 +45,7 @@ cd example
 avroc generate
 ```
 
-This reads `avroc.json` and produces Go types (`gen/` and `stream/`), Avro JSON schemas
+This reads `avroc.json` and produces Go types (`gen/`, `stream/` and `unions/`), Avro JSON schemas
 (`test_record.avsc`, `event.avsc`), and Parsing Canonical Form files (`pcf/`).
 
 It also writes [`avroc.gen.json`](avroc.gen.json), the committed record of every file
@@ -119,6 +125,19 @@ never materialised in either direction —
 items through a four-kilobyte pipe and checks that the live heap at the last item is what
 it was at the last item of a thousand, and
 [`stream/event_writer_test.go`](stream/event_writer_test.go) does the same writing them.
+
+### Go (`unions/`)
+
+[`unions/outer.go`](unions/outer.go) declares `Tone` and `Inner` even though neither is
+defined beside `Outer` in the descriptor the generator receives: each is defined inside the
+union branch that first refers to it, and the generator walks a union's branches for the
+definitions they carry before it writes the union. Alongside them are the two unions,
+`OuterToneUnion` and `OuterInnerUnion`, each an interface with a `…Null` member and a member
+wrapping the named type, and `Outer` itself.
+
+[`unions/outer_test.go`](unions/outer_test.go) encodes an `Outer` holding every combination
+of the two unions' branches, compares the bytes with the Avro binary encoding, and decodes
+them back.
 
 ### JSON Schema (`test_record.avsc`, `event.avsc`)
 

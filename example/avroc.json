@@ -22,6 +22,16 @@
       }
     },
     {
+      "name": "go",
+      "out": "unions",
+      "inputs": [
+        "unions.avdl"
+      ],
+      "options": {
+        "package_name": "unions"
+      }
+    },
+    {
       "name": "json",
       "out": ".",
       "inputs": [

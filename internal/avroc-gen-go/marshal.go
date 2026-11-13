@@ -122,7 +122,15 @@ func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName stri
 
 	// Generate write for each element using index to ensure addressability
 	itemType := arr.GetItems()
-	if itemType != nil {
+	switch {
+	case itemType.GetUnion() != nil:
+		// The items are the field's union interface, which writes its own
+		// branch index.
+		cb.writef("\t\t\terr = x.%s[i].MarshalAvroBinary(w)\n", fieldName)
+		cb.writeln("\t\t\tif err != nil {")
+		cb.writeln("\t\t\t\treturn err")
+		cb.writeln("\t\t\t}")
+	case itemType != nil:
 		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t")
 	}
 
