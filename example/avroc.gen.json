@@ -3,6 +3,7 @@
   "files": [
     "event.avsc",
     "gen/test_record.go",
+    "nested/outer.go",
     "pcf/event.avsc",
     "pcf/test_record.avsc",
     "stream/event.go",

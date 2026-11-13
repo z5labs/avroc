@@ -4,7 +4,7 @@ This example demonstrates using `avroc` to generate code from an Avro IDL schema
 
 ## Schemas
 
-There are three. Two differ in their **root type**, which changes what a generator has to
+There are four. Two differ in their **root type**, which changes what a generator has to
 produce for it:
 
 - [`schema.avdl`](schema.avdl) is a record root, based on the
@@ -18,19 +18,23 @@ The third, [`unions.avdl`](unions.avdl), is a record root like the first, and is
 reference from the root, and both of `Outer`'s named types are first referenced from a union
 branch.
 
+The fourth, [`nested.avdl`](nested.avdl), is a record root too, and is here for *what its
+arrays hold*: an array of arrays, an array of maps and an array of arrays of a union, each a
+container nested in a container.
+
 ## Manifest
 
 The generators and their configuration are declared in [`avroc.json`](avroc.json): a `go`,
 `json` and `pcf` generator, each with its output directory, its options and the inputs it
 reads. `avroc init` scaffolds a starter manifest; this example ships a ready-made one.
 
-There are **three `go` entries** rather than one. The first two are separate because `encoding=single_object` is a
+There are **four `go` entries** rather than one. The first two are separate because `encoding=single_object` is a
 per-generator option and single-object encoding frames a single value: it requires a record
 at the schema root and refuses an array one. So `schema.avdl` goes to a `go` generator with
 that option and `events.avdl` to one without, into separate packages. That is also why the
 inputs are declared per generator here instead of once at the top level — a top-level input
-is read by every generator. `unions.avdl` gets its own package so that its types live beside
-the test that round-trips them.
+is read by every generator. `unions.avdl` and `nested.avdl` each get their own package so that their
+types live beside the test that round-trips them.
 
 ## Generating Code
 
@@ -45,7 +49,7 @@ cd example
 avroc generate
 ```
 
-This reads `avroc.json` and produces Go types (`gen/`, `stream/` and `unions/`), Avro JSON schemas
+This reads `avroc.json` and produces Go types (`gen/`, `stream/`, `unions/` and `nested/`), Avro JSON schemas
 (`test_record.avsc`, `event.avsc`), and Parsing Canonical Form files (`pcf/`).
 
 It also writes [`avroc.gen.json`](avroc.gen.json), the committed record of every file
@@ -138,6 +142,19 @@ wrapping the named type, and `Outer` itself.
 [`unions/outer_test.go`](unions/outer_test.go) encodes an `Outer` holding every combination
 of the two unions' branches, compares the bytes with the Avro binary encoding, and decodes
 them back.
+
+### Go (`nested/`)
+
+[`nested/outer.go`](nested/outer.go) writes a nested container as the same sequence of
+blocks a top-level one is, as its enclosing container's item, and reads it back the same way
+into a value of its own before appending it. Each depth gets its own loop variable (`i`,
+`i1`, …) and its own block count, so a nested loop never shadows the one it is inside.
+`maybeGrid`'s union is `OuterMaybeGridUnion`, named after the field it belongs to however
+deep inside it the union sits.
+
+[`nested/outer_test.go`](nested/outer_test.go) encodes an `Outer` whose every field holds
+non-empty containers, compares the bytes with the Avro binary encoding, and decodes them
+back.
 
 ### JSON Schema (`test_record.avsc`, `event.avsc`)
 

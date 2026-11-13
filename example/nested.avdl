@@ -1,0 +1,21 @@
+/*
+ * A schema whose arrays hold containers of their own.
+ *
+ * An array's items can be any type in IDL, so an array of arrays, an array of
+ * maps and an array of arrays of a union are all writable here. It is here so
+ * that the Go generator's encoding of a container nested in a container is
+ * generated, committed and round-tripped like everything else in this example
+ * (#237). A map's values can only be named in IDL, so a map holding a container
+ * is reached by a descriptor built by hand instead, in the generator's own
+ * tests.
+ */
+
+namespace nested;
+
+schema Outer;
+
+record Outer {
+  array<array<int>> grid;
+  array<map<int>> rows;
+  array<array<union { null, int }>> maybeGrid;
+}

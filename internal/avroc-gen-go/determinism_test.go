@@ -276,5 +276,8 @@ func determinismSchemas() []*avrocpb.Schema {
 		// Named types defined in union branches, as items, as values and
 		// inside a record that is itself a branch (#235).
 		unionHolderSchema(),
+		// Containers nested in containers, to depth three and inside a union's
+		// branch, whose loop variables are named by depth (#237).
+		nestedShapesSchema(),
 	}
 }

@@ -141,66 +141,122 @@ func generateArrayFieldRead(cb *codeBuilder, arr *avrocpb.Array, fieldName strin
 
 // generateArrayItemRead generates read code for an individual array item.
 func generateArrayItemRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, unionName string, indent string) {
-	if t == nil {
+	if !generateValueRead(cb, t, readContext{unionName: unionName, ret: "err"}, indent, 0) {
 		return
 	}
-
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Union:
-		cb.writef("%svar v %s\n", indent, unionName)
-		cb.writef("%sv, err = unmarshal%s(r)\n", indent, unionName)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
-	case *avrocpb.Type_Reference:
-		generateArrayItemReferenceRead(cb, v.Reference, fieldName, indent)
-	case *avrocpb.Type_Record:
-		goType := toPascalCase(v.Record.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
-	case *avrocpb.Type_EnumType:
-		goType := toPascalCase(v.EnumType.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
-	case *avrocpb.Type_Fixed:
-		goType := toPascalCase(v.Fixed.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
-	}
+	cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
 }
 
-// generateArrayItemReferenceRead generates read code for an array item that is
-// a resolved reference.
-func generateArrayItemReferenceRead(cb *codeBuilder, ref *avrocpb.Reference, fieldName string, indent string) {
-	if method, ok := readMethodFor(ref); ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[ref.GetName()])
-		cb.writef("%sv, err = r.%s()\n", indent, method)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
-	} else {
-		goType := toPascalCase(ref.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s = append(x.%s, v)\n", indent, fieldName, fieldName)
+// readContext is what read code needs to know about the function it is
+// emitted into.
+type readContext struct {
+	// unionName is the record field's union, which a union reached through
+	// its arrays and maps is generated as. It is empty inside a union
+	// member's own read, where a union has no name to be read as.
+	unionName string
+
+	// ret is what the enclosing function returns alongside an error: "err"
+	// in an UnmarshalAvroBinary method, "nil, err" in a union's read.
+	ret string
+}
+
+// generateValueRead generates code declaring a local holding one value of t
+// and reading it, and reports whether it did. The local is depthName("v",
+// depth), so the caller stores it under that name.
+//
+// An array or a map is read as the block sequence a top-level field is, into
+// a local of its own, which is how a container nested in a container is read
+// to any depth (#237): its items are read by this function one depth further
+// down, with locals of their own names.
+func generateValueRead(cb *codeBuilder, t *avrocpb.Type, rc readContext, indent string, depth int) bool {
+	if t == nil {
+		return false
 	}
+	v := depthName("v", depth)
+
+	switch typ := t.Type.(type) {
+	case *avrocpb.Type_Union:
+		if rc.unionName == "" {
+			return false
+		}
+		cb.writef("%svar %s %s\n", indent, v, rc.unionName)
+		cb.writef("%s%s, err = unmarshal%s(r)\n", indent, v, rc.unionName)
+		generateReadErrCheck(cb, rc, indent)
+	case *avrocpb.Type_Reference:
+		if method, ok := readMethodFor(typ.Reference); ok {
+			cb.writef("%svar %s %s\n", indent, v, primitiveGoTypes[typ.Reference.GetName()])
+			cb.writef("%s%s, err = r.%s()\n", indent, v, method)
+			generateReadErrCheck(cb, rc, indent)
+			return true
+		}
+		generateNamedValueRead(cb, toPascalCase(typ.Reference.GetName()), v, rc, indent)
+	case *avrocpb.Type_Record:
+		generateNamedValueRead(cb, toPascalCase(typ.Record.GetName()), v, rc, indent)
+	case *avrocpb.Type_EnumType:
+		generateNamedValueRead(cb, toPascalCase(typ.EnumType.GetName()), v, rc, indent)
+	case *avrocpb.Type_Fixed:
+		generateNamedValueRead(cb, toPascalCase(typ.Fixed.GetName()), v, rc, indent)
+	case *avrocpb.Type_Array:
+		cb.writef("%svar %s %s\n", indent, v, goTypeForType(t, rc.unionName))
+		generateBlocksRead(cb, rc, indent, depth+1, func(inner string) {
+			if generateValueRead(cb, typ.Array.GetItems(), rc, inner, depth+1) {
+				cb.writef("%s%s = append(%s, %s)\n", inner, v, v, depthName("v", depth+1))
+			}
+		})
+	case *avrocpb.Type_MapType:
+		cb.writef("%s%s := make(%s)\n", indent, v, goTypeForType(t, rc.unionName))
+		generateBlocksRead(cb, rc, indent, depth+1, func(inner string) {
+			k := depthName("k", depth+1)
+			cb.writef("%svar %s string\n", inner, k)
+			cb.writef("%s%s, err = r.ReadString()\n", inner, k)
+			generateReadErrCheck(cb, rc, inner)
+			if generateValueRead(cb, typ.MapType.GetValues(), rc, inner, depth+1) {
+				cb.writef("%s%s[%s] = %s\n", inner, v, k, depthName("v", depth+1))
+			}
+		})
+	default:
+		return false
+	}
+	return true
+}
+
+// generateNamedValueRead declares a local of a named type and reads it through
+// the type's own UnmarshalAvroBinary.
+func generateNamedValueRead(cb *codeBuilder, goType string, v string, rc readContext, indent string) {
+	cb.writef("%svar %s %s\n", indent, v, goType)
+	cb.writef("%serr = %s.UnmarshalAvroBinary(r)\n", indent, v)
+	generateReadErrCheck(cb, rc, indent)
+}
+
+// generateReadErrCheck returns from the enclosing function on a read error.
+func generateReadErrCheck(cb *codeBuilder, rc readContext, indent string) {
+	cb.writef("%sif err != nil {\n", indent)
+	cb.writef("%s\treturn %s\n", indent, rc.ret)
+	cb.writef("%s}\n", indent)
+}
+
+// generateBlocksRead generates the block loop of a nested array or map, with a
+// block count of its own depth, and calls item for the code reading one item
+// at the indent it is to be written at.
+func generateBlocksRead(cb *codeBuilder, rc readContext, indent string, depth int, item func(inner string)) {
+	blkCount := depthName("blkCount", depth)
+
+	cb.writef("%sfor {\n", indent)
+	cb.writef("%s\tvar %s int64\n", indent, blkCount)
+	cb.writef("%s\t%s, err = r.ReadLong()\n", indent, blkCount)
+	generateReadErrCheck(cb, rc, indent+"\t")
+	cb.writef("%s\tif %s == 0 {\n", indent, blkCount)
+	cb.writef("%s\t\tbreak\n", indent)
+	cb.writef("%s\t}\n", indent)
+	cb.writef("%s\tif %s < 0 {\n", indent, blkCount)
+	cb.writef("%s\t\t%s = -%s\n", indent, blkCount, blkCount)
+	cb.writef("%s\t\t_, err = r.ReadLong()\n", indent)
+	generateReadErrCheck(cb, rc, indent+"\t\t")
+	cb.writef("%s\t}\n", indent)
+	cb.writef("%s\tfor range %s {\n", indent, blkCount)
+	item(indent + "\t\t")
+	cb.writef("%s\t}\n", indent)
+	cb.writef("%s}\n", indent)
 }
 
 // generateMapFieldRead generates read code for a map field. unionName is the
@@ -246,32 +302,10 @@ func generateMapFieldRead(cb *codeBuilder, m *avrocpb.Map, fieldName string, uni
 
 // generateMapValueRead generates read code for a map value.
 func generateMapValueRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, unionName string, indent string) {
-	if t.GetUnion() != nil {
-		cb.writef("%svar v %s\n", indent, unionName)
-		cb.writef("%sv, err = unmarshal%s(r)\n", indent, unionName)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s[k] = v\n", indent, fieldName)
+	if !generateValueRead(cb, t, readContext{unionName: unionName, ret: "err"}, indent, 0) {
 		return
 	}
-
-	if method, ok := readMethodFor(t.GetReference()); ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[t.GetReference().GetName()])
-		cb.writef("%sv, err = r.%s()\n", indent, method)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s[k] = v\n", indent, fieldName)
-	} else {
-		goType := goTypeForType(t, "")
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sx.%s[k] = v\n", indent, fieldName)
-	}
+	cb.writef("%sx.%s[k] = v\n", indent, fieldName)
 }
 
 // generateEnumUnmarshal generates the UnmarshalAvroBinary method for an enum type.
@@ -405,53 +439,10 @@ func generateUnionArrayRead(cb *codeBuilder, arr *avrocpb.Array) {
 
 // generateUnionArrayItemRead generates read code for a union array item.
 func generateUnionArrayItemRead(cb *codeBuilder, t *avrocpb.Type, indent string) {
-	if t == nil {
+	if !generateValueRead(cb, t, readContext{ret: "nil, err"}, indent, 0) {
 		return
 	}
-
-	switch v := t.Type.(type) {
-	case *avrocpb.Type_Reference:
-		if method, ok := readMethodFor(v.Reference); ok {
-			cb.writef("%svar v %s\n", indent, primitiveGoTypes[v.Reference.GetName()])
-			cb.writef("%sv, err = r.%s()\n", indent, method)
-			cb.writef("%sif err != nil {\n", indent)
-			cb.writef("%s\treturn nil, err\n", indent)
-			cb.writef("%s}\n", indent)
-			cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
-		} else {
-			goType := toPascalCase(v.Reference.GetName())
-			cb.writef("%svar v %s\n", indent, goType)
-			cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-			cb.writef("%sif err != nil {\n", indent)
-			cb.writef("%s\treturn nil, err\n", indent)
-			cb.writef("%s}\n", indent)
-			cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
-		}
-	case *avrocpb.Type_Record:
-		goType := toPascalCase(v.Record.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn nil, err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
-	case *avrocpb.Type_EnumType:
-		goType := toPascalCase(v.EnumType.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn nil, err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
-	case *avrocpb.Type_Fixed:
-		goType := toPascalCase(v.Fixed.GetName())
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn nil, err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
-	}
+	cb.writef("%sresult.Value = append(result.Value, v)\n", indent)
 }
 
 // generateUnionMapReadInit generates the initialization for a union map member.
@@ -499,20 +490,8 @@ func generateUnionMapRead(cb *codeBuilder, m *avrocpb.Map) {
 
 // generateUnionMapValueRead generates read code for a union map value.
 func generateUnionMapValueRead(cb *codeBuilder, t *avrocpb.Type, indent string) {
-	if method, ok := readMethodFor(t.GetReference()); ok {
-		cb.writef("%svar v %s\n", indent, primitiveGoTypes[t.GetReference().GetName()])
-		cb.writef("%sv, err = r.%s()\n", indent, method)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn nil, err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sresult.Value[k] = v\n", indent)
-	} else {
-		goType := goTypeForType(t, "")
-		cb.writef("%svar v %s\n", indent, goType)
-		cb.writef("%serr = v.UnmarshalAvroBinary(r)\n", indent)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn nil, err\n", indent)
-		cb.writef("%s}\n", indent)
-		cb.writef("%sresult.Value[k] = v\n", indent)
+	if !generateValueRead(cb, t, readContext{ret: "nil, err"}, indent, 0) {
+		return
 	}
+	cb.writef("%sresult.Value[k] = v\n", indent)
 }

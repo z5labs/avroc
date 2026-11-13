@@ -6,6 +6,8 @@
 package avrocgengo
 
 import (
+	"strconv"
+
 	"github.com/z5labs/avroc/avrocpb"
 )
 
@@ -121,17 +123,8 @@ func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName stri
 	cb.writef("\t\tfor i := range x.%s {\n", fieldName)
 
 	// Generate write for each element using index to ensure addressability
-	itemType := arr.GetItems()
-	switch {
-	case itemType.GetUnion() != nil:
-		// The items are the field's union interface, which writes its own
-		// branch index.
-		cb.writef("\t\t\terr = x.%s[i].MarshalAvroBinary(w)\n", fieldName)
-		cb.writeln("\t\t\tif err != nil {")
-		cb.writeln("\t\t\t\treturn err")
-		cb.writeln("\t\t\t}")
-	case itemType != nil:
-		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t")
+	if itemType := arr.GetItems(); itemType != nil {
+		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t", 0)
 	}
 
 	cb.writeln("\t\t}")
@@ -158,7 +151,7 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 	// Generate write for map value using index access for addressability
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t")
+		generateValueWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t", 0)
 	}
 
 	cb.writeln("\t\t}")
@@ -170,31 +163,48 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 }
 
 // generateItemWrite generates write code for an array item or similar value.
-func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string) {
+//
+// varName is an addressable expression — a slice element — so a named type's
+// pointer-receiver MarshalAvroBinary is called on it directly. depth is how
+// many containers deep varName already is beneath the outermost one, and is
+// what keeps a nested container's loop variable from shadowing the loop it is
+// inside (#237).
+func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int) {
 	if t == nil {
 		return
 	}
 
-	switch t.Type.(type) {
+	switch v := t.Type.(type) {
 	case *avrocpb.Type_Reference:
-		generateValueWrite(cb, t, varName, indent)
-	case *avrocpb.Type_Record, *avrocpb.Type_EnumType:
+		generateValueWrite(cb, t, varName, indent, depth)
+	case *avrocpb.Type_Record, *avrocpb.Type_EnumType, *avrocpb.Type_Fixed, *avrocpb.Type_Union:
+		// A union is the field's union interface, which writes its own branch
+		// index.
 		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
 		cb.writef("%sif err != nil {\n", indent)
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
-	case *avrocpb.Type_Fixed:
-		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
-		cb.writef("%sif err != nil {\n", indent)
-		cb.writef("%s\treturn err\n", indent)
-		cb.writef("%s}\n", indent)
+	case *avrocpb.Type_Array:
+		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1)
+	case *avrocpb.Type_MapType:
+		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1)
 	}
 }
 
 // generateValueWrite generates write code for a value in a non-addressable
 // position (e.g. a map index), so for named types with pointer receivers we
-// copy to a local variable first.
-func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string) {
+// copy to a local variable first. An array or a map there needs no copy: it is
+// only measured and indexed, never called a method on.
+func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int) {
+	switch v := t.GetType().(type) {
+	case *avrocpb.Type_Array:
+		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1)
+		return
+	case *avrocpb.Type_MapType:
+		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1)
+		return
+	}
+
 	if method, ok := writeMethodFor(t.GetReference()); ok {
 		cb.writef("%serr = w.%s(%s)\n", indent, method, varName)
 		cb.writef("%sif err != nil {\n", indent)
@@ -211,6 +221,73 @@ func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent
 		cb.writef("%s\t}\n", indent)
 		cb.writef("%s}\n", indent)
 	}
+}
+
+// generateNestedArrayWrite generates write code for an array that is itself an
+// array's item or a map's value: the same block sequence a top-level array
+// field is written as, over varName, with a loop variable of its own depth.
+func generateNestedArrayWrite(cb *codeBuilder, arr *avrocpb.Array, varName string, indent string, depth int) {
+	i := depthName("i", depth)
+
+	generateBlockCountWrite(cb, varName, indent)
+	cb.writef("%s\tfor %s := range %s {\n", indent, i, varName)
+	if itemType := arr.GetItems(); itemType != nil {
+		generateItemWrite(cb, itemType, varName+"["+i+"]", indent+"\t\t", depth)
+	}
+	cb.writef("%s\t}\n", indent)
+	cb.writef("%s}\n", indent)
+	generateBlockEndWrite(cb, indent)
+}
+
+// generateNestedMapWrite generates write code for a map that is itself an
+// array's item or a map's value, as generateNestedArrayWrite does for an
+// array.
+func generateNestedMapWrite(cb *codeBuilder, m *avrocpb.Map, varName string, indent string, depth int) {
+	k := depthName("k", depth)
+
+	generateBlockCountWrite(cb, varName, indent)
+	cb.writef("%s\tfor %s := range %s {\n", indent, k, varName)
+	cb.writef("%s\t\terr = w.WriteString(%s)\n", indent, k)
+	cb.writef("%s\t\tif err != nil {\n", indent)
+	cb.writef("%s\t\t\treturn err\n", indent)
+	cb.writef("%s\t\t}\n", indent)
+	if valueType := m.GetValues(); valueType != nil {
+		generateValueWrite(cb, valueType, varName+"["+k+"]", indent+"\t\t", depth)
+	}
+	cb.writef("%s\t}\n", indent)
+	cb.writef("%s}\n", indent)
+	generateBlockEndWrite(cb, indent)
+}
+
+// generateBlockCountWrite opens a nested container's single block: the
+// container is written as one block of len(varName) items, and as no block at
+// all when it is empty. The caller closes the if it opens.
+func generateBlockCountWrite(cb *codeBuilder, varName string, indent string) {
+	cb.writef("%sif len(%s) > 0 {\n", indent, varName)
+	cb.writef("%s\terr = w.WriteLong(int64(len(%s)))\n", indent, varName)
+	cb.writef("%s\tif err != nil {\n", indent)
+	cb.writef("%s\t\treturn err\n", indent)
+	cb.writef("%s\t}\n", indent)
+}
+
+// generateBlockEndWrite writes the zero-count block that ends a nested
+// container.
+func generateBlockEndWrite(cb *codeBuilder, indent string) {
+	cb.writef("%serr = w.WriteLong(0)\n", indent)
+	cb.writef("%sif err != nil {\n", indent)
+	cb.writef("%s\treturn err\n", indent)
+	cb.writef("%s}\n", indent)
+}
+
+// depthName is the name of a generated local at a container depth: base itself
+// for the outermost container, whose names generated code has always used, and
+// base suffixed with the depth beneath it, so that a nested loop never shadows
+// the variable of the loop it is inside.
+func depthName(base string, depth int) string {
+	if depth == 0 {
+		return base
+	}
+	return base + strconv.Itoa(depth)
 }
 
 // generateEnumMarshal generates the MarshalAvroBinary method for an enum type.
@@ -306,7 +383,7 @@ func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array) {
 
 	itemType := arr.GetItems()
 	if itemType != nil {
-		generateItemWrite(cb, itemType, "x.Value[i]", "\t\t\t")
+		generateItemWrite(cb, itemType, "x.Value[i]", "\t\t\t", 0)
 	}
 
 	cb.writeln("\t\t}")
@@ -332,7 +409,7 @@ func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
 
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueWrite(cb, valueType, "x.Value[k]", "\t\t\t")
+		generateValueWrite(cb, valueType, "x.Value[k]", "\t\t\t", 0)
 	}
 
 	cb.writeln("\t\t}")
