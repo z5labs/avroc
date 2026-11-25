@@ -233,6 +233,11 @@ func TestUnionBranchDefinitionsCompileAndRoundTrip(t *testing.T) {
 //
 // It is how this package checks generated code compiles and behaves, rather
 // than only that a declaration was written.
+//
+// testdata/directencoding/directencoding_test.go is copied there too, as part
+// of pkg, so that every descriptor built this way can hold the values its
+// testFile builds to SizeAvro and AppendAvro's invariants (#249) with one
+// implementation of them rather than one per package.
 func testGeneratedPackage(t *testing.T, pkg string, testFile string, schemas ...*avrocpb.Schema) {
 	t.Helper()
 	if testing.Short() {
@@ -273,6 +278,17 @@ func testGeneratedPackage(t *testing.T, pkg string, testFile string, schemas ...
 		t.Fatalf("read %s: %v", testFile, err)
 	}
 	writeTestFile(t, filepath.Join(dir, pkg, filepath.Base(testFile)), string(behaviour))
+
+	const directPackage = "package directencoding\n"
+	direct, err := os.ReadFile(filepath.Join("testdata", "directencoding", "directencoding_test.go"))
+	if err != nil {
+		t.Fatalf("read the direct encoding invariants: %v", err)
+	}
+	if !strings.Contains(string(direct), directPackage) {
+		t.Fatalf("the direct encoding invariants no longer declare %q", directPackage)
+	}
+	writeTestFile(t, filepath.Join(dir, pkg, "directencoding_test.go"),
+		strings.Replace(string(direct), directPackage, "package "+pkg+"\n", 1))
 
 	cmd := exec.Command(goBin, "test", "-mod=mod", "-count=1", "./...")
 	cmd.Dir = dir

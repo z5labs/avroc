@@ -94,6 +94,33 @@ func TestEveryNestedShapeRoundTrips(t *testing.T) {
 	})
 }
 
+// TestEveryNestedShapeIsSizedAndAppended holds the nested shapes to #249's
+// invariants: containers in containers to any depth, the innermost of every
+// kind, and the union branches that hold a container. deeper's maps hold more
+// than one entry, so those are compared by what they decode to.
+func TestEveryNestedShapeIsSizedAndAppended(t *testing.T) {
+	o, d := outer(), deeper()
+	testCases := []struct {
+		name  string
+		v     directEncoder
+		fresh func() avro.BinaryUnmarshaler
+	}{
+		{name: "Outer", v: &o, fresh: func() avro.BinaryUnmarshaler { return &Outer{} }},
+		{name: "an empty Outer", v: &Outer{}, fresh: func() avro.BinaryUnmarshaler { return &Outer{} }},
+		{name: "Deeper", v: &d, fresh: func() avro.BinaryUnmarshaler { return &Deeper{} }},
+		{name: "an empty Deeper", v: &Deeper{Choice: DeeperChoiceUnionNull{}, ChoiceMap: DeeperChoiceMapUnionNull{}},
+			fresh: func() avro.BinaryUnmarshaler { return &Deeper{} }},
+		{name: "an array of arrays branch", v: DeeperChoiceUnionArray{Value: [][]int32{{4, 5}, nil, {6}}}},
+		{name: "a map of arrays branch", v: DeeperChoiceMapUnionMap{Value: map[string][]string{"x": {"y", "z"}}}},
+		{name: "a union branch nested two containers deep", v: DeeperMaybeCellsUnionCell{Value: Cell{C: 9}}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			checkDirectEncoding(t, tc.v, tc.fresh)
+		})
+	}
+}
+
 // TestNestedContainersAreEncodedAsAvroSpecifies checks the bytes, field by
 // field, because a round trip alone would not catch a marshal and an unmarshal
 // that were wrong the same way. Each map holds one key, so its encoding does
@@ -134,6 +161,9 @@ func TestNestedContainersAreEncodedAsAvroSpecifies(t *testing.T) {
 	}
 	if got := encode(t, &in); !bytes.Equal(got, want) {
 		t.Errorf("encoded % x, want % x", got, want)
+	}
+	if got := in.AppendAvro(nil); !bytes.Equal(got, want) {
+		t.Errorf("AppendAvro(nil) = % x, want % x", got, want)
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 type OuterMaybeGridUnion interface {
 	isOuterMaybeGridUnion()
 	MarshalAvroBinary(w *avro.BinaryWriter) error
+	SizeAvro() int
+	AppendAvro(dst []byte) []byte
 }
 
 // OuterMaybeGridUnionNull represents the null value in the union.
@@ -39,6 +41,26 @@ func (x OuterMaybeGridUnionInt) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x OuterMaybeGridUnionNull) SizeAvro() int {
+	return avro.SizeIndex(0)
+}
+
+func (x OuterMaybeGridUnionInt) SizeAvro() int {
+	n := avro.SizeIndex(1)
+	n += avro.SizeLong(int64(x.Value))
+	return n
+}
+
+func (x OuterMaybeGridUnionNull) AppendAvro(dst []byte) []byte {
+	return avro.AppendIndex(dst, 0)
+}
+
+func (x OuterMaybeGridUnionInt) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendIndex(dst, 1)
+	dst = avro.AppendInt(dst, x.Value)
+	return dst
 }
 
 func unmarshalOuterMaybeGridUnion(r *avro.BinaryReader) (OuterMaybeGridUnion, error) {
@@ -159,6 +181,95 @@ func (x *Outer) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x *Outer) SizeAvro() int {
+	n := 0
+	if len(x.Grid) > 0 {
+		n += avro.SizeLong(int64(len(x.Grid)))
+		for i := range x.Grid {
+			if len(x.Grid[i]) > 0 {
+				n += avro.SizeLong(int64(len(x.Grid[i])))
+				for i1 := range x.Grid[i] {
+					n += avro.SizeLong(int64(x.Grid[i][i1]))
+				}
+			}
+			n++
+		}
+	}
+	n++
+	if len(x.Rows) > 0 {
+		n += avro.SizeLong(int64(len(x.Rows)))
+		for i := range x.Rows {
+			if len(x.Rows[i]) > 0 {
+				n += avro.SizeLong(int64(len(x.Rows[i])))
+				for k1, v1 := range x.Rows[i] {
+					n += avro.SizeBytes(len(k1))
+					n += avro.SizeLong(int64(v1))
+				}
+			}
+			n++
+		}
+	}
+	n++
+	if len(x.MaybeGrid) > 0 {
+		n += avro.SizeLong(int64(len(x.MaybeGrid)))
+		for i := range x.MaybeGrid {
+			if len(x.MaybeGrid[i]) > 0 {
+				n += avro.SizeLong(int64(len(x.MaybeGrid[i])))
+				for i1 := range x.MaybeGrid[i] {
+					n += x.MaybeGrid[i][i1].SizeAvro()
+				}
+			}
+			n++
+		}
+	}
+	n++
+	return n
+}
+
+func (x *Outer) AppendAvro(dst []byte) []byte {
+	if len(x.Grid) > 0 {
+		dst = avro.AppendLong(dst, int64(len(x.Grid)))
+		for i := range x.Grid {
+			if len(x.Grid[i]) > 0 {
+				dst = avro.AppendLong(dst, int64(len(x.Grid[i])))
+				for i1 := range x.Grid[i] {
+					dst = avro.AppendInt(dst, x.Grid[i][i1])
+				}
+			}
+			dst = append(dst, 0)
+		}
+	}
+	dst = append(dst, 0)
+	if len(x.Rows) > 0 {
+		dst = avro.AppendLong(dst, int64(len(x.Rows)))
+		for i := range x.Rows {
+			if len(x.Rows[i]) > 0 {
+				dst = avro.AppendLong(dst, int64(len(x.Rows[i])))
+				for k1, v1 := range x.Rows[i] {
+					dst = avro.AppendString(dst, k1)
+					dst = avro.AppendInt(dst, v1)
+				}
+			}
+			dst = append(dst, 0)
+		}
+	}
+	dst = append(dst, 0)
+	if len(x.MaybeGrid) > 0 {
+		dst = avro.AppendLong(dst, int64(len(x.MaybeGrid)))
+		for i := range x.MaybeGrid {
+			if len(x.MaybeGrid[i]) > 0 {
+				dst = avro.AppendLong(dst, int64(len(x.MaybeGrid[i])))
+				for i1 := range x.MaybeGrid[i] {
+					dst = x.MaybeGrid[i][i1].AppendAvro(dst)
+				}
+			}
+			dst = append(dst, 0)
+		}
+	}
+	dst = append(dst, 0)
+	return dst
 }
 
 func (x *Outer) UnmarshalAvroBinary(r *avro.BinaryReader) error {

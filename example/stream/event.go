@@ -33,6 +33,21 @@ func (x *Event) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	return nil
 }
 
+func (x *Event) SizeAvro() int {
+	n := 0
+	n += avro.SizeLong(x.Id)
+	n += 8
+	n++
+	return n
+}
+
+func (x *Event) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendLong(dst, x.Id)
+	dst = avro.AppendDouble(dst, x.Value)
+	dst = avro.AppendBool(dst, x.Ok)
+	return dst
+}
+
 func (x *Event) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	var err error
 	x.Id, err = r.ReadLong()
