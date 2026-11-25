@@ -8,6 +8,13 @@
 // testGeneratedPackage builds, with its package clause rewritten to that
 // package's, so that each of those packages' own test file can hold the values
 // it already builds to #249's invariants.
+//
+// example/directencoding/invariants_test.go is the same file under the package
+// clause directencoding_test, and holds the committed examples to the same
+// invariants. They are two files because the modules this one is copied into
+// cannot import anything from this repository's tree, and
+// TestTheDirectEncodingInvariantsAreOneFile is what keeps them byte-identical
+// apart from that clause.
 package directencoding
 
 import (
@@ -87,8 +94,18 @@ func checkDirectEncoding(t *testing.T, v directEncoder, fresh func() avro.Binary
 		if len(got) != len(prefix)+size {
 			t.Errorf("with %d bytes spare, AppendAvro extended dst by %d bytes, want SizeAvro() = %d", spare, len(got)-len(prefix), size)
 		}
-		if !unordered && !bytes.Equal(got[len(prefix):], appended) {
-			t.Errorf("with %d bytes spare, AppendAvro appended % x, want % x", spare, got[len(prefix):], appended)
+		switch {
+		case !unordered:
+			if !bytes.Equal(got[len(prefix):], appended) {
+				t.Errorf("with %d bytes spare, AppendAvro appended % x, want % x", spare, got[len(prefix):], appended)
+			}
+		case fresh != nil:
+			fromDst, fromNil := fresh(), fresh()
+			decodeAll(t, got[len(prefix):], fromDst)
+			decodeAll(t, appended, fromNil)
+			if !reflect.DeepEqual(fromDst, fromNil) {
+				t.Errorf("with %d bytes spare, AppendAvro appended bytes decoding to %+v, want %+v", spare, fromDst, fromNil)
+			}
 		}
 		if spare > 0 && &got[0] != &dst[0] {
 			t.Errorf("with %d bytes spare, AppendAvro reallocated rather than appending in place", spare)

@@ -7,17 +7,16 @@
 // generator writes, and the benchmarks that measure them.
 //
 // It is one package of tests over all four generated packages, rather than a
-// file beside each, so that the invariants are written once here. Its twin is
-// internal/avroc-gen-go/testdata/directencoding, which holds the descriptors
-// only a hand-built IR reaches to the same invariants; the two are separate
-// because that one is copied into modules of its own that cannot import this
-// one. It lives in a directory of its own, holding no generated code, so avroc
-// has nothing here to prune.
+// file beside each, so that the invariants are written once for them, in
+// invariants_test.go. That file is internal/avroc-gen-go/testdata/
+// directencoding's under another package clause, which is how the descriptors
+// only a hand-built IR reaches are held to exactly the same invariants. It
+// lives in a directory of its own, holding no generated code, so avroc has
+// nothing here to prune.
 package directencoding_test
 
 import (
 	"bytes"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -27,130 +26,6 @@ import (
 	"github.com/z5labs/avroc/example/stream"
 	"github.com/z5labs/avroc/example/unions"
 )
-
-type directEncoder interface {
-	MarshalAvroBinary(w *avro.BinaryWriter) error
-	SizeAvro() int
-	AppendAvro(dst []byte) []byte
-}
-
-// checkDirectEncoding holds v to #249's invariants: SizeAvro() equals
-// len(AppendAvro(nil)); AppendAvro(nil) is MarshalAvroBinary's bytes, or for a
-// value holding a map of more than one entry bytes that decode to the same
-// value; AppendAvro(dst) leaves dst[:len(dst)] as it was and extends it by
-// exactly SizeAvro() bytes; and neither allocates when dst has the room.
-//
-// fresh returns a zero value to decode into, and is nil for a union branch,
-// which has no UnmarshalAvroBinary of its own.
-func checkDirectEncoding(t *testing.T, v directEncoder, fresh func() avro.BinaryUnmarshaler) {
-	t.Helper()
-
-	var buf bytes.Buffer
-	if err := v.MarshalAvroBinary(avro.NewBinaryWriter(&buf)); err != nil {
-		t.Fatalf("MarshalAvroBinary: %v", err)
-	}
-	marshaled := buf.Bytes()
-
-	appended := v.AppendAvro(nil)
-	size := v.SizeAvro()
-	if size != len(appended) {
-		t.Errorf("SizeAvro() = %d, but AppendAvro(nil) appended %d bytes", size, len(appended))
-	}
-
-	unordered := holdsAMapOfMoreThanOneEntry(reflect.ValueOf(v))
-	if !bytes.Equal(appended, marshaled) {
-		switch {
-		case !unordered:
-			t.Errorf("AppendAvro(nil) = % x, MarshalAvroBinary wrote % x", appended, marshaled)
-		case fresh == nil:
-			t.Errorf("AppendAvro(nil) and MarshalAvroBinary disagree, and there is nothing to decode them into to compare")
-		default:
-			fromAppend, fromMarshal := fresh(), fresh()
-			decodeAll(t, appended, fromAppend)
-			decodeAll(t, marshaled, fromMarshal)
-			if !reflect.DeepEqual(fromAppend, fromMarshal) {
-				t.Errorf("AppendAvro(nil) decodes to %+v, MarshalAvroBinary's bytes to %+v", fromAppend, fromMarshal)
-			}
-		}
-	}
-
-	prefix := []byte("prefix")
-	for _, spare := range []int{0, size} {
-		dst := make([]byte, len(prefix), len(prefix)+spare)
-		copy(dst, prefix)
-
-		got := v.AppendAvro(dst)
-		if !bytes.Equal(dst, prefix) {
-			t.Errorf("with %d bytes spare, AppendAvro changed dst[:len(dst)] to % x", spare, dst)
-		}
-		if !bytes.Equal(got[:len(prefix)], prefix) {
-			t.Errorf("with %d bytes spare, AppendAvro returned % x, which does not begin with dst", spare, got)
-		}
-		if len(got) != len(prefix)+size {
-			t.Errorf("with %d bytes spare, AppendAvro extended dst by %d bytes, want SizeAvro() = %d", spare, len(got)-len(prefix), size)
-		}
-		if !unordered && !bytes.Equal(got[len(prefix):], appended) {
-			t.Errorf("with %d bytes spare, AppendAvro appended % x, want % x", spare, got[len(prefix):], appended)
-		}
-		if spare > 0 && &got[0] != &dst[0] {
-			t.Errorf("with %d bytes spare, AppendAvro reallocated rather than appending in place", spare)
-		}
-	}
-
-	var n int
-	if allocs := testing.AllocsPerRun(100, func() { n = v.SizeAvro() }); allocs != 0 {
-		t.Errorf("SizeAvro made %v allocations per run, want 0", allocs)
-	}
-	_ = n
-
-	room := make([]byte, 0, size)
-	if allocs := testing.AllocsPerRun(100, func() { room = v.AppendAvro(room[:0]) }); allocs != 0 {
-		t.Errorf("AppendAvro into a dst with room made %v allocations per run, want 0", allocs)
-	}
-}
-
-func decodeAll(t *testing.T, b []byte, into avro.BinaryUnmarshaler) {
-	t.Helper()
-	r := bytes.NewReader(b)
-	if err := into.UnmarshalAvroBinary(avro.NewBinaryReader(r)); err != nil {
-		t.Fatalf("UnmarshalAvroBinary: %v", err)
-	}
-	if r.Len() != 0 {
-		t.Errorf("%d byte(s) left unread", r.Len())
-	}
-}
-
-// holdsAMapOfMoreThanOneEntry reports whether a map of more than one entry is
-// reachable from v, which is the one case two encodings of a value may order
-// differently.
-func holdsAMapOfMoreThanOneEntry(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Pointer, reflect.Interface:
-		return !v.IsNil() && holdsAMapOfMoreThanOneEntry(v.Elem())
-	case reflect.Struct:
-		for i := range v.NumField() {
-			if holdsAMapOfMoreThanOneEntry(v.Field(i)) {
-				return true
-			}
-		}
-	case reflect.Slice, reflect.Array:
-		for i := range v.Len() {
-			if holdsAMapOfMoreThanOneEntry(v.Index(i)) {
-				return true
-			}
-		}
-	case reflect.Map:
-		if v.Len() > 1 {
-			return true
-		}
-		for it := v.MapRange(); it.Next(); {
-			if holdsAMapOfMoreThanOneEntry(it.Value()) {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 // testRecord is schema.avdl's record with the proposal's sizes (#244): a
 // 200-byte string and a 16-byte fixed, beside an enum and a fixed union

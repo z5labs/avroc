@@ -204,16 +204,39 @@ func (m directMethod) generateCall(cb *codeBuilder, expr string, indent string) 
 	}
 }
 
+// constantSize is the encoded size of a primitive whose size does not depend
+// on its value — boolean, float and double — and false for every other type.
+//
+// SizeAvro writes such a value as the constant rather than as an expression
+// over it, and so a container of them is sized by multiplying rather than by a
+// loop: a loop whose body never mentions its variable is one Go refuses to
+// compile, and multiplying is the O(1) answer anyway.
+func constantSize(t *avrocpb.Type) (int, bool) {
+	if !isPrimitiveRef(t) {
+		return 0, false
+	}
+	switch t.GetReference().GetName() {
+	case "boolean":
+		return 1, true
+	case "float":
+		return 4, true
+	case "double":
+		return 8, true
+	}
+	return 0, false
+}
+
 // generatePrimitive writes a primitive value with avro-go's Size and Append
 // functions, which are the bytes BinaryWriter's Write methods write. A
-// primitive whose size does not depend on its value is written as that
-// constant. null is no bytes at all.
+// primitive whose size does not depend on its value is sized as that constant.
+// null is no bytes at all.
 func (m directMethod) generatePrimitive(cb *codeBuilder, name string, expr string, indent string) {
 	if m == sizeMethod {
 		var size string
 		switch name {
 		case "boolean":
-			size = "1"
+			cb.writef("%sn++\n", indent)
+			return
 		case "int":
 			size = "avro.SizeLong(int64(" + expr + "))"
 		case "long":
@@ -227,11 +250,7 @@ func (m directMethod) generatePrimitive(cb *codeBuilder, name string, expr strin
 		default:
 			return
 		}
-		if size == "1" {
-			cb.writef("%sn++\n", indent)
-		} else {
-			cb.writef("%sn += %s\n", indent, size)
-		}
+		cb.writef("%sn += %s\n", indent, size)
 		return
 	}
 
@@ -283,9 +302,13 @@ func (m directMethod) generateArray(cb *codeBuilder, arr *avrocpb.Array, expr st
 	i := depthName("i", depth)
 
 	m.generateBlockCount(cb, expr, indent)
-	cb.writef("%s\tfor %s := range %s {\n", indent, i, expr)
-	m.generateValue(cb, arr.GetItems(), expr+"["+i+"]", indent+"\t\t", depth+1, fixed)
-	cb.writef("%s\t}\n", indent)
+	if size, ok := constantSize(arr.GetItems()); ok && m == sizeMethod {
+		cb.writef("%s\tn += len(%s) * %d\n", indent, expr, size)
+	} else {
+		cb.writef("%s\tfor %s := range %s {\n", indent, i, expr)
+		m.generateValue(cb, arr.GetItems(), expr+"["+i+"]", indent+"\t\t", depth+1, fixed)
+		cb.writef("%s\t}\n", indent)
+	}
 	cb.writef("%s}\n", indent)
 	m.generateBlockEnd(cb, indent)
 }
@@ -298,6 +321,16 @@ func (m directMethod) generateMap(cb *codeBuilder, mt *avrocpb.Map, expr string,
 	v := depthName("v", depth)
 
 	m.generateBlockCount(cb, expr, indent)
+	if size, ok := constantSize(mt.GetValues()); ok && m == sizeMethod {
+		// Every key still has to be measured, but not the values.
+		cb.writef("%s\tn += len(%s) * %d\n", indent, expr, size)
+		cb.writef("%s\tfor %s := range %s {\n", indent, k, expr)
+		cb.writef("%s\t\tn += avro.SizeBytes(len(%s))\n", indent, k)
+		cb.writef("%s\t}\n", indent)
+		cb.writef("%s}\n", indent)
+		m.generateBlockEnd(cb, indent)
+		return
+	}
 	cb.writef("%s\tfor %s, %s := range %s {\n", indent, k, v, expr)
 	if m == sizeMethod {
 		cb.writef("%s\t\tn += avro.SizeBytes(len(%s))\n", indent, k)
