@@ -60,6 +60,21 @@ func arrayStreamFor(schema *avrocpb.Schema) *arrayStream {
 	return &arrayStream{item: item, plural: pluralize(item)}
 }
 
+// reader is the name of the streaming reader type, e.g. EventReader.
+//
+// It is a method so that the emission below and the identifier check in
+// identifiers.go take it from the same place: a name derived twice is a name
+// that can be checked under one spelling and emitted under another.
+func (s arrayStream) reader() string {
+	return s.item + "Reader"
+}
+
+// writer is the name of the streaming writer type, e.g. EventWriter, for the
+// same reason as reader.
+func (s arrayStream) writer() string {
+	return s.item + "Writer"
+}
+
 // streamItemType returns the Go type name of an array item this generator has
 // generated marshalling methods for, or the empty string for anything else.
 func streamItemType(t *avrocpb.Type) string {
@@ -134,7 +149,7 @@ func isVowel(b byte) bool {
 // embedded reader, promoted unchanged. Wrapping them would be a forwarding
 // layer whose only effect is to be one version behind avro-go.
 func generateStreamReader(cb *codeBuilder, s arrayStream) {
-	reader := s.item + "Reader"
+	reader := s.reader()
 
 	cb.newline()
 	cb.writef("// %s reads a stream of %s values from an Avro array without\n", reader, s.item)
@@ -220,7 +235,7 @@ func generateStreamReader(cb *codeBuilder, s arrayStream) {
 // stream has no close to forget, and a stream written the explicit way and left
 // open is reported as avro.ErrTruncatedArray when it is read back.
 func generateStreamWriter(cb *codeBuilder, s arrayStream) {
-	writer := s.item + "Writer"
+	writer := s.writer()
 
 	cb.newline()
 	cb.writef("// %s writes a stream of %s values as an Avro array without\n", writer, s.item)

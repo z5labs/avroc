@@ -38,8 +38,8 @@ func deeper() Deeper {
 		Cube:       [][][]int64{{{1, -1}, nil}, {{7}}},
 		NestedMaps: map[string]map[string]string{"outer": {"inner": "value"}, "empty": {}},
 		Cells:      [][]Cell{{{C: 1}, {C: 2}}, {{C: 3}}},
-		Tones:      []map[string]Tone{{"lo": ToneLOW, "hi": ToneHIGH}},
-		Hashes:     map[string][]Hash{"h": {{0xab, 0xcd}, {0x01, 0x02}}},
+		Tones:      []map[string]Shade{{"lo": ShadeLOW, "hi": ShadeHIGH}},
+		Hashes:     map[string][]Digest{"h": {{0xab, 0xcd}, {0x01, 0x02}}},
 		CellsByKey: map[string]map[string]Cell{"a": {"b": {C: -4}}},
 		MaybeCells: []map[string][]DeeperMaybeCellsUnion{
 			{"some": {DeeperMaybeCellsUnionNull{}, DeeperMaybeCellsUnionCell{Value: Cell{C: 9}}}},

@@ -50,6 +50,15 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 		return err
 	}
 
+	// Every identifier the package is about to declare, checked across the
+	// whole descriptor before the loop below writes its first file: a
+	// collision is a package that does not compile, and the loop cannot take
+	// back the files it wrote before reaching one. checkIdentifiers is the
+	// long form.
+	if err := checkIdentifiers(req.GetSchemas(), singleObject); err != nil {
+		return err
+	}
+
 	// Indexed once for the descriptor rather than per schema: a schema's
 	// reference can name a fixed defined in full by an earlier one.
 	fixed := collectFixedTypes(req.GetSchemas())
