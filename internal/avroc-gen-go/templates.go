@@ -37,6 +37,7 @@ type fileImports struct {
 	binary  bool
 	io      bool
 	iter    bool
+	math    bool
 	avrolib bool
 }
 
@@ -45,7 +46,7 @@ type fileImports struct {
 func (f fileImports) writePreamble(cb *codeBuilder, packageName string) {
 	cb.writef(filePreamble, packageName)
 
-	std := make([]string, 0, 5)
+	std := make([]string, 0, 6)
 	if f.bytes {
 		std = append(std, "bytes")
 	}
@@ -60,6 +61,9 @@ func (f fileImports) writePreamble(cb *codeBuilder, packageName string) {
 	}
 	if f.iter {
 		std = append(std, "iter")
+	}
+	if f.math {
+		std = append(std, "math")
 	}
 	if len(std) == 0 && !f.avrolib {
 		return
@@ -139,6 +143,7 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 	// without one, and the error is returned rather than dropped for the
 	// reason the Compare plans' is.
 	var views map[*avrocpb.Record]viewPlan
+	var needMath bool
 	if opts.views {
 		views = map[*avrocpb.Record]viewPlan{}
 		for _, t := range types {
@@ -148,6 +153,7 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 					return "", err
 				}
 				views[rec.Record] = plan
+				needMath = needMath || plan.needsMath()
 			}
 		}
 	}
@@ -162,6 +168,7 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 		binary:  needBinary,
 		io:      stream != nil || len(views) > 0,
 		iter:    stream != nil,
+		math:    needMath,
 		avrolib: needsAvrolibImport(types) || stream != nil,
 	}
 	imports.writePreamble(cb, opts.packageName)

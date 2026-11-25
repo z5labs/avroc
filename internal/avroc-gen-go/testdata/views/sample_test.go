@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -356,6 +357,42 @@ func TestCorruptInputIsReportedAndMoreBytesNeverMendIt(t *testing.T) {
 	}
 }
 
+// everyAccessorPanics calls every exported method of the view v but Parse,
+// Need and Complete, each of which answers on an empty view, and requires each
+// to panic; Complete must be false and, on a view never parsed, Need 0.
+func everyAccessorPanics(t *testing.T, name string, v any) {
+	t.Helper()
+	rv := reflect.ValueOf(v)
+	called := 0
+	for i := range rv.NumMethod() {
+		m := rv.Type().Method(i)
+		switch m.Name {
+		case "Parse", "Need", "Complete":
+			continue
+		}
+		args := make([]reflect.Value, m.Type.NumIn()-1)
+		for j := range args {
+			switch in := m.Type.In(j + 1); {
+			case in == rv.Type():
+				args[j] = rv
+			case in.Kind() == reflect.Pointer:
+				args[j] = reflect.New(in.Elem())
+			default:
+				args[j] = reflect.Zero(in)
+			}
+		}
+		mustPanic(t, name+"."+m.Name+" on an empty view", func() { rv.Method(i).Call(args) })
+		called++
+	}
+	// PrefixLen, Len, Bytes and Decode at least, and an accessor per field.
+	if called < 4 {
+		t.Errorf("%s: only %d methods were called", name, called)
+	}
+	if rv.MethodByName("Complete").Call(nil)[0].Bool() {
+		t.Errorf("%s is Complete", name)
+	}
+}
+
 func mustPanic(t *testing.T, what string, f func()) {
 	t.Helper()
 	defer func() {
@@ -371,21 +408,35 @@ func mustPanic(t *testing.T, what string, f func()) {
 // accessor on an empty view; the tail's accessors, Bytes and Decode on an
 // incomplete one; and Compare on either, unless the tail is never compared.
 func TestAnEmptyOrIncompleteViewPanics(t *testing.T) {
-	var empty SampleView
-	for name, f := range map[string]func(){
-		"PrefixLen": func() { empty.PrefixLen() }, "Len": func() { empty.Len() }, "Bytes": func() { empty.Bytes() },
-		"Flag": func() { empty.Flag() }, "Ratio": func() { empty.Ratio() }, "Score": func() { empty.Score() },
-		"Digest": func() { empty.Digest() }, "DigestBytes": func() { empty.DigestBytes() }, "Pair": func() { empty.Pair() },
-		"Count": func() { empty.Count() }, "Total": func() { empty.Total() }, "Blob": func() { empty.Blob() },
-		"Name": func() { empty.Name() }, "NameBytes": func() { empty.NameBytes() }, "Color": func() { empty.Color() },
-		"Big": func() { empty.Big() }, "Inner": func() { empty.Inner() }, "Leaf": func() { empty.Leaf() },
-		"Decode": func() { empty.Decode(&Sample{}) }, "Compare": func() { empty.Compare(&empty) },
-		"inner Id": func() { (&InnerView{}).Id() }, "leaf TextLen": func() { (&LeafView{}).TextLen() },
-	} {
-		mustPanic(t, "SampleView."+name+" on an empty view", f)
+	var zero Sample
+	valid := encode(&zero)
+	corrupt := splice(valid, blobAt, 1, []byte{0x01})
+
+	// Every view, zero and after a failed Parse — corrupt where its input
+	// can be, and truncated where it cannot.
+	failed := func(v interface{ Parse([]byte) error }, b []byte) any {
+		if v.Parse(b) == nil {
+			t.Fatalf("%T parsed %x", v, b)
+		}
+		return v
 	}
-	if empty.Complete() || empty.Need() != 0 {
-		t.Errorf("an empty view is Complete %v, Need %d", empty.Complete(), empty.Need())
+	for name, v := range map[string]any{
+		"SampleView":           &SampleView{},
+		"PairView":             &PairView{},
+		"InnerView":            &InnerView{},
+		"LeafView":             &LeafView{},
+		"WholeView":            &WholeView{},
+		"NothingView":          &NothingView{},
+		"KeyedView":            &KeyedView{},
+		"corrupt SampleView":   failed(&SampleView{}, corrupt),
+		"truncated SampleView": failed(&SampleView{}, valid[:countAt]),
+		"truncated PairView":   failed(&PairView{}, []byte{1}),
+		"truncated InnerView":  failed(&InnerView{}, []byte{2}),
+		"truncated LeafView":   failed(&LeafView{}, nil),
+		"truncated WholeView":  failed(&WholeView{}, []byte{0, 0}),
+		"truncated KeyedView":  failed(&KeyedView{}, []byte{4, 'k'}),
+	} {
+		everyAccessorPanics(t, name, v)
 	}
 
 	x := randomSample(rand.New(rand.NewPCG(1, 2)))
@@ -473,6 +524,11 @@ func TestTheViewsMakeNoAllocations(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var wv WholeView
+	wenc := (&Whole{Id: 1000, Color: ColorGREEN}).AppendAvro(nil)
+	var kv KeyedView
+	kenc := (&Keyed{Key: []byte("key"), Value: []byte("value")}).AppendAvro(nil)
+
 	var sink int
 	for name, f := range map[string]func(){
 		"Parse": func() { _ = v.Parse(enc) },
@@ -487,9 +543,21 @@ func TestTheViewsMakeNoAllocations(t *testing.T) {
 			sink += len(v.Blob()) + len(v.NameBytes()) + int(v.Color()) + int(v.Big())
 			sink += int(v.Inner().Id()) + len(v.Inner().LabelBytes()) + len(v.Inner().Data()) + v.Inner().DataLen()
 			sink += int(v.Leaf().N()) + len(v.Leaf().TextBytes()) + v.Leaf().TextLen()
+			if v.Pair().On() || v.PairAgain().On() {
+				sink++
+			}
 			sink += v.PrefixLen() + v.Len() + v.Need() + len(v.Bytes())
 		},
 		"Compare": func() { sink += v.Compare(&w) },
+		"WholeView": func() {
+			_ = wv.Parse(wenc)
+			sink += int(wv.Id()) + int(wv.Color()) + int(wv.Digest()[0]) + len(wv.DigestBytes()) + wv.Nothing().Len() + len(wv.Bytes())
+			sink += wv.Compare(&wv)
+		},
+		"KeyedView": func() {
+			_ = kv.Parse(kenc)
+			sink += len(kv.Key()) + len(kv.Value()) + kv.ValueLen() + len(kv.Bytes()) + kv.Compare(&kv)
+		},
 	} {
 		if n := testing.AllocsPerRun(100, f); n != 0 {
 			t.Errorf("%s made %v allocations, want 0", name, n)

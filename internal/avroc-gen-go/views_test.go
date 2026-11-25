@@ -336,13 +336,20 @@ func TestViewParseDecidesTheOneByteCaseItself(t *testing.T) {
 		fieldOf("l", primType("long")),
 		fieldOf("b", primType("bytes")),
 		fieldOf("e", enumOf("Kind", "A", "B")),
+		fieldOf("i", primType("int")),
 		fieldOf("tail", primType("string")),
 	))
 	code := generateViewsString(t, "", schema)
 	body := between(t, code, "func (v *FastView) Parse(b []byte) error {", "\n}\n")
 
 	for _, want := range []string{
-		"if len(b) < 8 {\n\t\treturn v.fail(io.ErrUnexpectedEOF, 12)\n\t}\n\n\tpos := 8\n\n\t// l: long",
+		"if len(b) < 8 {\n\t\treturn v.fail(io.ErrUnexpectedEOF, 13)\n\t}\n\n\tpos := 8\n\n\t// l: long",
+		// An int is ConsumeLong and the range check, since ConsumeInt does not inline.
+		"// i: int\n\t{\n\t\tx, k := avro.ConsumeLong(b[pos:])",
+		"if x < math.MinInt32 || x > math.MaxInt32 {\n\t\t\treturn v.fail(avro.ErrOverflow, 0)\n\t\t}\n\t\tv.val4 = int32(x)",
+		// A length that would take the record past the largest int is refused.
+		"if l > math.MaxInt-pos-k-3 {\n\t\t\treturn v.fail(avro.ErrOverflow, 0)\n\t\t}",
+		"if l > math.MaxInt-pos-k {\n\t\t\treturn v.fail(avro.ErrOverflow, 0)\n\t\t}\n\t\tv.at5 = pos + k",
 		"x, k := avro.ConsumeLong(b[pos:])",
 		"if len(b) > pos && b[pos]&0x81 == 0 {\n\t\t\tl = int(b[pos] >> 1)\n\t\t} else {\n\t\t\tl, k = avro.ConsumeLength(b[pos:])",
 		"if len(b) > pos && b[pos]&0x81 == 0 && int(b[pos]>>1) < 2 {\n\t\t\ti = int(b[pos] >> 1)\n\t\t} else {\n\t\t\ti, k = avro.ConsumeIndex(b[pos:], 2)",
@@ -350,6 +357,9 @@ func TestViewParseDecidesTheOneByteCaseItself(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("FastView.Parse does not contain\n%s\n\nin:\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "ConsumeInt") {
+		t.Errorf("FastView.Parse calls ConsumeInt, which does not inline:\n%s", body)
 	}
 	if strings.Contains(body, "ConsumeBytes") {
 		t.Errorf("FastView.Parse calls ConsumeBytes, whose one-byte case it should decide itself:\n%s", body)

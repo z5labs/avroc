@@ -476,7 +476,8 @@ unwrapped:
   bytes either parses, reports corruption, or reports a strictly larger `Need()`.
 - `avro.ErrOverflow`, `avro.ErrNegativeLength` or `avro.ErrInvalidIndex` when the encoding is
   corrupt. `Parse` and `UnmarshalAvroBinary` agree on which input that is, and no more bytes
-  mend it.
+  mend it. On a 32-bit platform, a record whose length would not fit in an `int` is reported as
+  `avro.ErrOverflow` too, since no buffer could hold it.
 
 After a failed `Parse` the view is empty, as the zero view is, and every accessor panics.
 

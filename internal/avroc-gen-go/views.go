@@ -564,14 +564,17 @@ func generateViewParse(cb *codeBuilder, p viewPlan) {
 				cb.writef("\tpos += %d\n", f.width)
 			}
 		case viewInt, viewLong:
-			consume := "ConsumeLong"
-			if f.kind == viewInt {
-				consume = "ConsumeInt"
-			}
+			// ConsumeLong inlines and ConsumeInt does not, so an int is a long
+			// and ConsumeInt's range check, written out.
 			cb.writeln("\t{")
-			cb.writef("\t\tx, k := avro.%s(b[pos:])\n", consume)
+			cb.writeln("\t\tx, k := avro.ConsumeLong(b[pos:])")
 			cb.writef("\t\tif k < 0 {\n\t\t\treturn v.fail(avro.ConsumeError(k), len(b)+%d)\n\t\t}\n", 1+after)
-			cb.writef("\t\tv.val%d = x\n", f.index)
+			if f.kind == viewInt {
+				cb.writeln("\t\tif x < math.MinInt32 || x > math.MaxInt32 {\n\t\t\treturn v.fail(avro.ErrOverflow, 0)\n\t\t}")
+				cb.writef("\t\tv.val%d = int32(x)\n", f.index)
+			} else {
+				cb.writef("\t\tv.val%d = x\n", f.index)
+			}
 			cb.writeln("\t\tpos += k")
 			cb.writeln("\t}")
 		case viewEnum:
@@ -599,6 +602,7 @@ func generateViewParse(cb *codeBuilder, p viewPlan) {
 			cb.writeln("\t\t\tl, k = avro.ConsumeLength(b[pos:])")
 			cb.writef("\t\t\tif k < 0 {\n\t\t\t\treturn v.fail(avro.ConsumeError(k), len(b)+%d)\n\t\t\t}\n", 1+after)
 			cb.writeln("\t\t}")
+			writeViewLengthGuard(cb, "\t\t", "l", "pos-k", after)
 			if p.tail == f.index {
 				cb.writef("\t\tv.at%d = pos + k\n", f.index)
 				cb.writeln("\t\tv.prefix, v.size = pos+k, pos+k+l")
@@ -611,8 +615,16 @@ func generateViewParse(cb *codeBuilder, p viewPlan) {
 		case viewRecord:
 			rec := fmt.Sprintf("v.rec%d", f.index)
 			cb.writef("\tif err := %s.Parse(%s); err != nil {\n", rec, cur.rest())
+			if f.width < 0 {
+				cb.writef("\t\tif err == io.ErrUnexpectedEOF {\n")
+				writeViewLengthGuard(cb, "\t\t\t", rec+".need", "pos", after)
+				cb.writeln("\t\t}")
+			}
 			cb.writef("\t\treturn v.fail(err, %s+%s.need)\n", cur.plus(after), rec)
 			cb.writeln("\t}")
+			if f.width < 0 {
+				writeViewLengthGuard(cb, "\t", rec+".size", "pos", after)
+			}
 			switch {
 			case p.tail == f.index:
 				cb.writef("\tv.prefix, v.size = pos+%s.prefix, pos+%s.size\n", rec, rec)
@@ -656,6 +668,33 @@ func generateViewParse(cb *codeBuilder, p viewPlan) {
 		cb.writeln("\treturn err")
 		cb.writeln("}")
 	}
+}
+
+// writeViewLengthGuard refuses a length n that would take the cursor, with the
+// after bytes still to come, past the largest int, as avro.ErrOverflow: a
+// record that long cannot be held in memory, and the sum it would be added
+// into would wrap. A length is never past math.MaxInt32, so only a 32-bit
+// platform can reach it.
+func writeViewLengthGuard(cb *codeBuilder, indent, n, used string, after int) {
+	limit := "math.MaxInt-" + used
+	if after > 0 {
+		limit += fmt.Sprintf("-%d", after)
+	}
+	cb.writef("%sif %s > %s {\n%s\treturn v.fail(avro.ErrOverflow, 0)\n%s}\n", indent, n, limit, indent, indent)
+}
+
+// needsMath reports whether the view's Parse refers to package math: for an
+// int's range, or for the guard on a length.
+func (p *viewPlan) needsMath() bool {
+	for _, f := range p.fields {
+		switch {
+		case f.kind == viewInt, f.kind == viewBytes, f.kind == viewString:
+			return true
+		case f.kind == viewRecord && f.width < 0:
+			return true
+		}
+	}
+	return false
 }
 
 // writeViewEmpty writes the panic every accessor of an empty view makes.
@@ -882,7 +921,10 @@ func generateViewCompare(cb *codeBuilder, p viewPlan) {
 	if p.tailCompared {
 		cb.writef("\tif len(v.b) < v.size || len(w.b) < w.size {\n\t\tpanic(\"%s.Compare called on an incomplete view\")\n\t}\n", p.viewName)
 	}
-	cb.writef("\tc, _, _ := %s(v.b, w.b)\n", p.compare)
+	cb.writef("\tc, na, nb := %s(v.b, w.b)\n", p.compare)
+	cb.writeln("\tif na < 0 || nb < 0 {")
+	cb.writef("\t\tpanic(\"%s.Compare: %s could not read a parsed view\")\n", p.viewName, p.compare)
+	cb.writeln("\t}")
 	cb.writeln("\treturn c")
 	cb.writeln("}")
 }

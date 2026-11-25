@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"io"
+	"math"
 
 	avro "github.com/z5labs/avro-go"
 )
@@ -298,6 +299,9 @@ func (v *RecordView) Parse(b []byte) error {
 				return v.fail(avro.ConsumeError(k), len(b)+3)
 			}
 		}
+		if l > math.MaxInt-pos-k-2 {
+			return v.fail(avro.ErrOverflow, 0)
+		}
 		if len(b)-pos-k < l {
 			return v.fail(io.ErrUnexpectedEOF, pos+k+l+2)
 		}
@@ -330,6 +334,9 @@ func (v *RecordView) Parse(b []byte) error {
 			if k < 0 {
 				return v.fail(avro.ConsumeError(k), len(b)+1)
 			}
+		}
+		if l > math.MaxInt-pos-k {
+			return v.fail(avro.ErrOverflow, 0)
 		}
 		v.at3 = pos + k
 		v.prefix, v.size = pos+k, pos+k+l
@@ -478,6 +485,9 @@ func (v *RecordView) Compare(w *RecordView) int {
 	if !v.ok || !w.ok {
 		panic("RecordView.Compare called on an empty view")
 	}
-	c, _, _ := CompareRecordAvro(v.b, w.b)
+	c, na, nb := CompareRecordAvro(v.b, w.b)
+	if na < 0 || nb < 0 {
+		panic("RecordView.Compare: CompareRecordAvro could not read a parsed view")
+	}
 	return c
 }
