@@ -7,6 +7,7 @@ package avroc
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,8 +20,9 @@ import (
 )
 
 // TestEverySortOrderReachesTheDescriptor takes each order from IDL text all the
-// way to a decoded descriptor: parsed off disk, resolved, encoded the way
-// writeDescriptor encodes it, and decoded the way a generator decodes it. It is
+// way to a decoded descriptor: parsed off disk, resolved, encoded with
+// ir.MarshalDescriptor (which is what writeDescriptor encodes with), and decoded
+// the way a generator decodes it. It is
 // the descriptor a generator reads that has to carry the order, so asserting on
 // the resolver's return value alone would miss a step that dropped or remapped
 // it.
@@ -30,6 +32,7 @@ schema Event;
 
 record Event {
   string plain;
+  string @order("ascending") ascending;
   string @order("descending") descending;
   string @order("ignore") ignored;
 }
@@ -66,6 +69,7 @@ record Event {
 		order avrocpb.SortOrder
 	}{
 		{name: "plain", order: avrocpb.SortOrder_SORT_ORDER_ASC},
+		{name: "ascending", order: avrocpb.SortOrder_SORT_ORDER_ASC},
 		{name: "descending", order: avrocpb.SortOrder_SORT_ORDER_DESC},
 		{name: "ignored", order: avrocpb.SortOrder_SORT_ORDER_IGNORE},
 	}
@@ -99,9 +103,12 @@ func TestResolveSchema_RejectsAnUnknownSortOrder(t *testing.T) {
 			Fields: []*idl.Field{
 				{Name: "ok", Type: &idl.Ident{Value: "string"}},
 				{
-					Name:      "strange",
-					Type:      &idl.Ident{Value: "string"},
-					SortOrder: idl.SortOrderIgnore + 1,
+					Name: "strange",
+					Type: &idl.Ident{Value: "string"},
+					// Far outside any plausible enum rather than one past the
+					// last constant, so the test does not itself rest on
+					// avro-go's numbering.
+					SortOrder: idl.SortOrder(math.MaxInt),
 				},
 			},
 		},
