@@ -521,11 +521,13 @@ func TestGeneratedFilenames(t *testing.T) {
 
 // renderSchema is buildSchemaFile with the base name derived the way Generate
 // derives it, for the tests that are about the source one schema renders to
-// rather than about the name it is written under.
+// rather than about the name it is written under. Its fixed types are that one
+// schema's, so a schema referring to a fixed another schema defines belongs in
+// a test that goes through Generate instead.
 func renderSchema(t *testing.T, packageName string, schema *avrocpb.Schema) []byte {
 	t.Helper()
 
-	_, content, err := buildSchemaFile(t.Context(), packageName, ir.SchemaBaseName(schema), schema, false)
+	_, content, err := buildSchemaFile(t.Context(), packageName, ir.SchemaBaseName(schema), schema, collectFixedTypes([]*avrocpb.Schema{schema}), false)
 	if err != nil {
 		t.Fatalf("buildSchemaFile failed: %v", err)
 	}
