@@ -41,42 +41,58 @@ func TestFixedValuesAreWrittenWithoutAllocating(t *testing.T) {
 		fixedInlineSchema())
 }
 
-// TestFixedValuesAreWrittenInlineWhereTheyAreAddressable reads the generated
-// source for where a fixed is written inline and where it still goes through
-// its method, across every position #245 names: a record field (defined there
-// or referenced), an array item at any depth — including beneath a map value
-// and inside a union's array branch — a map value, and a union branch. A
-// second schema referring to the fixed the first defines is the case that
+// fixedPositionsSchemas puts a fixed in every position #245 names: a record
+// field (defined there or referenced), an array item at any depth — including
+// beneath a map value and inside a union's array branch — a map value, and a
+// union branch, beside records and enums that must keep their methods. The
+// second schema refers to the fixed the first defines, which is the case that
 // needs the whole descriptor's definitions rather than one schema's.
-func TestFixedValuesAreWrittenInlineWhereTheyAreAddressable(t *testing.T) {
+func fixedPositionsSchemas() []*avrocpb.Schema {
 	hash := func() *avrocpb.Type { return namedType(unionTestNamespace + ".Hash") }
-	inner := namedType(unionTestNamespace + ".Inner")
+	inner := func() *avrocpb.Type { return namedType(unionTestNamespace + ".Inner") }
 
-	first := &avrocpb.Schema{
-		Namespace: proto.String(unionTestNamespace),
-		Type: recordOf("Holder",
-			fieldOf("hash", fixedOf("Hash", 4)),
-			fieldOf("again", hash()),
-			fieldOf("hashes", arrayOf(hash())),
-			fieldOf("grid", arrayOf(arrayOf(hash()))),
-			fieldOf("listsByKey", mapOf(arrayOf(hash()))),
-			fieldOf("byKey", mapOf(hash())),
-			fieldOf("maybe", unionOf(primType("null"), hash())),
-			fieldOf("listed", unionOf(primType("null"), arrayOf(hash()))),
-			fieldOf("tone", enumOf("Tone", "LOW", "HIGH")),
-			fieldOf("inner", recordOf("Inner", fieldOf("i", primType("int")))),
-			fieldOf("innerAgain", inner),
-			fieldOf("inners", arrayOf(inner)),
-		),
+	return []*avrocpb.Schema{
+		{
+			Namespace: proto.String(unionTestNamespace),
+			Type: recordOf("Holder",
+				fieldOf("hash", fixedOf("Hash", 4)),
+				fieldOf("again", hash()),
+				fieldOf("hashes", arrayOf(hash())),
+				fieldOf("grid", arrayOf(arrayOf(hash()))),
+				fieldOf("listsByKey", mapOf(arrayOf(hash()))),
+				fieldOf("byKey", mapOf(hash())),
+				fieldOf("maybe", unionOf(primType("null"), hash())),
+				fieldOf("listed", unionOf(primType("null"), arrayOf(hash()))),
+				fieldOf("tone", enumOf("Tone", "LOW", "HIGH")),
+				fieldOf("inner", recordOf("Inner", fieldOf("i", primType("int")))),
+				fieldOf("innerAgain", inner()),
+				fieldOf("inners", arrayOf(inner())),
+			),
+		},
+		{
+			Namespace: proto.String(unionTestNamespace),
+			Type:      recordOf("Later", fieldOf("hash", hash())),
+		},
 	}
-	second := &avrocpb.Schema{
-		Namespace: proto.String(unionTestNamespace),
-		Type:      recordOf("Later", fieldOf("hash", hash())),
-	}
+}
 
+// TestEveryFixedPositionCompilesAndRoundTrips builds the generated code for
+// fixedPositionsSchemas and runs testdata/fixedpositions/holder_test.go
+// against it. The source assertions below say which form each position is
+// written in; this is what says each of those forms type-checks — slicing is
+// legal only on an addressable array — and encodes what it decodes.
+func TestEveryFixedPositionCompilesAndRoundTrips(t *testing.T) {
+	testGeneratedPackage(t, "fixedpositions", filepath.Join("testdata", "fixedpositions", "holder_test.go"),
+		fixedPositionsSchemas()...)
+}
+
+// TestFixedValuesAreWrittenInlineWhereTheyAreAddressable reads the generated
+// source for fixedPositionsSchemas, for where a fixed is written inline and
+// where it still goes through its method.
+func TestFixedValuesAreWrittenInlineWhereTheyAreAddressable(t *testing.T) {
 	res, err := generateToDir(t, t.TempDir(), &avrocpb.GenerateRequest{
 		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String("fixedinline")}},
-		Schemas: []*avrocpb.Schema{first, second},
+		Schemas: fixedPositionsSchemas(),
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)

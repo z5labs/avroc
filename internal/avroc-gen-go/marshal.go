@@ -84,6 +84,13 @@ func (fixed fixedTypes) isFixed(t *avrocpb.Type) bool {
 
 // generateFixedWrite writes a fixed value inline. varName must be addressable —
 // a record field or a slice element — because slicing an array requires it.
+//
+// The slice points into the value where it already is, so it is the record or
+// the slice's backing array that escapes to the writer rather than a copy of
+// the fixed. A record already on the heap — reached through a pointer, as
+// encoding one usually is — therefore costs nothing; one that would otherwise
+// have lived on its caller's stack is moved to the heap once, in place of the
+// one copy per fixed per encode the method made.
 func generateFixedWrite(cb *codeBuilder, varName string, indent string) {
 	cb.writef("%serr = w.WriteFixed(%s[:])\n", indent, varName)
 	cb.writef("%sif err != nil {\n", indent)
