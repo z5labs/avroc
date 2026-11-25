@@ -19,6 +19,14 @@ func (x Kind) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	return w.WriteInt(int32(x))
 }
 
+func (x Kind) SizeAvro() int {
+	return avro.SizeLong(int64(int32(x)))
+}
+
+func (x Kind) AppendAvro(dst []byte) []byte {
+	return avro.AppendInt(dst, int32(x))
+}
+
 func (x *Kind) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	v, err := r.ReadIndex(3)
 	if err != nil {
@@ -35,6 +43,14 @@ func (x MD5) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	return w.WriteFixed(x[:])
 }
 
+func (x MD5) SizeAvro() int {
+	return 16
+}
+
+func (x MD5) AppendAvro(dst []byte) []byte {
+	return avro.AppendFixed(dst, x[:])
+}
+
 func (x *MD5) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	b, err := r.ReadFixed(16)
 	if err != nil {
@@ -48,6 +64,8 @@ func (x *MD5) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 type TestRecordNullableHashUnion interface {
 	isTestRecordNullableHashUnion()
 	MarshalAvroBinary(w *avro.BinaryWriter) error
+	SizeAvro() int
+	AppendAvro(dst []byte) []byte
 }
 
 // TestRecordNullableHashUnionNull represents the null value in the union.
@@ -77,6 +95,26 @@ func (x TestRecordNullableHashUnionMD5) MarshalAvroBinary(w *avro.BinaryWriter) 
 		return err
 	}
 	return nil
+}
+
+func (x TestRecordNullableHashUnionNull) SizeAvro() int {
+	return avro.SizeIndex(0)
+}
+
+func (x TestRecordNullableHashUnionMD5) SizeAvro() int {
+	n := avro.SizeIndex(1)
+	n += len(x.Value)
+	return n
+}
+
+func (x TestRecordNullableHashUnionNull) AppendAvro(dst []byte) []byte {
+	return avro.AppendIndex(dst, 0)
+}
+
+func (x TestRecordNullableHashUnionMD5) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendIndex(dst, 1)
+	dst = avro.AppendFixed(dst, x.Value[:])
+	return dst
 }
 
 func unmarshalTestRecordNullableHashUnion(r *avro.BinaryReader) (TestRecordNullableHashUnion, error) {
@@ -126,6 +164,23 @@ func (x *TestRecord) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x *TestRecord) SizeAvro() int {
+	n := 0
+	n += avro.SizeBytes(len(x.Name))
+	n += x.Kind.SizeAvro()
+	n += len(x.Hash)
+	n += x.NullableHash.SizeAvro()
+	return n
+}
+
+func (x *TestRecord) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendString(dst, x.Name)
+	dst = x.Kind.AppendAvro(dst)
+	dst = avro.AppendFixed(dst, x.Hash[:])
+	dst = x.NullableHash.AppendAvro(dst)
+	return dst
 }
 
 func (x *TestRecord) UnmarshalAvroBinary(r *avro.BinaryReader) error {

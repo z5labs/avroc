@@ -18,6 +18,14 @@ func (x Tone) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	return w.WriteInt(int32(x))
 }
 
+func (x Tone) SizeAvro() int {
+	return avro.SizeLong(int64(int32(x)))
+}
+
+func (x Tone) AppendAvro(dst []byte) []byte {
+	return avro.AppendInt(dst, int32(x))
+}
+
 func (x *Tone) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	v, err := r.ReadIndex(2)
 	if err != nil {
@@ -31,6 +39,8 @@ func (x *Tone) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 type OuterToneUnion interface {
 	isOuterToneUnion()
 	MarshalAvroBinary(w *avro.BinaryWriter) error
+	SizeAvro() int
+	AppendAvro(dst []byte) []byte
 }
 
 // OuterToneUnionNull represents the null value in the union.
@@ -60,6 +70,26 @@ func (x OuterToneUnionTone) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x OuterToneUnionNull) SizeAvro() int {
+	return avro.SizeIndex(0)
+}
+
+func (x OuterToneUnionTone) SizeAvro() int {
+	n := avro.SizeIndex(1)
+	n += x.Value.SizeAvro()
+	return n
+}
+
+func (x OuterToneUnionNull) AppendAvro(dst []byte) []byte {
+	return avro.AppendIndex(dst, 0)
+}
+
+func (x OuterToneUnionTone) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendIndex(dst, 1)
+	dst = x.Value.AppendAvro(dst)
+	return dst
 }
 
 func unmarshalOuterToneUnion(r *avro.BinaryReader) (OuterToneUnion, error) {
@@ -96,6 +126,17 @@ func (x *Inner) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	return nil
 }
 
+func (x *Inner) SizeAvro() int {
+	n := 0
+	n += avro.SizeLong(int64(x.X))
+	return n
+}
+
+func (x *Inner) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendInt(dst, x.X)
+	return dst
+}
+
 func (x *Inner) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	var err error
 	x.X, err = r.ReadInt()
@@ -109,6 +150,8 @@ func (x *Inner) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 type OuterInnerUnion interface {
 	isOuterInnerUnion()
 	MarshalAvroBinary(w *avro.BinaryWriter) error
+	SizeAvro() int
+	AppendAvro(dst []byte) []byte
 }
 
 // OuterInnerUnionNull represents the null value in the union.
@@ -138,6 +181,26 @@ func (x OuterInnerUnionInner) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x OuterInnerUnionNull) SizeAvro() int {
+	return avro.SizeIndex(0)
+}
+
+func (x OuterInnerUnionInner) SizeAvro() int {
+	n := avro.SizeIndex(1)
+	n += x.Value.SizeAvro()
+	return n
+}
+
+func (x OuterInnerUnionNull) AppendAvro(dst []byte) []byte {
+	return avro.AppendIndex(dst, 0)
+}
+
+func (x OuterInnerUnionInner) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendIndex(dst, 1)
+	dst = x.Value.AppendAvro(dst)
+	return dst
 }
 
 func unmarshalOuterInnerUnion(r *avro.BinaryReader) (OuterInnerUnion, error) {
@@ -182,6 +245,21 @@ func (x *Outer) MarshalAvroBinary(w *avro.BinaryWriter) error {
 		return err
 	}
 	return nil
+}
+
+func (x *Outer) SizeAvro() int {
+	n := 0
+	n += avro.SizeLong(x.Id)
+	n += x.Tone.SizeAvro()
+	n += x.Inner.SizeAvro()
+	return n
+}
+
+func (x *Outer) AppendAvro(dst []byte) []byte {
+	dst = avro.AppendLong(dst, x.Id)
+	dst = x.Tone.AppendAvro(dst)
+	dst = x.Inner.AppendAvro(dst)
+	return dst
 }
 
 func (x *Outer) UnmarshalAvroBinary(r *avro.BinaryReader) error {

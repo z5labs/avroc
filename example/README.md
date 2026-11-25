@@ -156,6 +156,24 @@ deep inside it the union sits.
 non-empty containers, compares the bytes with the Avro binary encoding, and decodes them
 back.
 
+### Go: `SizeAvro` and `AppendAvro` (`directencoding/`)
+
+Every type above that has `MarshalAvroBinary` also has `SizeAvro() int` and
+`AppendAvro(dst []byte) []byte`, which size and append its encoding with no `io.Writer` and,
+into a `dst` with room, no allocation.
+[`directencoding/directencoding_test.go`](directencoding/directencoding_test.go) holds every
+generated type in the four packages to their invariants — `SizeAvro()` is
+`len(AppendAvro(nil))`, `AppendAvro(nil)` is `MarshalAvroBinary`'s bytes (or, for a map of
+more than one entry, bytes that decode to the same value), `dst[:len(dst)]` is left as it
+was, and neither allocates — and carries the benchmarks:
+
+```console
+go test -run '^$' -bench . ./directencoding
+```
+
+It is a package of tests and nothing else, in a directory of its own, so avroc has no
+generated file there to prune.
+
 ### JSON Schema (`test_record.avsc`, `event.avsc`)
 
 The JSON generator produces an Avro JSON schema file (`.avsc`) following the [Avro specification](https://avro.apache.org/docs/1.12.0/specification/#schema-declaration). Named types are inlined on first use and referenced by name afterwards.

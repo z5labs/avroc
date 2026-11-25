@@ -62,7 +62,7 @@ func TestEveryBranchOfEveryUnionRoundTrips(t *testing.T) {
 			h.Listed = HolderListedUnionArray{Value: []InList{InListB, InListA}}
 		}},
 		{name: "a map in a union branch", set: func(h *Holder) {
-			h.Mapped = HolderMappedUnionMap{Value: map[string]InUMap{"k": {0xab, 0xcd}}}
+			h.Mapped = HolderMappedUnionMap{Value: map[string]InUMap{"k": {0xab, 0xcd}, "l": {0x01, 0x02}}}
 		}},
 	}
 
@@ -87,6 +87,34 @@ func TestEveryBranchOfEveryUnionRoundTrips(t *testing.T) {
 			if !reflect.DeepEqual(out, in) {
 				t.Errorf("decoded %+v, want %+v", out, in)
 			}
+
+			checkDirectEncoding(t, &in, func() avro.BinaryUnmarshaler { return &Holder{} })
+		})
+	}
+}
+
+// TestEveryBranchTypeIsSizedAndAppendedOnItsOwn holds each union branch type
+// to #249's invariants directly, rather than only through a Holder: a branch
+// is a value of its own, and the union interface is what a caller holding one
+// calls.
+func TestEveryBranchTypeIsSizedAndAppendedOnItsOwn(t *testing.T) {
+	testCases := []struct {
+		name string
+		v    directEncoder
+	}{
+		{name: "a null branch", v: HolderToneUnionNull{}},
+		{name: "an enum branch", v: HolderToneUnionTone{Value: ToneHIGH}},
+		{name: "a fixed branch", v: HolderHashUnionHash{Value: Hash{1, 2, 3, 4}}},
+		{name: "a record branch", v: HolderWrapUnionWrapper{Value: Wrapper{Deep: WrapperDeepUnionDeep{Value: Deep{D: "deep"}}}}},
+		{name: "an array branch", v: HolderListedUnionArray{Value: []InList{InListB, InListA}}},
+		// One entry, because a branch has no UnmarshalAvroBinary of its own to
+		// compare two orderings by; the Holder cases above take several.
+		{name: "a map branch", v: HolderMappedUnionMap{Value: map[string]InUMap{"k": {0xab, 0xcd}}}},
+		{name: "a branch through its union interface", v: HolderKeyedUnion(HolderKeyedUnionInMap{Value: InMap{M: 9}})},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			checkDirectEncoding(t, tc.v, nil)
 		})
 	}
 }
@@ -120,5 +148,8 @@ func TestAUnionAsAnArraysItemsIsEncodedAsAvroSpecifies(t *testing.T) {
 	}
 	if got := buf.Bytes(); !bytes.Equal(got, want) {
 		t.Errorf("encoded % x, want % x", got, want)
+	}
+	if got := in.AppendAvro(nil); !bytes.Equal(got, want) {
+		t.Errorf("AppendAvro(nil) = % x, want % x", got, want)
 	}
 }

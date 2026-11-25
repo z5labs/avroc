@@ -260,7 +260,7 @@ avroc generate
 ```
 
 This produces:
-- `gen/test_record.go` — Go types with `MarshalAvroBinary` / `UnmarshalAvroBinary` methods
+- `gen/test_record.go` — Go types with `MarshalAvroBinary` / `UnmarshalAvroBinary` and `SizeAvro` / `AppendAvro` methods
 - `test_record.avsc` — Avro JSON schema
 - `pcf/test_record.avsc` — Avro Parsing Canonical Form
 - `avroc.gen.json` — the record of what was generated, below
@@ -325,9 +325,10 @@ Generates idiomatic Go types with binary Avro serialization support.
 
 Generated code imports [avro-go](https://github.com/z5labs/avro-go) and **requires
 v0.7.0 or later**: it decodes enum ordinals and union branch indexes with
-`BinaryReader.ReadIndex`, which that release added. An ordinal or branch index the schema
-does not define fails the decode with an error matching `avro.ErrInvalidIndex`, in either
-reader mode, rather than producing a value no symbol names.
+`BinaryReader.ReadIndex`, which that release added, and its `SizeAvro` and `AppendAvro`
+methods are built on avro-go's `Size*` and `Append*` functions. An ordinal or branch index
+the schema does not define fails the decode with an error matching `avro.ErrInvalidIndex`,
+in either reader mode, rather than producing a value no symbol names.
 
 | Option | Required | Description |
 |---|---|---|
@@ -338,15 +339,41 @@ reader mode, rather than producing a value no symbol names.
 
 | Avro type | Go type |
 |---|---|
-| `record` | `struct` with `MarshalAvroBinary` / `UnmarshalAvroBinary` |
-| `enum` | `int` type with typed constants |
-| `fixed` | `[N]byte` type |
-| `union { null, T }` | interface with `Null` and `T` implementations |
+| `record` | `struct` with `MarshalAvroBinary` / `UnmarshalAvroBinary`, and `SizeAvro` / `AppendAvro` |
+| `enum` | `int` type with typed constants, and the same four methods |
+| `fixed` | `[N]byte` type, and the same four methods |
+| `union { null, T }` | interface with `Null` and `T` implementations; the interface and every implementation have `MarshalAvroBinary`, `SizeAvro` and `AppendAvro` |
 | `string` | `string` |
 | `int` / `long` | `int32` / `int64` |
 | `float` / `double` | `float32` / `float64` |
 | `boolean` | `bool` |
 | `bytes` | `[]byte` |
+
+**Encoding into a `[]byte`.** Every type that has `MarshalAvroBinary` also has two methods,
+always generated, with the same receiver:
+
+```go
+func (x *Record) SizeAvro() int                // the length of x's Avro binary encoding
+func (x *Record) AppendAvro(dst []byte) []byte // dst extended by exactly that encoding
+```
+
+`AppendAvro` is the **allocation-free encoder**: it needs no `io.Writer`, and appending into
+a `dst` that already has `SizeAvro()` bytes of room makes no allocation — map values and union
+branches included. `SizeAvro` never allocates. Together they are what writing records into
+fixed-size blocks takes — check a record fits, then write it there:
+
+```go
+if len(block)+rec.SizeAvro() > cap(block) {
+    block = flush(block)
+}
+block = rec.AppendAvro(block)
+```
+
+`SizeAvro()` is always `len(AppendAvro(nil))`, `AppendAvro` leaves `dst[:len(dst)]` as it
+was, and the bytes are the ones `MarshalAvroBinary` writes — except that a map of more than
+one entry may be written in a different order, since Go does not order a map's entries, and
+decodes to the same value either way. A field named `sizeAvro` or `appendAvro` would collide
+with these methods, and is refused at generation like any other collision.
 
 **Streaming an array root.** A schema whose root type is `array<T>` says the file it
 describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader and writer

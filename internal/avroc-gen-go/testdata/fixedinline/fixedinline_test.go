@@ -78,3 +78,20 @@ func TestTheBytesAreAvrosBinaryEncoding(t *testing.T) {
 		t.Errorf("round trip gave %+v, want %+v", got, *packet())
 	}
 }
+
+// TestSizeAvroAndAppendAvroAgreeWithMarshalAvroBinary holds the record and
+// its fixed type to #249's invariants. The record is #245's: a fixed, an array
+// of fixed and a bytes, which is the shape whose MarshalAvroBinary had to be
+// rewritten to stop allocating, so it is the one AppendAvro has to get right
+// from the start.
+func TestSizeAvroAndAppendAvroAgreeWithMarshalAvroBinary(t *testing.T) {
+	t.Run("Packet", func(t *testing.T) {
+		checkDirectEncoding(t, packet(), func() avro.BinaryUnmarshaler { return &Packet{} })
+	})
+	t.Run("an empty Packet", func(t *testing.T) {
+		checkDirectEncoding(t, &Packet{}, func() avro.BinaryUnmarshaler { return &Packet{} })
+	})
+	t.Run("Hash", func(t *testing.T) {
+		checkDirectEncoding(t, Hash{0xca, 0xfe, 0xba, 0xbe}, func() avro.BinaryUnmarshaler { return &Hash{} })
+	})
+}

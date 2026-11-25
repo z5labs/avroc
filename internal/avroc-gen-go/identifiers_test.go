@@ -96,6 +96,32 @@ func TestGenerationRefusesCollidingIdentifiers(t *testing.T) {
 			},
 		},
 		{
+			// #249's two methods are registered like every other: a field
+			// named after either is refused rather than generated.
+			name: "a field and the generated SizeAvro method",
+			schemas: []*avrocpb.Schema{schemaOf(recordOf("Block",
+				fieldOf("sizeAvro", primType("int")),
+			))},
+			want: []string{
+				"SizeAvro",
+				"type Block",
+				"field sizeAvro of record com.example.Block",
+				"method SizeAvro generated for record com.example.Block",
+			},
+		},
+		{
+			name: "a field and the generated AppendAvro method",
+			schemas: []*avrocpb.Schema{schemaOf(recordOf("Block",
+				fieldOf("appendAvro", primType("bytes")),
+			))},
+			want: []string{
+				"AppendAvro",
+				"type Block",
+				"field appendAvro of record com.example.Block",
+				"method AppendAvro generated for record com.example.Block",
+			},
+		},
+		{
 			name: "two fields that are given one Go name",
 			schemas: []*avrocpb.Schema{schemaOf(recordOf("Pair",
 				fieldOf("a_b", primType("int")),

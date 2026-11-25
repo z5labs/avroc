@@ -117,6 +117,7 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTyp
 		cb.newline()
 		generateType(cb, t)
 		generateMarshalMethod(cb, t, fixed)
+		generateDirectMethods(cb, t, fixed)
 		generateUnmarshalMethod(cb, t)
 
 		if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok && hasFingerprint(rec.Record, primaryRecordName, singleObject) {
@@ -365,6 +366,8 @@ func generateUnion(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldNa
 	cb.writef("type %s interface {\n", unionName)
 	cb.writef("\t%s()\n", methodName)
 	cb.writef("\tMarshalAvroBinary(w *avro.BinaryWriter) error\n")
+	cb.writeln("\tSizeAvro() int")
+	cb.writeln("\tAppendAvro(dst []byte) []byte")
 	cb.writeln("}")
 
 	for _, t := range u.Types {

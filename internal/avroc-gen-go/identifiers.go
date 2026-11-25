@@ -156,9 +156,9 @@ func (reg *identifierRegistry) declareType(name string, d declaration) *identifi
 }
 
 // declareGenerated declares everything one collected type emits: the
-// declarations generateType writes, the methods generateMarshalMethod and
-// generateUnmarshalMethod write, and the Fingerprint generateFileCode writes
-// for the schema's primary record.
+// declarations generateType writes, the methods generateMarshalMethod,
+// generateDirectMethods and generateUnmarshalMethod write, and the Fingerprint
+// generateFileCode writes for the schema's primary record.
 func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerate, singleObject bool, primary string) {
 	at := func(source string) declaration { return declaration{schema: schema, source: source} }
 
@@ -171,7 +171,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 		for _, f := range r.GetFields() {
 			reg.declare(members, toFieldName(f.GetName()), at(fmt.Sprintf("field %s of %s", f.GetName(), label)))
 		}
-		methods := []string{"MarshalAvroBinary", "UnmarshalAvroBinary"}
+		methods := []string{"MarshalAvroBinary", "SizeAvro", "AppendAvro", "UnmarshalAvroBinary"}
 		if hasFingerprint(r, primary, singleObject) {
 			methods = append(methods, "Fingerprint")
 		}
@@ -189,7 +189,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 			reg.declare(reg.pkg, name+toPascalCase(sym.GetValue()),
 				at(fmt.Sprintf("constant for symbol %s of %s", sym.GetValue(), label)))
 		}
-		for _, m := range []string{"MarshalAvroBinary", "UnmarshalAvroBinary"} {
+		for _, m := range []string{"MarshalAvroBinary", "SizeAvro", "AppendAvro", "UnmarshalAvroBinary"} {
 			reg.declare(members, m, at(fmt.Sprintf("method %s generated for %s", m, label)))
 		}
 
@@ -197,7 +197,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 		f := v.Fixed
 		label := "fixed " + avroName(f.GetFullName(), f.GetName())
 		members := reg.declareType(toPascalCase(f.GetName()), at(label))
-		for _, m := range []string{"MarshalAvroBinary", "UnmarshalAvroBinary"} {
+		for _, m := range []string{"MarshalAvroBinary", "SizeAvro", "AppendAvro", "UnmarshalAvroBinary"} {
 			reg.declare(members, m, at(fmt.Sprintf("method %s generated for %s", m, label)))
 		}
 
@@ -210,7 +210,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 		}
 
 		iface := reg.declareType(unionName, at("interface for "+label))
-		for _, m := range []string{marker, "MarshalAvroBinary"} {
+		for _, m := range []string{marker, "MarshalAvroBinary", "SizeAvro", "AppendAvro"} {
 			reg.declare(iface, m, at(fmt.Sprintf("method %s of the interface for %s", m, label)))
 		}
 		reg.declare(reg.pkg, "unmarshal"+unionName, at("unmarshal function for "+label))
@@ -221,7 +221,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 			if !isNullType(branch) {
 				reg.declare(members, "Value", at("field Value of the "+branchLabel))
 			}
-			for _, m := range []string{marker, "MarshalAvroBinary"} {
+			for _, m := range []string{marker, "MarshalAvroBinary", "SizeAvro", "AppendAvro"} {
 				reg.declare(members, m, at(fmt.Sprintf("method %s of the %s", m, branchLabel)))
 			}
 		}

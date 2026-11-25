@@ -58,12 +58,47 @@ func TestAFixedInEveryPositionRoundTrips(t *testing.T) {
 		Inners:     []Inner{{I: 16}, {I: 17}},
 	}
 	roundTrip(t, in, &Holder{})
+	checkDirectEncoding(t, in, func() avro.BinaryUnmarshaler { return &Holder{} })
+}
+
+// TestAFixedInEveryPositionIsSizedAndAppended holds every type the two
+// schemas generate to #249's invariants on its own, beside the Holder above
+// that reaches all of them: the fixed's own methods, the union branches whose
+// fixed is their Value, and the record another schema's fixed is written into.
+func TestAFixedInEveryPositionIsSizedAndAppended(t *testing.T) {
+	testCases := []struct {
+		name  string
+		v     directEncoder
+		fresh func() avro.BinaryUnmarshaler
+	}{
+		{name: "Hash", v: Hash{1, 2, 3, 4}, fresh: func() avro.BinaryUnmarshaler { return &Hash{} }},
+		{name: "Tone", v: ToneHIGH, fresh: func() avro.BinaryUnmarshaler { return new(Tone) }},
+		{name: "Inner", v: &Inner{I: -300}, fresh: func() avro.BinaryUnmarshaler { return &Inner{} }},
+		{name: "Later", v: &Later{Hash: Hash{0xde, 0xad, 0xbe, 0xef}}, fresh: func() avro.BinaryUnmarshaler { return &Later{} }},
+		{name: "a null branch", v: HolderMaybeUnionNull{}},
+		{name: "a fixed branch", v: HolderMaybeUnionHash{Value: Hash{5, 6, 7, 8}}},
+		{name: "an array of fixed branch", v: HolderListedUnionArray{Value: []Hash{{1, 1, 1, 1}, {2, 2, 2, 2}}}},
+		{name: "a Holder holding maps of several entries", v: &Holder{
+			ListsByKey: map[string][]Hash{"a": {{1, 1, 1, 1}}, "b": nil, "c": {{2, 2, 2, 2}, {3, 3, 3, 3}}},
+			ByKey:      map[string]Hash{"x": {4, 4, 4, 4}, "y": {5, 5, 5, 5}},
+			Maybe:      HolderMaybeUnionNull{},
+			Listed:     HolderListedUnionNull{},
+		}, fresh: func() avro.BinaryUnmarshaler { return &Holder{} }},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			checkDirectEncoding(t, tc.v, tc.fresh)
+		})
+	}
 }
 
 // TestAFixedAnotherSchemaDefinesIsWrittenAsAvroEncodesIt pins the bytes of
 // the record whose fixed is defined by the other schema in the descriptor.
 func TestAFixedAnotherSchemaDefinesIsWrittenAsAvroEncodesIt(t *testing.T) {
 	got := roundTrip(t, &Later{Hash: Hash{0xde, 0xad, 0xbe, 0xef}}, &Later{})
+	if appended := (&Later{Hash: Hash{0xde, 0xad, 0xbe, 0xef}}).AppendAvro(nil); !bytes.Equal(appended, got) {
+		t.Errorf("AppendAvro(nil) = %x, MarshalAvroBinary wrote %x", appended, got)
+	}
 	if want := []byte{0xde, 0xad, 0xbe, 0xef}; !bytes.Equal(got, want) {
 		t.Errorf("encoded %x, want %x", got, want)
 	}
