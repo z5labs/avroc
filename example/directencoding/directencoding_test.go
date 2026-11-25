@@ -6,7 +6,7 @@
 // SizeAvro and AppendAvro (#249) against every committed example the Go
 // generator writes, and the benchmarks that measure them.
 //
-// It is one package of tests over all four generated packages, rather than a
+// It is one package of tests over all five generated packages, rather than a
 // file beside each, so that the invariants are written once for them, in
 // invariants_test.go. That file is internal/avroc-gen-go/testdata/
 // directencoding's under another package clause, which is how the descriptors
@@ -23,6 +23,7 @@ import (
 	avro "github.com/z5labs/avro-go"
 	gen "github.com/z5labs/avroc/example/gen"
 	"github.com/z5labs/avroc/example/nested"
+	"github.com/z5labs/avroc/example/record"
 	"github.com/z5labs/avroc/example/stream"
 	"github.com/z5labs/avroc/example/unions"
 )
@@ -55,6 +56,17 @@ func unionsOuter() *unions.Outer {
 		Id:    -1 << 40,
 		Tone:  unions.OuterToneUnionTone{Value: unions.ToneHIGH},
 		Inner: unions.OuterInnerUnionInner{Value: unions.Inner{X: 42}},
+	}
+}
+
+// recordRecord is record.avdl's record with the proposal's sizes (#244): a
+// 16-byte key and a 200-byte value.
+func recordRecord() *record.Record {
+	return &record.Record{
+		Hash:  record.Hash{0, 0, 0, 0, 0, 0, 1, 0},
+		Key:   bytes.Repeat([]byte{'k'}, 16),
+		Side:  record.SideRIGHT,
+		Value: bytes.Repeat([]byte{'v'}, 200),
 	}
 }
 
@@ -91,6 +103,11 @@ func TestEveryExampleTypeIsSizedAndAppendedAsItIsMarshaled(t *testing.T) {
 		{name: "an empty nested.Outer", v: &nested.Outer{}, fresh: func() avro.BinaryUnmarshaler { return &nested.Outer{} }},
 		{name: "nested.OuterMaybeGridUnionInt", v: nested.OuterMaybeGridUnionInt{Value: -64}},
 		{name: "nested.OuterMaybeGridUnionNull", v: nested.OuterMaybeGridUnionNull{}},
+
+		{name: "record.Record", v: recordRecord(), fresh: func() avro.BinaryUnmarshaler { return &record.Record{} }},
+		{name: "a zero record.Record", v: &record.Record{}, fresh: func() avro.BinaryUnmarshaler { return &record.Record{} }},
+		{name: "record.Hash", v: record.Hash{1, 2, 3}, fresh: func() avro.BinaryUnmarshaler { return &record.Hash{} }},
+		{name: "record.Side", v: record.SideLEFT, fresh: func() avro.BinaryUnmarshaler { return new(record.Side) }},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,7 +162,8 @@ func benchmarkDirect(b *testing.B, v directEncoder) {
 	})
 }
 
-func BenchmarkTestRecord(b *testing.B)  { benchmarkDirect(b, testRecord()) }
-func BenchmarkStreamEvent(b *testing.B) { benchmarkDirect(b, streamEvent()) }
-func BenchmarkUnionsOuter(b *testing.B) { benchmarkDirect(b, unionsOuter()) }
-func BenchmarkNestedOuter(b *testing.B) { benchmarkDirect(b, nestedOuter()) }
+func BenchmarkTestRecord(b *testing.B)   { benchmarkDirect(b, testRecord()) }
+func BenchmarkStreamEvent(b *testing.B)  { benchmarkDirect(b, streamEvent()) }
+func BenchmarkUnionsOuter(b *testing.B)  { benchmarkDirect(b, unionsOuter()) }
+func BenchmarkNestedOuter(b *testing.B)  { benchmarkDirect(b, nestedOuter()) }
+func BenchmarkRecordRecord(b *testing.B) { benchmarkDirect(b, recordRecord()) }

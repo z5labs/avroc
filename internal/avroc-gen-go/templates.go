@@ -32,6 +32,9 @@ const avrolibImport = `avro "github.com/z5labs/avro-go"`
 // generated first, which is a way for two runs over the same descriptor to
 // disagree.
 type fileImports struct {
+	bytes   bool
+	cmp     bool
+	binary  bool
 	io      bool
 	iter    bool
 	avrolib bool
@@ -42,7 +45,16 @@ type fileImports struct {
 func (f fileImports) writePreamble(cb *codeBuilder, packageName string) {
 	cb.writef(filePreamble, packageName)
 
-	std := make([]string, 0, 2)
+	std := make([]string, 0, 5)
+	if f.bytes {
+		std = append(std, "bytes")
+	}
+	if f.cmp {
+		std = append(std, "cmp")
+	}
+	if f.binary {
+		std = append(std, "encoding/binary")
+	}
 	if f.io {
 		std = append(std, "io")
 	}
@@ -93,22 +105,43 @@ func (cb *codeBuilder) newline() {
 //
 // fixed is every fixed the whole descriptor defines, since a reference in this
 // schema can name one an earlier schema wrote out in full.
-func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTypes, singleObject bool, fp [8]byte) string {
+func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes, named namedTypes, fp [8]byte) string {
 	cb := &codeBuilder{}
 
 	// Collect all types to generate (including unions)
 	types := collectTypes(schema)
+
+	// Every record's Compare, planned before the preamble for the stream's
+	// reason: the plans are what pull bytes and cmp into the import block.
+	// readOptions has already refused a record without one.
+	var plans map[*avrocpb.Record]comparePlan
+	var needBytes, needCmp, needBinary bool
+	if opts.compare {
+		plans = map[*avrocpb.Record]comparePlan{}
+		for _, t := range types {
+			if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
+				plan, _ := named.comparePlanFor(rec.Record)
+				plans[rec.Record] = plan
+				needBytes = needBytes || plan.needsBytes()
+				needCmp = needCmp || plan.needsCmp()
+				needBinary = needBinary || plan.needsBinary()
+			}
+		}
+	}
 
 	// The streaming reader and writer an array root gets, decided before the
 	// preamble because they are what pull io and iter into the import block.
 	stream := arrayStreamFor(schema)
 
 	imports := fileImports{
+		bytes:   needBytes,
+		cmp:     needCmp,
+		binary:  needBinary,
 		io:      stream != nil,
 		iter:    stream != nil,
 		avrolib: needsAvrolibImport(types) || stream != nil,
 	}
-	imports.writePreamble(cb, packageName)
+	imports.writePreamble(cb, opts.packageName)
 
 	// Determine the primary record name so we only emit Fingerprint for it.
 	primaryRecordName := schemaRecordName(schema)
@@ -120,8 +153,13 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTyp
 		generateDirectMethods(cb, t, fixed)
 		generateUnmarshalMethod(cb, t)
 
-		if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok && hasFingerprint(rec.Record, primaryRecordName, singleObject) {
-			generateFingerprintMethod(cb, toPascalCase(rec.Record.GetName()), fp)
+		if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
+			if hasFingerprint(rec.Record, primaryRecordName, opts.singleObject) {
+				generateFingerprintMethod(cb, toPascalCase(rec.Record.GetName()), fp)
+			}
+			if plan, ok := plans[rec.Record]; ok {
+				generateCompareFunc(cb, rec.Record, plan)
+			}
 		}
 	}
 

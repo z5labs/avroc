@@ -326,13 +326,15 @@ Generates idiomatic Go types with binary Avro serialization support.
 Generated code imports [avro-go](https://github.com/z5labs/avro-go) and **requires
 v0.7.0 or later**: it decodes enum ordinals and union branch indexes with
 `BinaryReader.ReadIndex`, which that release added, and its `SizeAvro` and `AppendAvro`
-methods are built on avro-go's `Size*` and `Append*` functions. An ordinal or branch index
+methods are built on avro-go's `Size*` and `Append*` functions, and `compare`'s functions on its
+`Compare*` and `Consume*` functions. An ordinal or branch index
 the schema does not define fails the decode with an error matching `avro.ErrInvalidIndex`,
 in either reader mode, rather than producing a value no symbol names.
 
 | Option | Required | Description |
 |---|---|---|
 | `package_name` | Yes | The Go package name for all generated files. |
+| `compare` | No | `true` or `false`, and `false` when absent. `true` generates a `Compare<Record>Avro` function for every record, which compares two encoded records by Avro's sort order without decoding them — see [Comparing encoded records](#comparing-encoded-records). A record it cannot generate one for fails the run, naming the record, the field and the field's type. Any other value fails the run naming it. |
 | `encoding` | No | Set to `single_object` to generate a `Fingerprint()` method on the primary record type for [Avro Single Object Encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding). Every schema in the run must be rooted at a record. Any other root — an array, a map, a union, an enum, a fixed or a primitive — fails the run with a diagnostic naming that root, rather than generating without the fingerprint. |
 
 **Generated types:**
@@ -374,6 +376,57 @@ was, and the bytes are the ones `MarshalAvroBinary` writes — except that a map
 one entry may be written in a different order, since Go does not order a map's entries, and
 decodes to the same value either way. A field named `sizeAvro` or `appendAvro` would collide
 with these methods, and is refused at generation like any other collision.
+
+#### Comparing encoded records
+
+With `"compare": "true"`, every record also gets a function that orders two encoded records by
+the specification's [sort order](https://avro.apache.org/docs/1.12.0/specification/#sort-order)
+straight from the buffer — what a sort or a merge join over encoded records calls. It goes in
+the same `<schema>.go` file as the record's type:
+
+```go
+// CompareRecordAvro compares the Records encoded at the start of a and b by
+// the spec's sort order.
+func CompareRecordAvro(a, b []byte) (c, na, nb int)
+```
+
+`c` is `-1`, `0` or `+1` as `a`'s record sorts before, equal to or after `b`'s. `na` and `nb`
+follow avro-go's `Consume` convention, one per side and each side consumed independently:
+
+- a non-negative value is the number of bytes read from that side, and reading stops at the
+  first field that differs, so it is not the record's length;
+- a negative value is an error code for `avro.ConsumeError`: `io.ErrUnexpectedEOF` when that
+  side ended too soon and more bytes might decide it, or `avro.ErrOverflow`,
+  `avro.ErrNegativeLength` or `avro.ErrInvalidIndex` when it is corrupt;
+- `c` is `0` whenever either is negative.
+
+Fields are compared in schema order. A field with `@order("descending")` has its result
+negated, and one with `@order("ignore")` is skipped. A **trailing run** of ignored fields is
+never read at all, so `a` and `b` only have to hold each record's encoding up to the last
+compared field — for `record Record { Hash hash; bytes key; Side side; bytes @order("ignore")
+value; }` that is through `side`, and the value can still be on its way. Each type is ordered
+as the specification orders it:
+
+| Type | Order |
+|---|---|
+| `null` | always equal |
+| `boolean` | `false` before `true`; any non-zero byte is `true` |
+| `int`, `long` | by value |
+| `float`, `double` | `cmp.Compare`: NaN first, NaN equal to NaN, -0 equal to +0 |
+| `bytes`, `string`, `fixed` | by unsigned bytes |
+| enum | by ordinal; an ordinal no symbol names is reported as `avro.ErrInvalidIndex` |
+| record | field by field, recursively, with a descending record's fields negated and an ignored record's skipped |
+
+It never allocates and never panics or reads out of bounds, on any input. The one-byte case of
+every length, index and varint is decoded in the generated code itself, and avro-go's
+`CompareLong`, `CompareBytes` and `Consume*` functions are called only for longer encodings.
+
+**Scope.** Every field a `Compare` has to read must be a primitive, an enum, a fixed or a
+record, and the same goes for each nested record's fields. The exception is a trailing run of
+ignored fields, which is never read and so may be of any type. A record with a map, an array
+or a union anywhere else — or a record that contains itself — fails the run under
+`compare=true`, before any file is written. A record named `Compare<Other>Avro` beside a
+record `Other` collides with that function, and is refused like any other collision.
 
 **Streaming an array root.** A schema whose root type is `array<T>` says the file it
 describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader and writer

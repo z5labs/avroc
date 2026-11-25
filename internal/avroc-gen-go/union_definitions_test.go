@@ -240,6 +240,13 @@ func TestUnionBranchDefinitionsCompileAndRoundTrip(t *testing.T) {
 // implementation of them rather than one per package.
 func testGeneratedPackage(t *testing.T, pkg string, testFile string, schemas ...*avrocpb.Schema) {
 	t.Helper()
+	testGeneratedPackageWith(t, pkg, testFile, nil, schemas...)
+}
+
+// testGeneratedPackageWith is testGeneratedPackage with options beside
+// package_name, given as name and value pairs.
+func testGeneratedPackageWith(t *testing.T, pkg string, testFile string, extra []string, schemas ...*avrocpb.Schema) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("builds and tests a module of its own")
 	}
@@ -252,7 +259,7 @@ func testGeneratedPackage(t *testing.T, pkg string, testFile string, schemas ...
 	dir := t.TempDir()
 
 	res, err := generateToDir(t, filepath.Join(dir, pkg), &avrocpb.GenerateRequest{
-		Options: []*avrocpb.Option{{Name: proto.String("package_name"), Value: proto.String(pkg)}},
+		Options: options(append([]string{"package_name", pkg}, extra...)...),
 		Schemas: schemas,
 	})
 	if err != nil {
