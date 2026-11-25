@@ -119,7 +119,7 @@ func (x *TestRecord) MarshalAvroBinary(w *avro.BinaryWriter) error {
 	if err != nil {
 		return err
 	}
-	err = x.Hash.MarshalAvroBinary(w)
+	err = w.WriteFixed(x.Hash[:])
 	if err != nil {
 		return err
 	}

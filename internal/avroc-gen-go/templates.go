@@ -94,7 +94,10 @@ func (cb *codeBuilder) newline() {
 }
 
 // generateFileCode generates the complete Go source code for a schema.
-func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject bool, fp [8]byte) string {
+//
+// fixed is every fixed the whole descriptor defines, since a reference in this
+// schema can name one an earlier schema wrote out in full.
+func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTypes, singleObject bool, fp [8]byte) string {
 	cb := &codeBuilder{}
 
 	// Collect all types to generate (including unions)
@@ -118,7 +121,7 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, singleObject b
 	for _, t := range types {
 		cb.newline()
 		generateType(cb, t)
-		generateMarshalMethod(cb, t)
+		generateMarshalMethod(cb, t, fixed)
 		generateUnmarshalMethod(cb, t)
 
 		if singleObject {

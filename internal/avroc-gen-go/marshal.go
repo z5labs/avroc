@@ -22,26 +22,94 @@ func writeMethodFor(ref *avrocpb.Reference) (string, bool) {
 	return method, ok
 }
 
+// fixedTypes is the set of full names a descriptor defines as a fixed.
+//
+// A reference says only that it names a type, not what kind of type, and a
+// fixed is the one named type MarshalAvroBinary writes differently: inline, as
+// w.WriteFixed over the value where it already is, wherever that value is
+// addressable (#245). Going through the fixed's own value-receiver method
+// instead hands x[:] on to an io.Writer, which moves the array to the heap —
+// one allocation per fixed per encode. So the kind of a named reference is read
+// from the definition the descriptor carries for that full name, which is
+// walking the tree rather than re-deriving resolution (docs/ir/SPEC.md).
+type fixedTypes map[string]bool
+
+// collectFixedTypes indexes every fixed defined anywhere in the descriptor's
+// schemas. It is the whole descriptor rather than one schema because a named
+// type is written out in full at its first use and only referenced after it, so
+// a later schema's reference can name a fixed an earlier schema defines — and
+// both are generated into the same package.
+func collectFixedTypes(schemas []*avrocpb.Schema) fixedTypes {
+	fixed := fixedTypes{}
+	for _, schema := range schemas {
+		fixed.collect(schema.GetType())
+		for _, t := range schema.GetTypes() {
+			fixed.collect(t)
+		}
+	}
+	return fixed
+}
+
+func (fixed fixedTypes) collect(t *avrocpb.Type) {
+	switch v := t.GetType().(type) {
+	case *avrocpb.Type_Fixed:
+		fixed[v.Fixed.GetFullName()] = true
+	case *avrocpb.Type_Record:
+		for _, f := range v.Record.GetFields() {
+			fixed.collect(f.GetType())
+		}
+	case *avrocpb.Type_Array:
+		fixed.collect(v.Array.GetItems())
+	case *avrocpb.Type_MapType:
+		fixed.collect(v.MapType.GetValues())
+	case *avrocpb.Type_Union:
+		for _, branch := range v.Union.GetTypes() {
+			fixed.collect(branch)
+		}
+	}
+}
+
+// isFixed reports whether t is a fixed: one defined in full right there, or a
+// reference to one defined elsewhere in the descriptor.
+func (fixed fixedTypes) isFixed(t *avrocpb.Type) bool {
+	switch v := t.GetType().(type) {
+	case *avrocpb.Type_Fixed:
+		return true
+	case *avrocpb.Type_Reference:
+		ref := v.Reference
+		return ref.GetKind() == avrocpb.TypeRefKind_TYPE_REF_KIND_NAMED && fixed[ref.GetName()]
+	}
+	return false
+}
+
+// generateFixedWrite writes a fixed value inline. varName must be addressable —
+// a record field or a slice element — because slicing an array requires it.
+func generateFixedWrite(cb *codeBuilder, varName string, indent string) {
+	cb.writef("%serr = w.WriteFixed(%s[:])\n", indent, varName)
+	cb.writef("%sif err != nil {\n", indent)
+	cb.writef("%s\treturn err\n", indent)
+	cb.writef("%s}\n", indent)
+}
+
 // generateMarshalMethod generates the MarshalAvroBinary method for a type.
-func generateMarshalMethod(cb *codeBuilder, ttg typeToGenerate) {
+func generateMarshalMethod(cb *codeBuilder, ttg typeToGenerate, fixed fixedTypes) {
 	t := ttg.typ
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Record:
-		generateRecordMarshal(cb, v.Record)
+		generateRecordMarshal(cb, v.Record, fixed)
 	case *avrocpb.Type_EnumType:
 		generateEnumMarshal(cb, v.EnumType)
 	case *avrocpb.Type_Fixed:
 		generateFixedMarshal(cb, v.Fixed)
 	case *avrocpb.Type_Union:
-		generateUnionMarshal(cb, v.Union, ttg.recordName, ttg.fieldName)
+		generateUnionMarshal(cb, v.Union, ttg.recordName, ttg.fieldName, fixed)
 	}
 }
 
 // generateRecordMarshal generates the MarshalAvroBinary method for a record type.
-func generateRecordMarshal(cb *codeBuilder, r *avrocpb.Record) {
+func generateRecordMarshal(cb *codeBuilder, r *avrocpb.Record, fixed fixedTypes) {
 	name := toPascalCase(r.GetName())
-	recordName := r.GetName()
 
 	cb.newline()
 	cb.writef("func (x *%s) MarshalAvroBinary(w *avro.BinaryWriter) error {\n", name)
@@ -56,7 +124,7 @@ func generateRecordMarshal(cb *codeBuilder, r *avrocpb.Record) {
 	cb.writeln("\tvar err error")
 
 	for _, f := range fields {
-		generateFieldWrite(cb, f, recordName)
+		generateFieldWrite(cb, f, fixed)
 	}
 
 	cb.writeln("\treturn nil")
@@ -64,7 +132,10 @@ func generateRecordMarshal(cb *codeBuilder, r *avrocpb.Record) {
 }
 
 // generateFieldWrite generates the write code for a single field.
-func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, recordName string) {
+//
+// A record field is addressable — x is the record's pointer receiver — so a
+// fixed one is written inline rather than through its method.
+func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, fixed fixedTypes) {
 	fieldName := toFieldName(f.GetName())
 	fieldType := f.GetType()
 
@@ -72,24 +143,24 @@ func generateFieldWrite(cb *codeBuilder, f *avrocpb.Field, recordName string) {
 		return
 	}
 
+	if fixed.isFixed(fieldType) {
+		generateFixedWrite(cb, "x."+fieldName, "\t")
+		return
+	}
+
 	switch v := fieldType.Type.(type) {
 	case *avrocpb.Type_Reference:
 		generateReferenceWrite(cb, v.Reference, fieldName)
 	case *avrocpb.Type_Array:
-		generateArrayFieldWrite(cb, v.Array, fieldName)
+		generateArrayFieldWrite(cb, v.Array, fieldName, fixed)
 	case *avrocpb.Type_MapType:
-		generateMapFieldWrite(cb, v.MapType, fieldName)
+		generateMapFieldWrite(cb, v.MapType, fieldName, fixed)
 	case *avrocpb.Type_Union:
 		cb.writef("\terr = x.%s.MarshalAvroBinary(w)\n", fieldName)
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
 		cb.writeln("\t}")
 	case *avrocpb.Type_Record, *avrocpb.Type_EnumType:
-		cb.writef("\terr = x.%s.MarshalAvroBinary(w)\n", fieldName)
-		cb.writeln("\tif err != nil {")
-		cb.writeln("\t\treturn err")
-		cb.writeln("\t}")
-	case *avrocpb.Type_Fixed:
 		cb.writef("\terr = x.%s.MarshalAvroBinary(w)\n", fieldName)
 		cb.writeln("\tif err != nil {")
 		cb.writeln("\t\treturn err")
@@ -114,7 +185,7 @@ func generateReferenceWrite(cb *codeBuilder, ref *avrocpb.Reference, fieldName s
 }
 
 // generateArrayFieldWrite generates write code for an array field.
-func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName string) {
+func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName string, fixed fixedTypes) {
 	cb.writef("\tif len(x.%s) > 0 {\n", fieldName)
 	cb.writef("\t\terr = w.WriteLong(int64(len(x.%s)))\n", fieldName)
 	cb.writeln("\t\tif err != nil {")
@@ -124,7 +195,7 @@ func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName stri
 
 	// Generate write for each element using index to ensure addressability
 	if itemType := arr.GetItems(); itemType != nil {
-		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t", 0)
+		generateItemWrite(cb, itemType, "x."+fieldName+"[i]", "\t\t\t", 0, fixed)
 	}
 
 	cb.writeln("\t\t}")
@@ -136,7 +207,7 @@ func generateArrayFieldWrite(cb *codeBuilder, arr *avrocpb.Array, fieldName stri
 }
 
 // generateMapFieldWrite generates write code for a map field.
-func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
+func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string, fixed fixedTypes) {
 	cb.writef("\tif len(x.%s) > 0 {\n", fieldName)
 	cb.writef("\t\terr = w.WriteLong(int64(len(x.%s)))\n", fieldName)
 	cb.writeln("\t\tif err != nil {")
@@ -151,7 +222,7 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 	// Generate write for map value using index access for addressability
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t", 0)
+		generateValueWrite(cb, valueType, "x."+fieldName+"[k]", "\t\t\t", 0, fixed)
 	}
 
 	cb.writeln("\t\t}")
@@ -169,15 +240,24 @@ func generateMapFieldWrite(cb *codeBuilder, m *avrocpb.Map, fieldName string) {
 // many containers deep varName already is beneath the outermost one, and is
 // what keeps a nested container's loop variable from shadowing the loop it is
 // inside (#237).
-func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int) {
+//
+// Being addressable is also what lets a fixed item be written inline, at any
+// depth: a slice element is addressable even when the slice is itself a map's
+// value.
+func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int, fixed fixedTypes) {
 	if t == nil {
+		return
+	}
+
+	if fixed.isFixed(t) {
+		generateFixedWrite(cb, varName, indent)
 		return
 	}
 
 	switch v := t.Type.(type) {
 	case *avrocpb.Type_Reference:
-		generateValueWrite(cb, t, varName, indent, depth)
-	case *avrocpb.Type_Record, *avrocpb.Type_EnumType, *avrocpb.Type_Fixed, *avrocpb.Type_Union:
+		generateValueWrite(cb, t, varName, indent, depth, fixed)
+	case *avrocpb.Type_Record, *avrocpb.Type_EnumType, *avrocpb.Type_Union:
 		// A union is the field's union interface, which writes its own branch
 		// index.
 		cb.writef("%serr = %s.MarshalAvroBinary(w)\n", indent, varName)
@@ -185,9 +265,9 @@ func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent 
 		cb.writef("%s\treturn err\n", indent)
 		cb.writef("%s}\n", indent)
 	case *avrocpb.Type_Array:
-		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1)
+		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1, fixed)
 	case *avrocpb.Type_MapType:
-		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1)
+		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1, fixed)
 	}
 }
 
@@ -195,13 +275,18 @@ func generateItemWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent 
 // position (e.g. a map index), so for named types with pointer receivers we
 // copy to a local variable first. An array or a map there needs no copy: it is
 // only measured and indexed, never called a method on.
-func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int) {
+//
+// A fixed here is written through its method like any other named type: a map
+// value is not addressable, so it cannot be sliced where it is, and the copy it
+// would take to make it so escapes exactly as the method's receiver does.
+// Removing that allocation would mean changing the generated Go types (#245).
+func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent string, depth int, fixed fixedTypes) {
 	switch v := t.GetType().(type) {
 	case *avrocpb.Type_Array:
-		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1)
+		generateNestedArrayWrite(cb, v.Array, varName, indent, depth+1, fixed)
 		return
 	case *avrocpb.Type_MapType:
-		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1)
+		generateNestedMapWrite(cb, v.MapType, varName, indent, depth+1, fixed)
 		return
 	}
 
@@ -226,13 +311,13 @@ func generateValueWrite(cb *codeBuilder, t *avrocpb.Type, varName string, indent
 // generateNestedArrayWrite generates write code for an array that is itself an
 // array's item or a map's value: the same block sequence a top-level array
 // field is written as, over varName, with a loop variable of its own depth.
-func generateNestedArrayWrite(cb *codeBuilder, arr *avrocpb.Array, varName string, indent string, depth int) {
+func generateNestedArrayWrite(cb *codeBuilder, arr *avrocpb.Array, varName string, indent string, depth int, fixed fixedTypes) {
 	i := depthName("i", depth)
 
 	generateBlockCountWrite(cb, varName, indent)
 	cb.writef("%s\tfor %s := range %s {\n", indent, i, varName)
 	if itemType := arr.GetItems(); itemType != nil {
-		generateItemWrite(cb, itemType, varName+"["+i+"]", indent+"\t\t", depth)
+		generateItemWrite(cb, itemType, varName+"["+i+"]", indent+"\t\t", depth, fixed)
 	}
 	cb.writef("%s\t}\n", indent)
 	cb.writef("%s}\n", indent)
@@ -242,7 +327,7 @@ func generateNestedArrayWrite(cb *codeBuilder, arr *avrocpb.Array, varName strin
 // generateNestedMapWrite generates write code for a map that is itself an
 // array's item or a map's value, as generateNestedArrayWrite does for an
 // array.
-func generateNestedMapWrite(cb *codeBuilder, m *avrocpb.Map, varName string, indent string, depth int) {
+func generateNestedMapWrite(cb *codeBuilder, m *avrocpb.Map, varName string, indent string, depth int, fixed fixedTypes) {
 	k := depthName("k", depth)
 
 	generateBlockCountWrite(cb, varName, indent)
@@ -252,7 +337,7 @@ func generateNestedMapWrite(cb *codeBuilder, m *avrocpb.Map, varName string, ind
 	cb.writef("%s\t\t\treturn err\n", indent)
 	cb.writef("%s\t\t}\n", indent)
 	if valueType := m.GetValues(); valueType != nil {
-		generateValueWrite(cb, valueType, varName+"["+k+"]", indent+"\t\t", depth)
+		generateValueWrite(cb, valueType, varName+"["+k+"]", indent+"\t\t", depth, fixed)
 	}
 	cb.writef("%s\t}\n", indent)
 	cb.writef("%s}\n", indent)
@@ -311,16 +396,22 @@ func generateFixedMarshal(cb *codeBuilder, f *avrocpb.Fixed) {
 }
 
 // generateUnionMarshal generates the MarshalAvroBinary methods for union member types.
-func generateUnionMarshal(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldName string) {
+func generateUnionMarshal(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldName string, fixed fixedTypes) {
 	unionName := unionTypeName(recordName, fieldName)
 
 	for i, t := range u.Types {
-		generateUnionMemberMarshal(cb, unionName, t, i)
+		generateUnionMemberMarshal(cb, unionName, t, i, fixed)
 	}
 }
 
 // generateUnionMemberMarshal generates the MarshalAvroBinary method for a union member.
-func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Type, index int) {
+//
+// A fixed branch is still written through its method: the member's receiver
+// is a copy, and slicing a copy moves it to the heap just as the method does,
+// so writing it inline would buy nothing short of changing the generated Go
+// types (#245). Items of an array branch are slice elements, and those are
+// written inline like any other array's.
+func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Type, index int, fixed fixedTypes) {
 	memberName := unionMemberName(unionName, t)
 
 	cb.newline()
@@ -357,9 +448,9 @@ func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Ty
 			cb.writeln("\t\treturn err")
 			cb.writeln("\t}")
 		case *avrocpb.Type_Array:
-			generateUnionArrayMarshal(cb, v.Array)
+			generateUnionArrayMarshal(cb, v.Array, fixed)
 		case *avrocpb.Type_MapType:
-			generateUnionMapMarshal(cb, v.MapType)
+			generateUnionMapMarshal(cb, v.MapType, fixed)
 		case *avrocpb.Type_Fixed:
 			cb.writeln("\terr = x.Value.MarshalAvroBinary(w)")
 			cb.writeln("\tif err != nil {")
@@ -373,7 +464,7 @@ func generateUnionMemberMarshal(cb *codeBuilder, unionName string, t *avrocpb.Ty
 }
 
 // generateUnionArrayMarshal generates array marshal code for a union member.
-func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array) {
+func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array, fixed fixedTypes) {
 	cb.writeln("\tif len(x.Value) > 0 {")
 	cb.writeln("\t\terr = w.WriteLong(int64(len(x.Value)))")
 	cb.writeln("\t\tif err != nil {")
@@ -383,7 +474,7 @@ func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array) {
 
 	itemType := arr.GetItems()
 	if itemType != nil {
-		generateItemWrite(cb, itemType, "x.Value[i]", "\t\t\t", 0)
+		generateItemWrite(cb, itemType, "x.Value[i]", "\t\t\t", 0, fixed)
 	}
 
 	cb.writeln("\t\t}")
@@ -395,7 +486,7 @@ func generateUnionArrayMarshal(cb *codeBuilder, arr *avrocpb.Array) {
 }
 
 // generateUnionMapMarshal generates map marshal code for a union member.
-func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
+func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map, fixed fixedTypes) {
 	cb.writeln("\tif len(x.Value) > 0 {")
 	cb.writeln("\t\terr = w.WriteLong(int64(len(x.Value)))")
 	cb.writeln("\t\tif err != nil {")
@@ -409,7 +500,7 @@ func generateUnionMapMarshal(cb *codeBuilder, m *avrocpb.Map) {
 
 	valueType := m.GetValues()
 	if valueType != nil {
-		generateValueWrite(cb, valueType, "x.Value[k]", "\t\t\t", 0)
+		generateValueWrite(cb, valueType, "x.Value[k]", "\t\t\t", 0, fixed)
 	}
 
 	cb.writeln("\t\t}")

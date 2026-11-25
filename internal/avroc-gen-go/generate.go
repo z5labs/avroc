@@ -50,6 +50,10 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 		return err
 	}
 
+	// Indexed once for the descriptor rather than per schema: a schema's
+	// reference can name a fixed defined in full by an earlier one.
+	fixed := collectFixedTypes(req.GetSchemas())
+
 	for _, schema := range req.GetSchemas() {
 		// Once, and before the span: it is the name the file is built from as
 		// well as the name the span carries, so computing it here is what keeps
@@ -58,7 +62,7 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 
 		schemaCtx, schemaSpan := plugin.StartSchemaGenerate(ctx, base)
 
-		filename, content, err := buildSchemaFile(schemaCtx, packageName, base, schema, singleObject)
+		filename, content, err := buildSchemaFile(schemaCtx, packageName, base, schema, fixed, singleObject)
 		if err != nil {
 			plugin.EndPhase(schemaSpan, err)
 			return fmt.Errorf("failed to generate schema: %w", err)
@@ -127,8 +131,9 @@ func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (packageName
 //
 // base is the schema's base name, computed by the caller because the span it
 // opened is named by it too; deriving it again here would be work an untraced
-// generation had no reason to do.
-func buildSchemaFile(ctx context.Context, packageName, base string, schema *avrocpb.Schema, singleObject bool) (string, []byte, error) {
+// generation had no reason to do. fixed is the descriptor's fixed types, for
+// the same reason: it is a property of every schema at once.
+func buildSchemaFile(ctx context.Context, packageName, base string, schema *avrocpb.Schema, fixed fixedTypes, singleObject bool) (string, []byte, error) {
 	// Refuse a descriptor this generator cannot represent before emitting any
 	// of it. The code builders below cannot report a problem — they append to a
 	// buffer — so a reference whose kind is unrecognised, or which claims to
@@ -154,7 +159,7 @@ func buildSchemaFile(ctx context.Context, packageName, base string, schema *avro
 	}
 
 	// Generate the Go source code
-	code := generateFileCode(packageName, schema, singleObject, fp)
+	code := generateFileCode(packageName, schema, fixed, singleObject, fp)
 
 	// Determine the filename from the schema
 	filename := ir.SnakeCase(base) + ".go"
