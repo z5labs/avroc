@@ -519,9 +519,11 @@ func TestViewCompareAgreesWithCompareAvro(t *testing.T) {
 func TestTheViewsMakeNoAllocations(t *testing.T) {
 	x := randomSample(rand.New(rand.NewPCG(3, 4)))
 	enc := encode(&x)
+	// Both parsed before the loop, which runs its cases in map order: Compare
+	// may come first.
 	var v, w SampleView
-	if err := w.Parse(enc); err != nil {
-		t.Fatal(err)
+	if v.Parse(enc) != nil || w.Parse(enc) != nil {
+		t.Fatal("Parse failed on a valid encoding")
 	}
 
 	var wv WholeView

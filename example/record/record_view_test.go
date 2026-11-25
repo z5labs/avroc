@@ -106,9 +106,11 @@ func TestRecordViewReportsCorruption(t *testing.T) {
 
 func TestRecordViewMakesNoAllocations(t *testing.T) {
 	a, b := sized(Hash{1}, SideLEFT).AppendAvro(nil), sized(Hash{1}, SideRIGHT).AppendAvro(nil)
+	// Both parsed before the loop, which runs its cases in map order: Compare
+	// may come first.
 	var v, w RecordView
-	if err := w.Parse(b); err != nil {
-		t.Fatal(err)
+	if v.Parse(a) != nil || w.Parse(b) != nil {
+		t.Fatal("Parse failed on a valid encoding")
 	}
 	var into Record
 	var sink int
