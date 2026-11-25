@@ -124,13 +124,8 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTyp
 		generateMarshalMethod(cb, t, fixed)
 		generateUnmarshalMethod(cb, t)
 
-		if singleObject {
-			if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
-				if rec.Record.GetName() == primaryRecordName {
-					name := toPascalCase(rec.Record.GetName())
-					generateFingerprintMethod(cb, name, fp)
-				}
-			}
+		if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok && hasFingerprint(rec.Record, primaryRecordName, singleObject) {
+			generateFingerprintMethod(cb, toPascalCase(rec.Record.GetName()), fp)
 		}
 	}
 
@@ -156,6 +151,14 @@ func schemaRecordName(schema *avrocpb.Schema) string {
 		return rec.Record.GetName()
 	}
 	return ""
+}
+
+// hasFingerprint reports whether r is given a Fingerprint method: under
+// single-object encoding, and only for the schema's primary record. The
+// emission above and the identifier check both ask it, so the two cannot
+// disagree about which records carry the method.
+func hasFingerprint(r *avrocpb.Record, primary string, singleObject bool) bool {
+	return singleObject && r.GetName() == primary
 }
 
 // needsAvrolibImport checks if any types need the avrolib import.
@@ -372,7 +375,7 @@ func generateFixed(cb *codeBuilder, f *avrocpb.Fixed) {
 // generateUnion generates a Go interface and concrete types for an Avro union.
 func generateUnion(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldName string) {
 	unionName := unionTypeName(recordName, fieldName)
-	methodName := "is" + unionName
+	methodName := unionMarker(unionName)
 
 	cb.writef("// %s is a generated Avro union type.\n", unionName)
 	cb.writef("type %s interface {\n", unionName)
@@ -389,7 +392,7 @@ func generateUnion(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldNa
 // generateUnionMember generates a concrete type for a union member.
 func generateUnionMember(cb *codeBuilder, unionName string, t *avrocpb.Type) {
 	memberName := unionMemberName(unionName, t)
-	methodName := "is" + unionName
+	methodName := unionMarker(unionName)
 
 	if isNullType(t) {
 		cb.writef("// %s represents the null value in the union.\n", memberName)

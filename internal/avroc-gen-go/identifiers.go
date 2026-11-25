@@ -39,8 +39,15 @@ import (
 // this generator makes of it in Go is the one thing only this generator knows.
 //
 // It is the one place identifiers are registered. Anything new this generator
-// emits is declared in declareGenerated or declareStream below, with the same
-// naming function the emission uses, rather than checked somewhere of its own.
+// emits is declared in declareGenerated or declareStream below rather than
+// checked somewhere of its own. Every name derived from the schema comes from
+// the function the emission takes it from — toPascalCase, unionTypeName,
+// unionMemberName, unionMarker, the arrayStream methods — and so does the one
+// condition, hasFingerprint. The fixed method names (MarshalAvroBinary and the
+// rest) are written out here and in their emitters both, and
+// TestTheRegistryIsEverythingTheGeneratorDeclares is what holds the two
+// together: it parses what the generator wrote and fails on any identifier
+// declared there and not here, or here and not there.
 //
 // It runs over the whole descriptor before the generation loop for
 // checkSingleObjectRoots' reason: that loop writes as it goes. And every
@@ -87,8 +94,8 @@ func declareIdentifiers(schemas []*avrocpb.Schema, singleObject bool) (*identifi
 // declaration is one identifier the generator is about to emit, together with
 // what produced it, which is everything a collision diagnostic has to say.
 type declaration struct {
-	// schema is the base name of the schema the identifier came from — the
-	// name its file is given, so a person can find it.
+	// schema is the base name of the schema the identifier came from
+	// (ir.SchemaBaseName), which is what its file name is derived from.
 	schema string
 	// source is the record, field, symbol or generated construct within it.
 	source string
@@ -165,7 +172,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 			reg.declare(members, toFieldName(f.GetName()), at(fmt.Sprintf("field %s of %s", f.GetName(), label)))
 		}
 		methods := []string{"MarshalAvroBinary", "UnmarshalAvroBinary"}
-		if singleObject && r.GetName() == primary {
+		if hasFingerprint(r, primary, singleObject) {
 			methods = append(methods, "Fingerprint")
 		}
 		for _, m := range methods {
@@ -196,7 +203,7 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 
 	case *avrocpb.Type_Union:
 		unionName := unionTypeName(ttg.recordName, ttg.fieldName)
-		marker := "is" + unionName
+		marker := unionMarker(unionName)
 		label := "the union"
 		if ttg.fieldName != "" {
 			label = fmt.Sprintf("the union of field %s of record %s", ttg.fieldName, ttg.recordName)
@@ -235,14 +242,14 @@ func (reg *identifierRegistry) declareStream(schema string, s arrayStream) {
 	reader := reg.declareType(s.reader(), at("reader type for "+label))
 	reg.declare(reader, "ArrayReader", at("embedded field ArrayReader of the reader for "+label))
 	reg.declare(reader, "All", at("method All of the reader for "+label))
-	reg.declare(reg.pkg, "New"+s.reader(), at("reader constructor for "+label))
-	reg.declare(reg.pkg, "Stream"+s.plural, at("Stream function for "+label))
+	reg.declare(reg.pkg, s.newReader(), at("reader constructor for "+label))
+	reg.declare(reg.pkg, s.streamFunc(), at("Stream function for "+label))
 
 	writer := reg.declareType(s.writer(), at("writer type for "+label))
 	reg.declare(writer, "ArrayWriter", at("embedded field ArrayWriter of the writer for "+label))
 	reg.declare(writer, "Write", at("method Write of the writer for "+label))
-	reg.declare(reg.pkg, "New"+s.writer(), at("writer constructor for "+label))
-	reg.declare(reg.pkg, "Write"+s.plural, at("Write function for "+label))
+	reg.declare(reg.pkg, s.newWriter(), at("writer constructor for "+label))
+	reg.declare(reg.pkg, s.writeFunc(), at("Write function for "+label))
 }
 
 // branchName names a union branch for a diagnostic: a named type defined in

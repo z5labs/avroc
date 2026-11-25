@@ -152,6 +152,13 @@ func unionTypeName(recordName string, fieldName string) string {
 	return toPascalCase(recordName) + toPascalCase(fieldName) + "Union"
 }
 
+// unionMarker is the unexported method that marks a type as one of a union's
+// branches, e.g. isHolderToneUnion: the union interface declares it, and every
+// branch type implements it.
+func unionMarker(unionName string) string {
+	return "is" + unionName
+}
+
 // isNullType returns true if the type is the null primitive.
 func isNullType(t *avrocpb.Type) bool {
 	if t == nil {

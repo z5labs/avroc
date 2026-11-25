@@ -259,6 +259,18 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 	}{
 		{name: "every type constructor", schemas: append(determinismSchemas(), arrayRootSchema())},
 		{name: "single-object encoding", singleObject: true, schemas: []*avrocpb.Schema{schemaOf(eventRecord())}},
+		{name: "a union branch referring to a named type, and additional types", schemas: []*avrocpb.Schema{{
+			Namespace: proto.String(unionTestNamespace),
+			Type: recordOf("Referrer",
+				fieldOf("kind", enumOf("Kind", "A", "B")),
+				fieldOf("maybeKind", unionOf(primType("null"), namedType(unionTestNamespace+".Kind"))),
+			),
+			Types: []*avrocpb.Type{
+				recordOf("Extra", fieldOf("choice", unionOf(primType("null"), primType("string")))),
+				enumOf("Loose", "X"),
+				fixedOf("Spare", 2),
+			},
+		}}},
 		{name: "a union root", schemas: []*avrocpb.Schema{
 			schemaOf(unionOf(primType("null"), recordOf("Branch", fieldOf("id", primType("long"))))),
 		}},
@@ -331,13 +343,21 @@ func declaredInFiles(t *testing.T, files []string) map[string][]string {
 				if star, ok := recv.(*ast.StarExpr); ok {
 					recv = star.X
 				}
-				add(recv.(*ast.Ident).Name, d.Name.Name)
+				ident, ok := recv.(*ast.Ident)
+				if !ok {
+					t.Fatalf("method %s has a receiver of type %T, which this test does not know how to name", d.Name.Name, recv)
+				}
+				add(ident.Name, d.Name.Name)
 			case *ast.GenDecl:
 				for _, spec := range d.Specs {
 					switch s := spec.(type) {
 					case *ast.TypeSpec:
 						add("", s.Name.Name)
-						scopes[s.Name.Name] = map[string]bool{}
+						// A type with no members still has a scope, so that
+						// one registered for it is compared against nothing.
+						if scopes[s.Name.Name] == nil {
+							scopes[s.Name.Name] = map[string]bool{}
+						}
 						for _, member := range typeMembers(s.Type) {
 							add(s.Name.Name, member)
 						}
