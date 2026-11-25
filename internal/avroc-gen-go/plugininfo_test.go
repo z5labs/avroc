@@ -35,6 +35,7 @@ func TestDeclaredOptionsAreTheOnesGenerateReads(t *testing.T) {
 		"package_name": options("package_name", "other"),
 		"encoding":     options("package_name", "gen", "encoding", "single_object"),
 		"compare":      options("package_name", "gen", "compare", "true"),
+		"views":        options("package_name", "gen", "views", "true"),
 	}
 
 	for _, key := range declaredOptions() {

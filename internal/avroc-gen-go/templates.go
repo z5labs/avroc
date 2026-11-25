@@ -134,6 +134,24 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 		}
 	}
 
+	// Every record's view, planned before the preamble for the same reason:
+	// a view is what pulls io in. readOptions has already refused a record
+	// without one, and the error is returned rather than dropped for the
+	// reason the Compare plans' is.
+	var views map[*avrocpb.Record]viewPlan
+	if opts.views {
+		views = map[*avrocpb.Record]viewPlan{}
+		for _, t := range types {
+			if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
+				plan, err := named.viewPlanFor(rec.Record)
+				if err != nil {
+					return "", err
+				}
+				views[rec.Record] = plan
+			}
+		}
+	}
+
 	// The streaming reader and writer an array root gets, decided before the
 	// preamble because they are what pull io and iter into the import block.
 	stream := arrayStreamFor(schema)
@@ -142,7 +160,7 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 		bytes:   needBytes,
 		cmp:     needCmp,
 		binary:  needBinary,
-		io:      stream != nil,
+		io:      stream != nil || len(views) > 0,
 		iter:    stream != nil,
 		avrolib: needsAvrolibImport(types) || stream != nil,
 	}
@@ -164,6 +182,9 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 			}
 			if plan, ok := plans[rec.Record]; ok {
 				generateCompareFunc(cb, rec.Record, plan)
+			}
+			if plan, ok := views[rec.Record]; ok {
+				generateView(cb, plan, opts.compare)
 			}
 		}
 	}

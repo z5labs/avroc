@@ -37,5 +37,5 @@ func Main(ctx context.Context, c cli.Context) int {
 // wired into Generate is exactly the failure the declaration is supposed to make
 // impossible.
 func declaredOptions() []string {
-	return []string{"compare", "encoding", "package_name"}
+	return []string{"compare", "encoding", "package_name", "views"}
 }

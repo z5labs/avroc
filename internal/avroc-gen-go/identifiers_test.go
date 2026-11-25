@@ -282,6 +282,7 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 		name         string
 		singleObject bool
 		compare      bool
+		views        bool
 		schemas      []*avrocpb.Schema
 	}{
 		{name: "every type constructor", schemas: append(determinismSchemas(), arrayRootSchema())},
@@ -303,6 +304,8 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 			Type:      recordOf("Second", fieldOf("inner", namedType(unionTestNamespace+".Inner"))),
 			Types:     []*avrocpb.Type{recordOf("Extra", fieldOf("id", primType("long")))},
 		}}},
+		{name: "views", views: true, schemas: viewSampleSchemas()},
+		{name: "views and compare", views: true, compare: true, schemas: viewSampleSchemas()},
 		{name: "a union root", schemas: []*avrocpb.Schema{
 			schemaOf(unionOf(primType("null"), recordOf("Branch", fieldOf("id", primType("long"))))),
 		}},
@@ -314,13 +317,20 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 			if tc.compare {
 				req = compareRequest("true", tc.schemas...)
 			}
+			if tc.views {
+				compare := ""
+				if tc.compare {
+					compare = "true"
+				}
+				req = viewsRequest("true", compare, tc.schemas...)
+			}
 			res, err := generateToDir(t, t.TempDir(), req)
 			if err != nil {
 				t.Fatalf("Generate failed: %v", err)
 			}
 			emitted := declaredInFiles(t, res.OutputFiles)
 
-			reg, err := declareIdentifiers(tc.schemas, genOptions{packageName: "gen", singleObject: tc.singleObject, compare: tc.compare})
+			reg, err := declareIdentifiers(tc.schemas, genOptions{packageName: "gen", singleObject: tc.singleObject, compare: tc.compare, views: tc.views})
 			if err != nil {
 				t.Fatalf("declareIdentifiers failed: %v", err)
 			}

@@ -104,6 +104,8 @@ type genOptions struct {
 	singleObject bool
 	// compare is compare=true: a Compare<Record>Avro for every record (#250).
 	compare bool
+	// views is views=true: a <Record>View for every record (#251).
+	views bool
 }
 
 // readOptions reads the --opt vocabulary this generator declares, and refuses
@@ -114,7 +116,8 @@ type genOptions struct {
 // descriptor this generator cannot give that encoding to is an option it is
 // refusing, and refusing it before the loop is what keeps a package the option
 // had no effect on from being half written. checkSingleObjectRoots' own comment
-// is the long form. compare=true's scope check is here for the same reason.
+// is the long form. compare=true's and views=true's scope checks are here for the
+// same reason.
 func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (opts genOptions, err error) {
 	_, span := plugin.StartOptionsParse(ctx)
 	defer func() { plugin.EndPhase(span, err) }()
@@ -128,6 +131,11 @@ func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (opts genOpt
 			encoding = opt.GetValue()
 		case "compare":
 			opts.compare, err = parseBoolOption(opt.GetName(), opt.GetValue())
+			if err != nil {
+				return genOptions{}, err
+			}
+		case "views":
+			opts.views, err = parseBoolOption(opt.GetName(), opt.GetValue())
 			if err != nil {
 				return genOptions{}, err
 			}
@@ -149,6 +157,11 @@ func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (opts genOpt
 	}
 	if opts.compare {
 		if err := checkCompareScope(req.GetSchemas()); err != nil {
+			return genOptions{}, err
+		}
+	}
+	if opts.views {
+		if err := checkViewScope(req.GetSchemas()); err != nil {
 			return genOptions{}, err
 		}
 	}

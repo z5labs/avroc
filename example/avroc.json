@@ -49,7 +49,8 @@
       ],
       "options": {
         "compare": "true",
-        "package_name": "record"
+        "package_name": "record",
+        "views": "true"
       }
     },
     {

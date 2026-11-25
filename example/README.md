@@ -39,7 +39,7 @@ that option and `events.avdl` to one without, into separate packages. That is al
 inputs are declared per generator here instead of once at the top level — a top-level input
 is read by every generator. `unions.avdl` and `nested.avdl` each get their own package so that their
 types live beside the test that round-trips them. `record.avdl` gets its own because it is the one
-generated with `"compare": "true"`.
+generated with `"compare": "true"` and `"views": "true"`.
 
 ## Generating Code
 
@@ -173,6 +173,16 @@ hash tie, decided on the key, and differing hashes:
 
 ```console
 go test -run '^$' -bench CompareRecordAvro ./record
+```
+
+It is generated with `"views": "true"` too, so it also has `RecordView`, which indexes an encoded
+`Record` from its head — everything but the value's payload — without copying it: `Parse`, then
+`Key()`, `Side()` and `ValueLen()` straight from the buffer, and `View.Compare` agreeing with
+`CompareRecordAvro`. [`record/record_view_test.go`](record/record_view_test.go) checks it against
+`UnmarshalAvroBinary`, truncates and corrupts it, fuzzes it, and carries its benchmarks:
+
+```console
+go test -run '^$' -bench RecordView ./record
 ```
 
 ### Go: `SizeAvro` and `AppendAvro` (`directencoding/`)
