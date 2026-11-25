@@ -212,7 +212,10 @@ func (r *resolver) resolveRecord(v *idl.Record, enclosingNamespace string) (*avr
 		if err != nil {
 			return nil, fmt.Errorf("record %q field %q: %w", fullName, f.Name, err)
 		}
-		sortOrder := avrocpb.SortOrder(f.SortOrder)
+		sortOrder, err := resolveSortOrder(f.SortOrder)
+		if err != nil {
+			return nil, fmt.Errorf("record %q field %q: %w", fullName, f.Name, err)
+		}
 		fields[i] = &avrocpb.Field{
 			Name: proto.String(f.Name),
 			// A field alias is an alternate field name, not a type name, so it
@@ -234,6 +237,28 @@ func (r *resolver) resolveRecord(v *idl.Record, enclosingNamespace string) (*avr
 			},
 		},
 	}, nil
+}
+
+// resolveSortOrder maps a field's parsed sort order onto the IR's.
+//
+// It is a switch rather than a conversion because the two enums belong to
+// different packages and agree on their numbering only by coincidence: a cast
+// would carry a renumbering on either side straight into the descriptor as the
+// wrong order, which is exactly the fact a generator comparing records by sort
+// order has to be able to trust. An order this switch does not know fails
+// resolution, the way ir.Validate treats an unknown member of every closed set,
+// rather than being guessed at.
+func resolveSortOrder(o idl.SortOrder) (avrocpb.SortOrder, error) {
+	switch o {
+	case idl.SortOrderAsc:
+		return avrocpb.SortOrder_SORT_ORDER_ASC, nil
+	case idl.SortOrderDesc:
+		return avrocpb.SortOrder_SORT_ORDER_DESC, nil
+	case idl.SortOrderIgnore:
+		return avrocpb.SortOrder_SORT_ORDER_IGNORE, nil
+	default:
+		return 0, fmt.Errorf("unknown sort order %d", o)
+	}
 }
 
 func (r *resolver) resolveEnum(v *idl.Enum, enclosingNamespace string) (*avrocpb.Type, error) {
