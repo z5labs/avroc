@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/binary"
+	"io"
+	"math"
 
 	avro "github.com/z5labs/avro-go"
 )
@@ -240,4 +242,252 @@ func CompareRecordAvro(a, b []byte) (c, na, nb int) {
 	nb += kb
 
 	return 0, na, nb
+}
+
+// RecordView indexes a Record encoded at the start of a buffer, without decoding or
+// copying it: Parse reads the encoding's structure, and each accessor reads one
+// field where it lies.
+//
+// Parse needs only the encoding's prefix — everything up to the payload of the
+// last field, value — so a record's other fields, and the size of that payload,
+// can be read before the payload has arrived. Complete reports whether it has.
+//
+// A RecordView, and every slice it returns, aliases the buffer it parsed, and is
+// valid only as long as that buffer is unchanged. Before a successful Parse, and
+// after a failed one, the view is empty, and every accessor panics.
+type RecordView struct {
+	b      []byte
+	ok     bool
+	need   int
+	prefix int
+	size   int
+	at1    int
+	len1   int
+	val2   Side
+	at3    int
+}
+
+// RecordHashOffset is the offset of field hash, which is the same in every
+// encoding of a Record.
+const RecordHashOffset = 0
+
+// Parse indexes the Record encoded at the start of b. b need hold only the
+// record's prefix, PrefixLen bytes, and anything after the record is left
+// alone. Parse never allocates.
+//
+// It returns io.ErrUnexpectedEOF when b ends before the prefix does, and more
+// bytes might parse; Need is then the length b must at least have. It returns
+// avro.ErrOverflow, avro.ErrNegativeLength or avro.ErrInvalidIndex when the
+// encoding is corrupt, which no more bytes can mend. The errors are avro-go's
+// sentinels, unwrapped. After any error the view is empty.
+func (v *RecordView) Parse(b []byte) error {
+	// hash: fixed example.record.Hash (8 bytes)
+	if len(b) < 8 {
+		return v.fail(io.ErrUnexpectedEOF, 11)
+	}
+
+	pos := 8
+
+	// key: bytes
+	{
+		l, k := 0, 1
+		if len(b) > pos && b[pos]&0x81 == 0 {
+			l = int(b[pos] >> 1)
+		} else {
+			l, k = avro.ConsumeLength(b[pos:])
+			if k < 0 {
+				return v.fail(avro.ConsumeError(k), len(b)+3)
+			}
+		}
+		if l > math.MaxInt-pos-k-2 {
+			return v.fail(avro.ErrOverflow, 0)
+		}
+		if len(b)-pos-k < l {
+			return v.fail(io.ErrUnexpectedEOF, pos+k+l+2)
+		}
+		v.at1, v.len1 = pos+k, l
+		pos += k + l
+	}
+
+	// side: enum example.record.Side
+	{
+		i, k := 0, 1
+		if len(b) > pos && b[pos]&0x81 == 0 && int(b[pos]>>1) < 2 {
+			i = int(b[pos] >> 1)
+		} else {
+			i, k = avro.ConsumeIndex(b[pos:], 2)
+			if k < 0 {
+				return v.fail(avro.ConsumeError(k), len(b)+2)
+			}
+		}
+		v.val2 = Side(i)
+		pos += k
+	}
+
+	// value: bytes
+	{
+		l, k := 0, 1
+		if len(b) > pos && b[pos]&0x81 == 0 {
+			l = int(b[pos] >> 1)
+		} else {
+			l, k = avro.ConsumeLength(b[pos:])
+			if k < 0 {
+				return v.fail(avro.ConsumeError(k), len(b)+1)
+			}
+		}
+		if l > math.MaxInt-pos-k {
+			return v.fail(avro.ErrOverflow, 0)
+		}
+		v.at3 = pos + k
+		v.prefix, v.size = pos+k, pos+k+l
+	}
+
+	v.b = b
+	v.ok = true
+	v.need = v.prefix
+	return nil
+}
+
+// fail empties v, records need as what Parse needs when err is
+// io.ErrUnexpectedEOF, and returns err.
+func (v *RecordView) fail(err error, need int) error {
+	*v = RecordView{}
+	if err == io.ErrUnexpectedEOF {
+		v.need = need
+	}
+	return err
+}
+
+// Need is the length the buffer given to the last Parse had to have at least:
+// after io.ErrUnexpectedEOF, more than that buffer held and no more than
+// PrefixLen, so that no shorter buffer can parse and one at least this long
+// parses, is corrupt, or needs strictly more. It is PrefixLen after a
+// successful Parse, and 0 on a view never parsed or one found corrupt.
+func (v *RecordView) Need() int {
+	return v.need
+}
+
+// PrefixLen is the length of the record's prefix: its encoding through the
+// length of value, which is all Parse reads.
+func (v *RecordView) PrefixLen() int {
+	if !v.ok {
+		panic("RecordView.PrefixLen called on an empty view")
+	}
+	return v.prefix
+}
+
+// Len is the length of the whole record's encoding, which the prefix alone
+// determines.
+func (v *RecordView) Len() int {
+	if !v.ok {
+		panic("RecordView.Len called on an empty view")
+	}
+	return v.size
+}
+
+// Complete reports whether the buffer v parsed holds the whole record, Len
+// bytes. It is false on an empty view, rather than a panic.
+func (v *RecordView) Complete() bool {
+	return v.ok && len(v.b) >= v.size
+}
+
+// Bytes is the record's encoding, the first Len bytes of the buffer v parsed.
+// It panics unless v is Complete.
+func (v *RecordView) Bytes() []byte {
+	if !v.ok {
+		panic("RecordView.Bytes called on an empty view")
+	}
+	if len(v.b) < v.size {
+		panic("RecordView.Bytes called on an incomplete view")
+	}
+	return v.b[:v.size:v.size]
+}
+
+// Hash is a copy of field hash.
+func (v *RecordView) Hash() Hash {
+	if !v.ok {
+		panic("RecordView.Hash called on an empty view")
+	}
+	return Hash(v.b[RecordHashOffset : RecordHashOffset+8])
+}
+
+// HashBytes is the bytes field hash lies in, a slice of the buffer v parsed.
+func (v *RecordView) HashBytes() []byte {
+	if !v.ok {
+		panic("RecordView.HashBytes called on an empty view")
+	}
+	return v.b[RecordHashOffset : RecordHashOffset+8 : RecordHashOffset+8]
+}
+
+// Key is field key, a slice of the buffer v parsed whose capacity is its
+// length.
+func (v *RecordView) Key() []byte {
+	if !v.ok {
+		panic("RecordView.Key called on an empty view")
+	}
+	return v.b[v.at1 : v.at1+v.len1 : v.at1+v.len1]
+}
+
+// Side is field side.
+func (v *RecordView) Side() Side {
+	if !v.ok {
+		panic("RecordView.Side called on an empty view")
+	}
+	return v.val2
+}
+
+// Value is field value, a slice of the buffer v parsed whose capacity is its
+// length.
+//
+// It panics unless v is Complete.
+func (v *RecordView) Value() []byte {
+	if !v.ok {
+		panic("RecordView.Value called on an empty view")
+	}
+	if len(v.b) < v.size {
+		panic("RecordView.Value called on an incomplete view")
+	}
+	return v.b[v.at3:v.size:v.size]
+}
+
+// ValueLen is the length of field value's payload, which is known from the
+// prefix alone.
+func (v *RecordView) ValueLen() int {
+	if !v.ok {
+		panic("RecordView.ValueLen called on an empty view")
+	}
+	return v.size - v.at3
+}
+
+// Decode sets x to the record v indexes: a bytes field to a slice of the
+// buffer v parsed, a string field to a copy, and a fixed field by value. It
+// allocates only for string fields, and panics unless v is Complete.
+func (v *RecordView) Decode(x *Record) {
+	if !v.ok {
+		panic("RecordView.Decode called on an empty view")
+	}
+	if len(v.b) < v.size {
+		panic("RecordView.Decode called on an incomplete view")
+	}
+	x.Hash = v.Hash()
+	x.Key = v.Key()
+	x.Side = v.Side()
+	x.Value = v.Value()
+}
+
+// Compare orders the records v and w index by the Avro specification's sort
+// order, as CompareRecordAvro orders their encodings: -1, 0 or +1 as v's record
+// sorts before, equal to or after w's. It never allocates.
+//
+// It reads nothing past either record's prefix, and panics only on an empty
+// view.
+func (v *RecordView) Compare(w *RecordView) int {
+	if !v.ok || !w.ok {
+		panic("RecordView.Compare called on an empty view")
+	}
+	c, na, nb := CompareRecordAvro(v.b, w.b)
+	if na < 0 || nb < 0 {
+		panic("RecordView.Compare: CompareRecordAvro could not read a parsed view")
+	}
+	return c
 }

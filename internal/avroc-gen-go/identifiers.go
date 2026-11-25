@@ -70,6 +70,7 @@ func checkIdentifiers(schemas []*avrocpb.Schema, opts genOptions) error {
 // an identifier would pass every collision test it was never written for.
 func declareIdentifiers(schemas []*avrocpb.Schema, opts genOptions) (*identifierRegistry, error) {
 	reg := &identifierRegistry{pkg: newIdentifierScope("", "the package")}
+	named := collectNamedTypes(schemas)
 
 	for _, schema := range schemas {
 		// A schema Validate refuses is one this generator cannot represent,
@@ -82,7 +83,7 @@ func declareIdentifiers(schemas []*avrocpb.Schema, opts genOptions) (*identifier
 		base := ir.SchemaBaseName(schema)
 		primary := schemaRecordName(schema)
 		for _, t := range collectTypes(schema) {
-			reg.declareGenerated(base, t, opts, primary)
+			reg.declareGenerated(base, t, opts, primary, named)
 		}
 		if stream := arrayStreamFor(schema); stream != nil {
 			reg.declareStream(base, *stream)
@@ -160,8 +161,9 @@ func (reg *identifierRegistry) declareType(name string, d declaration) *identifi
 // generateDirectMethods and generateUnmarshalMethod write, and the Fingerprint
 // generateFileCode writes for the schema's primary record, and the
 // Compare<Record>Avro function generateCompareFunc writes for every record
-// under compare=true.
-func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerate, opts genOptions, primary string) {
+// under compare=true, and the <Record>View, its members and its offset
+// constants generateView writes for every record under views=true.
+func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerate, opts genOptions, primary string, named namedTypes) {
 	at := func(source string) declaration { return declaration{schema: schema, source: source} }
 
 	switch v := ttg.typ.GetType().(type) {
@@ -182,6 +184,9 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 		}
 		for _, m := range methods {
 			reg.declare(members, m, at(fmt.Sprintf("method %s generated for %s", m, label)))
+		}
+		if opts.views {
+			reg.declareView(r, label, at, named, opts.compare)
 		}
 
 	case *avrocpb.Type_EnumType:
@@ -230,6 +235,28 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 				reg.declare(members, m, at(fmt.Sprintf("method %s of the %s", m, branchLabel)))
 			}
 		}
+	}
+}
+
+// declareView declares r's view as generateView writes it: the type, its
+// offset constants in the package block, and its fields and methods —
+// viewPlan.members, which the emitter reads too.
+//
+// A record readOptions would have refused has no plan, and declares nothing:
+// its refusal is the diagnostic worth reading, and it is reached first.
+func (reg *identifierRegistry) declareView(r *avrocpb.Record, label string, at func(string) declaration, named namedTypes, compare bool) {
+	plan, err := named.viewPlanFor(r)
+	if err != nil {
+		return
+	}
+	view := reg.declareType(plan.viewName, at("view type generated for "+label))
+	for _, f := range plan.fields {
+		if f.offsetConst != "" {
+			reg.declare(reg.pkg, f.offsetConst, at(fmt.Sprintf("offset constant for field %s of %s", f.name, label)))
+		}
+	}
+	for _, m := range plan.members(compare) {
+		reg.declare(view, m.name, at(fmt.Sprintf("%s of the view generated for %s", m.source, label)))
 	}
 }
 

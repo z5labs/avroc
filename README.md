@@ -335,6 +335,7 @@ in either reader mode, rather than producing a value no symbol names.
 |---|---|---|
 | `package_name` | Yes | The Go package name for all generated files. |
 | `compare` | No | `true` or `false`, and `false` when absent. `true` generates a `Compare<Record>Avro` function for every record, which compares two encoded records by Avro's sort order without decoding them — see [Comparing encoded records](#comparing-encoded-records). A record it cannot generate one for fails the run, naming the record, the field and the field's type. Any other value fails the run naming it. |
+| `views` | No | `true` or `false`, and `false` when absent. `true` generates a `<Record>View` for every record, which indexes an encoded record's fields from a prefix of its bytes without copying them — see [Viewing encoded records](#viewing-encoded-records). A record it cannot generate one for fails the run, naming the record, the field and the field's type. Any other value fails the run naming it. |
 | `encoding` | No | Set to `single_object` to generate a `Fingerprint()` method on the primary record type for [Avro Single Object Encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding). Every schema in the run must be rooted at a record. Any other root — an array, a map, a union, an enum, a fixed or a primitive — fails the run with a diagnostic naming that root, rather than generating without the fingerprint. |
 
 **Generated types:**
@@ -429,6 +430,90 @@ or a union anywhere else — or a record that contains itself — fails the run 
 than through its own function, so a record reused in several fields is written out once per
 field, and the function grows with the number of paths to the record's leaves. A record named `Compare<Other>Avro` beside a
 record `Other` collides with that function, and is refused like any other collision.
+
+#### Viewing encoded records
+
+With `"views": "true"`, every record also gets a `<Record>View`, in the same `<schema>.go`, which
+indexes one encoded record **from a prefix of its bytes, without decoding or copying it** — what a
+reader of in-memory blocks and run files holds instead of a decoded record. For the
+`record Record { Hash hash; bytes key; Side side; bytes @order("ignore") value; }` above:
+
+```go
+type RecordView struct{ /* unexported */ }
+
+func (v *RecordView) Parse(b []byte) error
+func (v *RecordView) Need() int
+func (v *RecordView) PrefixLen() int
+func (v *RecordView) Len() int
+func (v *RecordView) Complete() bool
+func (v *RecordView) Bytes() []byte
+func (v *RecordView) Decode(x *Record)
+func (v *RecordView) Compare(w *RecordView) int // only when compare is also true
+
+func (v *RecordView) Hash() Hash
+func (v *RecordView) HashBytes() []byte
+func (v *RecordView) Key() []byte
+func (v *RecordView) Side() Side
+func (v *RecordView) Value() []byte
+func (v *RecordView) ValueLen() int
+
+const RecordHashOffset = 0
+```
+
+**The prefix.** When a record's last field is `bytes` or `string`, its prefix is the encoding up
+to that field's payload — through its length, but not the payload itself. When the last field is
+a nested record, the same rule applies to that record's last field, recursively. For any other
+last field the prefix is the whole record. `Parse(b)` needs only `PrefixLen()` bytes, so the key,
+the side and the value's size can all be read before the value has arrived; `Len()` is the whole
+record's size, known from the prefix alone, and `Complete()` reports whether `b` holds all of it.
+`Bytes()` is the record's encoding, `b[:Len()]`.
+
+**Need more, or corrupt.** `Parse` never allocates, and its errors are avro-go's sentinels,
+unwrapped:
+
+- `io.ErrUnexpectedEOF` when `b` ends before the prefix does and more bytes might parse. Then
+  `len(b) < Need() <= PrefixLen()`, no shorter `b` can parse, and retrying with at least `Need()`
+  bytes either parses, reports corruption, or reports a strictly larger `Need()`.
+- `avro.ErrOverflow`, `avro.ErrNegativeLength` or `avro.ErrInvalidIndex` when the encoding is
+  corrupt. `Parse` and `UnmarshalAvroBinary` agree on which input that is, and no more bytes
+  mend it. On a 32-bit platform, a record whose length would not fit in an `int` is reported as
+  `avro.ErrOverflow` too, since no buffer could hold it.
+
+After a failed `Parse` the view is empty, as the zero view is, and every accessor panics.
+
+**Accessors.** Each field has one, named after it:
+
+| Field | Accessor |
+|---|---|
+| `bytes` | a slice of the parsed bytes whose capacity is its length |
+| `string` | a copy, as a `string`; `<Field>Bytes()` is a slice of the parsed bytes |
+| `fixed` | a copy of the value; `<Field>Bytes()` is a slice of the parsed bytes |
+| `boolean`, `int`, `long`, `float`, `double`, enum | the value |
+| record | that record's view, which shares the parsed bytes |
+
+The last field, when it is `bytes` or `string`, also gets `<Field>Len()`, and its accessors panic
+unless the view is `Complete()`. Each field before the first variable-size one — anything but a
+`boolean`, `float`, `double`, `fixed`, or a record of only those — gets a
+`<Record><Field>Offset` constant, since its offset is the same in every encoding.
+
+`Decode(x)` sets `bytes` fields to slices of the parsed bytes, `string` fields to copies and
+`fixed` fields by value, and panics unless the view is `Complete()`. With `compare` also `true`,
+`View.Compare` orders two parsed records exactly as `Compare<Record>Avro` orders their
+encodings; when the record's last field is compared and variable-size it needs both views
+`Complete()`, and otherwise it needs only their prefixes. `Parse`, every accessor but those
+returning a `string`, and `View.Compare` make no allocations, and `Decode` allocates only for
+`string` fields.
+
+**Aliasing.** A view, and every slice it returns, is valid only as long as the buffer it parsed
+is unchanged: reusing, overwriting or moving that buffer invalidates them.
+
+**Scope.** Every field must be a primitive, an enum, a fixed or a record, and the same goes for
+each nested record's fields. A view indexes every field, so unlike `compare` there is no exception
+for ignored fields: a record with a union, an array or a map anywhere — or one that contains
+itself — fails the run under `views=true`, before any file is written. The view's type, methods,
+accessors and offset constants are registered with the collision check like every other
+identifier, so a field named `complete`, or a pair of fields named `hash` and `hashBytes`, is
+refused.
 
 **Streaming an array root.** A schema whose root type is `array<T>` says the file it
 describes is a *stream of `T`*, so `avroc-gen-go` generates a streaming reader and writer
