@@ -54,8 +54,8 @@ import (
 // collision is reported rather than the first, in the order the descriptor
 // reaches them, because a person fixing one schema should not have to run the
 // generator once per name to find the rest.
-func checkIdentifiers(schemas []*avrocpb.Schema, singleObject bool) error {
-	reg, err := declareIdentifiers(schemas, singleObject)
+func checkIdentifiers(schemas []*avrocpb.Schema, opts genOptions) error {
+	reg, err := declareIdentifiers(schemas, opts)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func checkIdentifiers(schemas []*avrocpb.Schema, singleObject bool) error {
 // It is separate from checkIdentifiers so that the registry itself can be
 // compared against what the generator actually emits: a registry that missed
 // an identifier would pass every collision test it was never written for.
-func declareIdentifiers(schemas []*avrocpb.Schema, singleObject bool) (*identifierRegistry, error) {
+func declareIdentifiers(schemas []*avrocpb.Schema, opts genOptions) (*identifierRegistry, error) {
 	reg := &identifierRegistry{pkg: newIdentifierScope("", "the package")}
 
 	for _, schema := range schemas {
@@ -82,7 +82,7 @@ func declareIdentifiers(schemas []*avrocpb.Schema, singleObject bool) (*identifi
 		base := ir.SchemaBaseName(schema)
 		primary := schemaRecordName(schema)
 		for _, t := range collectTypes(schema) {
-			reg.declareGenerated(base, t, singleObject, primary)
+			reg.declareGenerated(base, t, opts, primary)
 		}
 		if stream := arrayStreamFor(schema); stream != nil {
 			reg.declareStream(base, *stream)
@@ -158,8 +158,10 @@ func (reg *identifierRegistry) declareType(name string, d declaration) *identifi
 // declareGenerated declares everything one collected type emits: the
 // declarations generateType writes, the methods generateMarshalMethod,
 // generateDirectMethods and generateUnmarshalMethod write, and the Fingerprint
-// generateFileCode writes for the schema's primary record.
-func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerate, singleObject bool, primary string) {
+// generateFileCode writes for the schema's primary record, and the
+// Compare<Record>Avro function generateCompareFunc writes for every record
+// under compare=true.
+func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerate, opts genOptions, primary string) {
 	at := func(source string) declaration { return declaration{schema: schema, source: source} }
 
 	switch v := ttg.typ.GetType().(type) {
@@ -172,8 +174,11 @@ func (reg *identifierRegistry) declareGenerated(schema string, ttg typeToGenerat
 			reg.declare(members, toFieldName(f.GetName()), at(fmt.Sprintf("field %s of %s", f.GetName(), label)))
 		}
 		methods := []string{"MarshalAvroBinary", "SizeAvro", "AppendAvro", "UnmarshalAvroBinary"}
-		if hasFingerprint(r, primary, singleObject) {
+		if hasFingerprint(r, primary, opts.singleObject) {
 			methods = append(methods, "Fingerprint")
+		}
+		if opts.compare {
+			reg.declare(reg.pkg, compareFuncName(r), at("Compare function generated for "+label))
 		}
 		for _, m := range methods {
 			reg.declare(members, m, at(fmt.Sprintf("method %s generated for %s", m, label)))

@@ -42,6 +42,17 @@
       }
     },
     {
+      "name": "go",
+      "out": "record",
+      "inputs": [
+        "record.avdl"
+      ],
+      "options": {
+        "compare": "true",
+        "package_name": "record"
+      }
+    },
+    {
       "name": "json",
       "out": ".",
       "inputs": [

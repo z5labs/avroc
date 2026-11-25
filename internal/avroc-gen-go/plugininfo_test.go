@@ -34,6 +34,7 @@ func TestDeclaredOptionsAreTheOnesGenerateReads(t *testing.T) {
 	changed := map[string][]*avrocpb.Option{
 		"package_name": options("package_name", "other"),
 		"encoding":     options("package_name", "gen", "encoding", "single_object"),
+		"compare":      options("package_name", "gen", "compare", "true"),
 	}
 
 	for _, key := range declaredOptions() {

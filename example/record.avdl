@@ -1,0 +1,22 @@
+/*
+ * The record of a sort/spill/merge-join engine's blocks and run files
+ * (discussion #244): its fields are ordered so that Avro's sort order is the
+ * engine's (hash, key, side), and the hash is a fixed stored big-endian so that
+ * byte order is numeric order. The value is order "ignore", and last, so
+ * CompareRecordAvro never reads it.
+ */
+
+namespace example.record;
+
+schema Record;
+
+fixed Hash(8);
+
+enum Side { LEFT, RIGHT }
+
+record Record {
+  Hash hash;
+  bytes key;
+  Side side;
+  bytes @order("ignore") value;
+}

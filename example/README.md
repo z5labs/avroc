@@ -4,7 +4,7 @@ This example demonstrates using `avroc` to generate code from an Avro IDL schema
 
 ## Schemas
 
-There are four. Two differ in their **root type**, which changes what a generator has to
+There are five. Two differ in their **root type**, which changes what a generator has to
 produce for it:
 
 - [`schema.avdl`](schema.avdl) is a record root, based on the
@@ -22,19 +22,24 @@ The fourth, [`nested.avdl`](nested.avdl), is a record root too, and is here for 
 arrays hold*: an array of arrays, an array of maps and an array of arrays of a union, each a
 container nested in a container.
 
+The fifth, [`record.avdl`](record.avdl), is the record of a sort/spill/merge-join engine from
+[discussion #244](https://github.com/z5labs/avroc/discussions/244): a fixed hash, a key, a side
+and an ignored value, ordered so that Avro's sort order is the engine's.
+
 ## Manifest
 
 The generators and their configuration are declared in [`avroc.json`](avroc.json): a `go`,
 `json` and `pcf` generator, each with its output directory, its options and the inputs it
 reads. `avroc init` scaffolds a starter manifest; this example ships a ready-made one.
 
-There are **four `go` entries** rather than one. The first two are separate because `encoding=single_object` is a
+There are **five `go` entries** rather than one. The first two are separate because `encoding=single_object` is a
 per-generator option and single-object encoding frames a single value: it requires a record
 at the schema root and refuses an array one. So `schema.avdl` goes to a `go` generator with
 that option and `events.avdl` to one without, into separate packages. That is also why the
 inputs are declared per generator here instead of once at the top level — a top-level input
 is read by every generator. `unions.avdl` and `nested.avdl` each get their own package so that their
-types live beside the test that round-trips them.
+types live beside the test that round-trips them. `record.avdl` gets its own because it is the one
+generated with `"compare": "true"`.
 
 ## Generating Code
 
@@ -49,7 +54,7 @@ cd example
 avroc generate
 ```
 
-This reads `avroc.json` and produces Go types (`gen/`, `stream/`, `unions/` and `nested/`), Avro JSON schemas
+This reads `avroc.json` and produces Go types (`gen/`, `stream/`, `unions/`, `nested/` and `record/`), Avro JSON schemas
 (`test_record.avsc`, `event.avsc`), and Parsing Canonical Form files (`pcf/`).
 
 It also writes [`avroc.gen.json`](avroc.gen.json), the committed record of every file
@@ -156,13 +161,27 @@ deep inside it the union sits.
 non-empty containers, compares the bytes with the Avro binary encoding, and decodes them
 back.
 
+### Go (`record/`)
+
+[`record/record.go`](record/record.go) is generated with `"compare": "true"`, so beside the
+`Record` type it has `CompareRecordAvro(a, b []byte) (c, na, nb int)`, which orders two encoded
+`Record`s by hash, then key, then side, straight from the bytes and without allocating. The
+value is `@order("ignore")` and last, so it is never read: a record's head is enough to place it.
+[`record/record_test.go`](record/record_test.go) checks it against a comparison over decoded
+`Record`s, truncates both sides at every position, fuzzes it, and carries the benchmarks — a
+hash tie, decided on the key, and differing hashes:
+
+```console
+go test -run '^$' -bench CompareRecordAvro ./record
+```
+
 ### Go: `SizeAvro` and `AppendAvro` (`directencoding/`)
 
 Every type above that has `MarshalAvroBinary` also has `SizeAvro() int` and
 `AppendAvro(dst []byte) []byte`, which size and append its encoding with no `io.Writer` and,
 into a `dst` with room, no allocation.
 [`directencoding/directencoding_test.go`](directencoding/directencoding_test.go) holds every
-generated type in the four packages to their invariants — `SizeAvro()` is
+generated type in the five packages to their invariants — `SizeAvro()` is
 `len(AppendAvro(nil))`, `AppendAvro(nil)` is `MarshalAvroBinary`'s bytes (or, for a map of
 more than one entry, bytes that decode to the same value), `dst[:len(dst)]` is left as it
 was, and neither allocates — and carries the benchmarks:

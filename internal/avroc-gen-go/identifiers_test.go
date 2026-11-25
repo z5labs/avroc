@@ -281,6 +281,7 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 	testCases := []struct {
 		name         string
 		singleObject bool
+		compare      bool
 		schemas      []*avrocpb.Schema
 	}{
 		{name: "every type constructor", schemas: append(determinismSchemas(), arrayRootSchema())},
@@ -297,6 +298,11 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 				fixedOf("Spare", 2),
 			},
 		}}},
+		{name: "compare", compare: true, schemas: []*avrocpb.Schema{compareSampleSchema(), {
+			Namespace: proto.String(unionTestNamespace),
+			Type:      recordOf("Second", fieldOf("inner", namedType(unionTestNamespace+".Inner"))),
+			Types:     []*avrocpb.Type{recordOf("Extra", fieldOf("id", primType("long")))},
+		}}},
 		{name: "a union root", schemas: []*avrocpb.Schema{
 			schemaOf(unionOf(primType("null"), recordOf("Branch", fieldOf("id", primType("long"))))),
 		}},
@@ -304,13 +310,17 @@ func TestTheRegistryIsEverythingTheGeneratorDeclares(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := generateToDir(t, t.TempDir(), identifierRequest(tc.singleObject, tc.schemas...))
+			req := identifierRequest(tc.singleObject, tc.schemas...)
+			if tc.compare {
+				req = compareRequest("true", tc.schemas...)
+			}
+			res, err := generateToDir(t, t.TempDir(), req)
 			if err != nil {
 				t.Fatalf("Generate failed: %v", err)
 			}
 			emitted := declaredInFiles(t, res.OutputFiles)
 
-			reg, err := declareIdentifiers(tc.schemas, tc.singleObject)
+			reg, err := declareIdentifiers(tc.schemas, genOptions{packageName: "gen", singleObject: tc.singleObject, compare: tc.compare})
 			if err != nil {
 				t.Fatalf("declareIdentifiers failed: %v", err)
 			}

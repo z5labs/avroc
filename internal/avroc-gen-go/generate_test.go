@@ -527,7 +527,8 @@ func TestGeneratedFilenames(t *testing.T) {
 func renderSchema(t *testing.T, packageName string, schema *avrocpb.Schema) []byte {
 	t.Helper()
 
-	_, content, err := buildSchemaFile(t.Context(), packageName, ir.SchemaBaseName(schema), schema, collectFixedTypes([]*avrocpb.Schema{schema}), false)
+	schemas := []*avrocpb.Schema{schema}
+	_, content, err := buildSchemaFile(t.Context(), genOptions{packageName: packageName}, ir.SchemaBaseName(schema), schema, collectFixedTypes(schemas), collectNamedTypes(schemas))
 	if err != nil {
 		t.Fatalf("buildSchemaFile failed: %v", err)
 	}

@@ -45,7 +45,7 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 		return err
 	}
 
-	packageName, singleObject, err := readOptions(ctx, req)
+	opts, err := readOptions(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -55,13 +55,15 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 	// collision is a package that does not compile, and the loop cannot take
 	// back the files it wrote before reaching one. checkIdentifiers is the
 	// long form.
-	if err := checkIdentifiers(req.GetSchemas(), singleObject); err != nil {
+	if err := checkIdentifiers(req.GetSchemas(), opts); err != nil {
 		return err
 	}
 
 	// Indexed once for the descriptor rather than per schema: a schema's
-	// reference can name a fixed defined in full by an earlier one.
+	// reference can name a fixed, or any other named type, defined in full by
+	// an earlier one.
 	fixed := collectFixedTypes(req.GetSchemas())
+	named := collectNamedTypes(req.GetSchemas())
 
 	for _, schema := range req.GetSchemas() {
 		// Once, and before the span: it is the name the file is built from as
@@ -71,7 +73,7 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 
 		schemaCtx, schemaSpan := plugin.StartSchemaGenerate(ctx, base)
 
-		filename, content, err := buildSchemaFile(schemaCtx, packageName, base, schema, fixed, singleObject)
+		filename, content, err := buildSchemaFile(schemaCtx, opts, base, schema, fixed, named)
 		if err != nil {
 			plugin.EndPhase(schemaSpan, err)
 			return fmt.Errorf("failed to generate schema: %w", err)
@@ -96,6 +98,14 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 	return nil
 }
 
+// genOptions is the --opt vocabulary, read.
+type genOptions struct {
+	packageName  string
+	singleObject bool
+	// compare is compare=true: a Compare<Record>Avro for every record (#250).
+	compare bool
+}
+
 // readOptions reads the --opt vocabulary this generator declares, and refuses
 // what it cannot honour.
 //
@@ -104,8 +114,8 @@ func Generate(ctx context.Context, req *avrocpb.GenerateRequest, w plugin.FileWr
 // descriptor this generator cannot give that encoding to is an option it is
 // refusing, and refusing it before the loop is what keeps a package the option
 // had no effect on from being half written. checkSingleObjectRoots' own comment
-// is the long form.
-func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (packageName string, singleObject bool, err error) {
+// is the long form. compare=true's scope check is here for the same reason.
+func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (opts genOptions, err error) {
 	_, span := plugin.StartOptionsParse(ctx)
 	defer func() { plugin.EndPhase(span, err) }()
 
@@ -113,26 +123,50 @@ func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (packageName
 	for _, opt := range req.GetOptions() {
 		switch opt.GetName() {
 		case "package_name":
-			packageName = opt.GetValue()
+			opts.packageName = opt.GetValue()
 		case "encoding":
 			encoding = opt.GetValue()
+		case "compare":
+			opts.compare, err = parseBoolOption(opt.GetName(), opt.GetValue())
+			if err != nil {
+				return genOptions{}, err
+			}
 		}
 	}
-	if packageName == "" {
-		return "", false, fmt.Errorf("package_name option is required")
+	if opts.packageName == "" {
+		return genOptions{}, fmt.Errorf("package_name option is required")
 	}
 
-	singleObject = encoding == "single_object"
-	if encoding != "" && !singleObject {
-		return "", false, fmt.Errorf("unsupported encoding option: %q (supported: single_object)", encoding)
+	opts.singleObject = encoding == "single_object"
+	if encoding != "" && !opts.singleObject {
+		return genOptions{}, fmt.Errorf("unsupported encoding option: %q (supported: single_object)", encoding)
 	}
 
-	if singleObject {
+	if opts.singleObject {
 		if err := checkSingleObjectRoots(req.GetSchemas()); err != nil {
-			return "", false, err
+			return genOptions{}, err
 		}
 	}
-	return packageName, singleObject, nil
+	if opts.compare {
+		if err := checkCompareScope(req.GetSchemas()); err != nil {
+			return genOptions{}, err
+		}
+	}
+	return opts, nil
+}
+
+// parseBoolOption reads an option whose value is exactly true or false. Any
+// other spelling — True, 1, yes, the empty string — is refused rather than
+// read as one of the two, because an option a person misspelled is one they
+// believe is set.
+func parseBoolOption(name, value string) (bool, error) {
+	switch value {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("unsupported %s option: %q (supported: true, false)", name, value)
 }
 
 // buildSchemaFile generates the Go source for a single schema, returning its
@@ -142,7 +176,7 @@ func readOptions(ctx context.Context, req *avrocpb.GenerateRequest) (packageName
 // opened is named by it too; deriving it again here would be work an untraced
 // generation had no reason to do. fixed is the descriptor's fixed types, for
 // the same reason: it is a property of every schema at once.
-func buildSchemaFile(ctx context.Context, packageName, base string, schema *avrocpb.Schema, fixed fixedTypes, singleObject bool) (string, []byte, error) {
+func buildSchemaFile(ctx context.Context, opts genOptions, base string, schema *avrocpb.Schema, fixed fixedTypes, named namedTypes) (string, []byte, error) {
 	// Refuse a descriptor this generator cannot represent before emitting any
 	// of it. The code builders below cannot report a problem — they append to a
 	// buffer — so a reference whose kind is unrecognised, or which claims to
@@ -157,7 +191,7 @@ func buildSchemaFile(ctx context.Context, packageName, base string, schema *avro
 	// computes over the IR rather than walking it, and the only per-schema cost
 	// here that does not scale with the size of the file being written.
 	var fp [8]byte
-	if singleObject {
+	if opts.singleObject {
 		_, span := plugin.StartFingerprint(ctx)
 		var err error
 		fp, err = schemaFingerprint(schema)
@@ -168,7 +202,10 @@ func buildSchemaFile(ctx context.Context, packageName, base string, schema *avro
 	}
 
 	// Generate the Go source code
-	code := generateFileCode(packageName, schema, fixed, singleObject, fp)
+	code, err := generateFileCode(opts, schema, fixed, named, fp)
+	if err != nil {
+		return "", nil, err
+	}
 
 	// Determine the filename from the schema
 	filename := ir.SnakeCase(base) + ".go"

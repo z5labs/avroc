@@ -6,6 +6,7 @@
     "nested/outer.go",
     "pcf/event.avsc",
     "pcf/test_record.avsc",
+    "record/record.go",
     "stream/event.go",
     "test_record.avsc",
     "unions/outer.go"
