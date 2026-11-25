@@ -17,6 +17,8 @@ package unions
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -84,15 +86,110 @@ func TestOuterRoundTripsEveryBranchOfEveryUnion(t *testing.T) {
 	}
 }
 
-// TestOuterRejectsAnUnknownBranch is the failure path of the decoder the
-// generator now emits for a union whose branch it defines: an index past the
-// last branch is an error rather than a zero value.
-func TestOuterRejectsAnUnknownBranch(t *testing.T) {
-	// id 42, then branch index 2 of a two-branch union.
-	r := avro.NewBinaryReader(bytes.NewReader([]byte{0x54, 0x04}))
+// readerModes are the two ways an avro.BinaryReader reads: from an io.Reader,
+// and over a byte slice it decodes in place. ReadIndex checks the range in
+// both, and they are implemented apart, so every decode below runs in both.
+func readerModes() []struct {
+	name string
+	new  func([]byte) *avro.BinaryReader
+} {
+	return []struct {
+		name string
+		new  func([]byte) *avro.BinaryReader
+	}{
+		{name: "io.Reader", new: func(b []byte) *avro.BinaryReader { return avro.NewBinaryReader(bytes.NewReader(b)) }},
+		{name: "bytes", new: avro.NewBytesReader},
+	}
+}
 
-	var out Outer
-	if err := out.UnmarshalAvroBinary(r); err == nil {
-		t.Fatalf("decoded %+v from a union index past the last branch, want an error", out)
+// TestOuterDecodesEveryInRangeIndexInEitherReaderMode is the other half of
+// the rejection below: every index the schema does define decodes exactly as
+// it did before ReadIndex, whichever reader mode reads it (#248).
+func TestOuterDecodesEveryInRangeIndexInEitherReaderMode(t *testing.T) {
+	cases := []struct {
+		name string
+		wire []byte
+		want Outer
+	}{
+		{
+			name: "both null",
+			wire: []byte{0x54, 0x00, 0x00},
+			want: Outer{Id: 42, Tone: OuterToneUnionNull{}, Inner: OuterInnerUnionNull{}},
+		},
+		{
+			name: "tone LOW",
+			wire: []byte{0x54, 0x02, 0x00, 0x00},
+			want: Outer{Id: 42, Tone: OuterToneUnionTone{Value: ToneLOW}, Inner: OuterInnerUnionNull{}},
+		},
+		{
+			name: "tone HIGH and an inner record",
+			wire: []byte{0x54, 0x02, 0x02, 0x02, 0x05},
+			want: Outer{Id: 42, Tone: OuterToneUnionTone{Value: ToneHIGH}, Inner: OuterInnerUnionInner{Value: Inner{X: -3}}},
+		},
+	}
+
+	for _, mode := range readerModes() {
+		for _, tc := range cases {
+			t.Run(mode.name+"/"+tc.name, func(t *testing.T) {
+				var out Outer
+				if err := out.UnmarshalAvroBinary(mode.new(tc.wire)); err != nil {
+					t.Fatalf("UnmarshalAvroBinary: %v", err)
+				}
+				if !reflect.DeepEqual(out, tc.want) {
+					t.Errorf("decoded %+v, want %+v", out, tc.want)
+				}
+			})
+		}
+	}
+}
+
+// TestOuterRejectsAnOutOfRangeIndex is the failure path of ReadIndex in the
+// generated decoder (#248): an enum ordinal or a union branch index that the
+// schema does not define, negative or past the end, fails the decode with
+// avro.ErrInvalidIndex in either reader mode, rather than decoding into a
+// value no symbol names or failing with an error nothing can match.
+func TestOuterRejectsAnOutOfRangeIndex(t *testing.T) {
+	// Every case starts with id 42, which is 0x54 as a zig-zag long. An
+	// index is a zig-zag varint: -1 is 0x01, 2 is 0x04, and 1000 is d0 0f.
+	cases := []struct {
+		name string
+		wire []byte
+	}{
+		{name: "tone branch -1", wire: []byte{0x54, 0x01}},
+		{name: "tone branch 2", wire: []byte{0x54, 0x04}},
+		{name: "tone branch 1000", wire: []byte{0x54, 0xd0, 0x0f}},
+		{name: "Tone ordinal -1", wire: []byte{0x54, 0x02, 0x01}},
+		{name: "Tone ordinal 2", wire: []byte{0x54, 0x02, 0x04}},
+		{name: "Tone ordinal 1000", wire: []byte{0x54, 0x02, 0xd0, 0x0f}},
+		{name: "inner branch -1", wire: []byte{0x54, 0x00, 0x01}},
+		{name: "inner branch 2", wire: []byte{0x54, 0x00, 0x04}},
+	}
+
+	for _, mode := range readerModes() {
+		for _, tc := range cases {
+			t.Run(mode.name+"/"+tc.name, func(t *testing.T) {
+				var out Outer
+				err := out.UnmarshalAvroBinary(mode.new(tc.wire))
+				if !errors.Is(err, avro.ErrInvalidIndex) {
+					t.Fatalf("UnmarshalAvroBinary(% x) = %v, want an error matching avro.ErrInvalidIndex", tc.wire, err)
+				}
+			})
+		}
+	}
+}
+
+// TestToneRejectsAnOutOfRangeOrdinal decodes the enum on its own, so the
+// check is seen to be the enum's and not only the union holding it.
+func TestToneRejectsAnOutOfRangeOrdinal(t *testing.T) {
+	for _, mode := range readerModes() {
+		for _, wire := range [][]byte{{0x01}, {0x04}} {
+			t.Run(fmt.Sprintf("%s/% x", mode.name, wire), func(t *testing.T) {
+				var tone Tone
+				err := tone.UnmarshalAvroBinary(mode.new(wire))
+				if !errors.Is(err, avro.ErrInvalidIndex) {
+					t.Fatalf("UnmarshalAvroBinary(% x) = %v (decoded %d), want an error matching avro.ErrInvalidIndex", wire, err, tone)
+				}
+			})
+		}
 	}
 }

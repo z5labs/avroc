@@ -3,8 +3,6 @@
 package unions
 
 import (
-	"fmt"
-
 	avro "github.com/z5labs/avro-go"
 )
 
@@ -21,7 +19,7 @@ func (x Tone) MarshalAvroBinary(w *avro.BinaryWriter) error {
 }
 
 func (x *Tone) UnmarshalAvroBinary(r *avro.BinaryReader) error {
-	v, err := r.ReadInt()
+	v, err := r.ReadIndex(2)
 	if err != nil {
 		return err
 	}
@@ -65,7 +63,7 @@ func (x OuterToneUnionTone) MarshalAvroBinary(w *avro.BinaryWriter) error {
 }
 
 func unmarshalOuterToneUnion(r *avro.BinaryReader) (OuterToneUnion, error) {
-	index, err := r.ReadLong()
+	index, err := r.ReadIndex(2)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +78,7 @@ func unmarshalOuterToneUnion(r *avro.BinaryReader) (OuterToneUnion, error) {
 		}
 		return v, nil
 	default:
-		return nil, fmt.Errorf("unknown union index: %d", index)
+		return nil, avro.ErrInvalidIndex
 	}
 }
 
@@ -143,7 +141,7 @@ func (x OuterInnerUnionInner) MarshalAvroBinary(w *avro.BinaryWriter) error {
 }
 
 func unmarshalOuterInnerUnion(r *avro.BinaryReader) (OuterInnerUnion, error) {
-	index, err := r.ReadLong()
+	index, err := r.ReadIndex(2)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +156,7 @@ func unmarshalOuterInnerUnion(r *avro.BinaryReader) (OuterInnerUnion, error) {
 		}
 		return v, nil
 	default:
-		return nil, fmt.Errorf("unknown union index: %d", index)
+		return nil, avro.ErrInvalidIndex
 	}
 }
 

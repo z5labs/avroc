@@ -32,7 +32,6 @@ const avrolibImport = `avro "github.com/z5labs/avro-go"`
 // generated first, which is a way for two runs over the same descriptor to
 // disagree.
 type fileImports struct {
-	fmt     bool
 	io      bool
 	iter    bool
 	avrolib bool
@@ -43,10 +42,7 @@ type fileImports struct {
 func (f fileImports) writePreamble(cb *codeBuilder, packageName string) {
 	cb.writef(filePreamble, packageName)
 
-	std := make([]string, 0, 3)
-	if f.fmt {
-		std = append(std, "fmt")
-	}
+	std := make([]string, 0, 2)
 	if f.io {
 		std = append(std, "io")
 	}
@@ -108,7 +104,6 @@ func generateFileCode(packageName string, schema *avrocpb.Schema, fixed fixedTyp
 	stream := arrayStreamFor(schema)
 
 	imports := fileImports{
-		fmt:     needsFmtImport(types),
 		io:      stream != nil,
 		iter:    stream != nil,
 		avrolib: needsAvrolibImport(types) || stream != nil,
@@ -167,17 +162,6 @@ func needsAvrolibImport(types []typeToGenerate) bool {
 	for _, ttg := range types {
 		switch ttg.typ.Type.(type) {
 		case *avrocpb.Type_Record, *avrocpb.Type_EnumType, *avrocpb.Type_Fixed, *avrocpb.Type_Union:
-			return true
-		}
-	}
-	return false
-}
-
-// needsFmtImport checks if any types need the fmt import.
-// Returns true if there are union types (for unmarshal error messages).
-func needsFmtImport(types []typeToGenerate) bool {
-	for _, ttg := range types {
-		if _, ok := ttg.typ.Type.(*avrocpb.Type_Union); ok {
 			return true
 		}
 	}

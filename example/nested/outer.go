@@ -3,8 +3,6 @@
 package nested
 
 import (
-	"fmt"
-
 	avro "github.com/z5labs/avro-go"
 )
 
@@ -44,7 +42,7 @@ func (x OuterMaybeGridUnionInt) MarshalAvroBinary(w *avro.BinaryWriter) error {
 }
 
 func unmarshalOuterMaybeGridUnion(r *avro.BinaryReader) (OuterMaybeGridUnion, error) {
-	index, err := r.ReadLong()
+	index, err := r.ReadIndex(2)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +57,7 @@ func unmarshalOuterMaybeGridUnion(r *avro.BinaryReader) (OuterMaybeGridUnion, er
 		}
 		return OuterMaybeGridUnionInt{Value: v}, nil
 	default:
-		return nil, fmt.Errorf("unknown union index: %d", index)
+		return nil, avro.ErrInvalidIndex
 	}
 }
 

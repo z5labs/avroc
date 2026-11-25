@@ -323,6 +323,12 @@ not know still renders — that is the case worth reading.
 
 Generates idiomatic Go types with binary Avro serialization support.
 
+Generated code imports [avro-go](https://github.com/z5labs/avro-go) and **requires
+v0.7.0 or later**: it decodes enum ordinals and union branch indexes with
+`BinaryReader.ReadIndex`, which that release added. An ordinal or branch index the schema
+does not define fails the decode with an error matching `avro.ErrInvalidIndex`, in either
+reader mode, rather than producing a value no symbol names.
+
 | Option | Required | Description |
 |---|---|---|
 | `package_name` | Yes | The Go package name for all generated files. |

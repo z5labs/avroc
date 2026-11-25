@@ -163,7 +163,8 @@ func TestUnmarshal_Enum(t *testing.T) {
 
 	expectations := []string{
 		"func (x *Status) UnmarshalAvroBinary(r *avro.BinaryReader) error",
-		"r.ReadInt()",
+		// The ordinal is range-checked against the two symbols (#248).
+		"v, err := r.ReadIndex(2)",
 		"*x = Status(v)",
 	}
 
@@ -171,6 +172,9 @@ func TestUnmarshal_Enum(t *testing.T) {
 		if !strings.Contains(code, exp) {
 			t.Errorf("expected generated code to contain %q, got:\n%s", exp, code)
 		}
+	}
+	if strings.Contains(code, "r.ReadInt()") {
+		t.Errorf("expected the enum ordinal not to be read with ReadInt, got:\n%s", code)
 	}
 }
 
@@ -226,7 +230,8 @@ func TestUnmarshal_Union(t *testing.T) {
 	expectations := []string{
 		// Standalone unmarshal function
 		"func unmarshalEventDataUnion(r *avro.BinaryReader) (EventDataUnion, error)",
-		"r.ReadLong()",
+		// The branch index is range-checked against the three branches (#248).
+		"index, err := r.ReadIndex(3)",
 		"switch index",
 		// Null member returns directly
 		"return EventDataUnionNull{}, nil",
@@ -238,14 +243,22 @@ func TestUnmarshal_Union(t *testing.T) {
 		"return EventDataUnionInt{Value: v}, nil",
 		// Record unmarshal calls standalone function
 		"x.Data, err = unmarshalEventDataUnion(r)",
-		// fmt import for error handling
-		`"fmt"`,
-		"unknown union index",
+		// The unreachable default reports the sentinel ReadIndex does.
+		"return nil, avro.ErrInvalidIndex",
 	}
 
 	for _, exp := range expectations {
 		if !strings.Contains(code, exp) {
 			t.Errorf("expected generated code to contain %q, got:\n%s", exp, code)
+		}
+	}
+
+	// Nothing generated for a union uses fmt any more, and an unused import
+	// is a compile error in the user's package rather than in this one.
+	unwanted := []string{`"fmt"`, "fmt.Errorf", "unknown union index"}
+	for _, u := range unwanted {
+		if strings.Contains(code, u) {
+			t.Errorf("expected generated code not to contain %q, got:\n%s", u, code)
 		}
 	}
 }
