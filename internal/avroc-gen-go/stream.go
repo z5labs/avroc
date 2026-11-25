@@ -60,6 +60,42 @@ func arrayStreamFor(schema *avrocpb.Schema) *arrayStream {
 	return &arrayStream{item: item, plural: pluralize(item)}
 }
 
+// reader is the name of the streaming reader type, e.g. EventReader.
+//
+// It is a method so that the emission below and the identifier check in
+// identifiers.go take it from the same place: a name derived twice is a name
+// that can be checked under one spelling and emitted under another.
+func (s arrayStream) reader() string {
+	return s.item + "Reader"
+}
+
+// writer is the name of the streaming writer type, e.g. EventWriter, for the
+// same reason as reader.
+func (s arrayStream) writer() string {
+	return s.item + "Writer"
+}
+
+// newReader is the reader's constructor, e.g. NewEventReader.
+func (s arrayStream) newReader() string {
+	return "New" + s.reader()
+}
+
+// streamFunc is the package-level iterator over a stream, e.g. StreamEvents.
+func (s arrayStream) streamFunc() string {
+	return "Stream" + s.plural
+}
+
+// newWriter is the writer's constructor, e.g. NewEventWriter.
+func (s arrayStream) newWriter() string {
+	return "New" + s.writer()
+}
+
+// writeFunc is the package-level function producing a stream, e.g.
+// WriteEvents.
+func (s arrayStream) writeFunc() string {
+	return "Write" + s.plural
+}
+
 // streamItemType returns the Go type name of an array item this generator has
 // generated marshalling methods for, or the empty string for anything else.
 func streamItemType(t *avrocpb.Type) string {
@@ -134,7 +170,7 @@ func isVowel(b byte) bool {
 // embedded reader, promoted unchanged. Wrapping them would be a forwarding
 // layer whose only effect is to be one version behind avro-go.
 func generateStreamReader(cb *codeBuilder, s arrayStream) {
-	reader := s.item + "Reader"
+	reader := s.reader()
 
 	cb.newline()
 	cb.writef("// %s reads a stream of %s values from an Avro array without\n", reader, s.item)
@@ -149,8 +185,8 @@ func generateStreamReader(cb *codeBuilder, s arrayStream) {
 	cb.writeln("}")
 	cb.newline()
 
-	cb.writef("// New%s returns a reader decoding the Avro array in r.\n", reader)
-	cb.writef("func New%s(r io.Reader) *%s {\n", reader, reader)
+	cb.writef("// %s returns a reader decoding the Avro array in r.\n", s.newReader())
+	cb.writef("func %s(r io.Reader) *%s {\n", s.newReader(), reader)
 	cb.writef("\treturn &%s{ArrayReader: avro.NewArrayReader(avro.NewBinaryReader(r))}\n", reader)
 	cb.writeln("}")
 	cb.newline()
@@ -181,14 +217,14 @@ func generateStreamReader(cb *codeBuilder, s arrayStream) {
 	cb.writeln("}")
 	cb.newline()
 
-	cb.writef("// Stream%s returns an iterator over the %s values encoded as an Avro array\n", s.plural, s.item)
+	cb.writef("// %s returns an iterator over the %s values encoded as an Avro array\n", s.streamFunc(), s.item)
 	cb.writeln("// in r. It is the ordinary way to consume such a stream:")
 	cb.writeln("//")
-	cb.writef("//\tfor v, err := range Stream%s(r) {\n", s.plural)
+	cb.writef("//\tfor v, err := range %s(r) {\n", s.streamFunc())
 	cb.writeln("//\t\t...")
 	cb.writeln("//\t}")
-	cb.writef("func Stream%s(r io.Reader) iter.Seq2[*%s, error] {\n", s.plural, s.item)
-	cb.writef("\treturn New%s(r).All()\n", reader)
+	cb.writef("func %s(r io.Reader) iter.Seq2[*%s, error] {\n", s.streamFunc(), s.item)
+	cb.writef("\treturn %s(r).All()\n", s.newReader())
 	cb.writeln("}")
 }
 
@@ -220,7 +256,7 @@ func generateStreamReader(cb *codeBuilder, s arrayStream) {
 // stream has no close to forget, and a stream written the explicit way and left
 // open is reported as avro.ErrTruncatedArray when it is read back.
 func generateStreamWriter(cb *codeBuilder, s arrayStream) {
-	writer := s.item + "Writer"
+	writer := s.writer()
 
 	cb.newline()
 	cb.writef("// %s writes a stream of %s values as an Avro array without\n", writer, s.item)
@@ -230,19 +266,19 @@ func generateStreamWriter(cb *codeBuilder, s arrayStream) {
 	cb.writeln("// the zero-count block that terminates the array. Its Close writes that block,")
 	cb.writeln("// so Close is neither optional nor merely a flush: a writer that is never")
 	cb.writeln("// closed leaves a truncated array behind, which reading it back reports as")
-	cb.writef("// [avro.ErrTruncatedArray]. Write%s closes for you.\n", s.plural)
+	cb.writef("// [avro.ErrTruncatedArray]. %s closes for you.\n", s.writeFunc())
 	cb.writef("type %s struct {\n", writer)
 	cb.writeln("\t*avro.ArrayWriter")
 	cb.writeln("}")
 	cb.newline()
 
-	cb.writef("// New%s returns a writer encoding an Avro array of %s to w.\n", writer, s.item)
+	cb.writef("// %s returns a writer encoding an Avro array of %s to w.\n", s.newWriter(), s.item)
 	cb.writeln("//")
 	cb.writeln("// By default the blocks it emits declare no size and nothing is buffered: each")
 	cb.writeln("// item reaches w as it is written. Pass [avro.WithSizedBlocks] to batch items")
 	cb.writeln("// into blocks that declare their encoded size, which a reader can discard with")
 	cb.writeln("// SkipBlock instead of decoding, at the cost of a bounded buffer.")
-	cb.writef("func New%s(w io.Writer, opts ...avro.ArrayWriterOption) *%s {\n", writer, writer)
+	cb.writef("func %s(w io.Writer, opts ...avro.ArrayWriterOption) *%s {\n", s.newWriter(), writer)
 	cb.writef("\treturn &%s{ArrayWriter: avro.NewArrayWriter(avro.NewBinaryWriter(w), opts...)}\n", writer)
 	cb.writeln("}")
 	cb.newline()
@@ -258,11 +294,11 @@ func generateStreamWriter(cb *codeBuilder, s arrayStream) {
 	cb.writeln("}")
 	cb.newline()
 
-	cb.writef("// Write%s encodes the %s values f writes as an Avro array in w,\n", s.plural, s.item)
+	cb.writef("// %s encodes the %s values f writes as an Avro array in w,\n", s.writeFunc(), s.item)
 	cb.writeln("// terminating the array once f returns without error. It is the ordinary way")
 	cb.writeln("// to produce such a stream:")
 	cb.writeln("//")
-	cb.writef("//\terr := Write%s(w, func(s *%s) error {\n", s.plural, writer)
+	cb.writef("//\terr := %s(w, func(s *%s) error {\n", s.writeFunc(), writer)
 	cb.writef("//\t\tfor _, v := range %s {\n", strings.ToLower(s.plural))
 	cb.writeln("//\t\t\tif err := s.Write(v); err != nil {")
 	cb.writeln("//\t\t\t\treturn err")
@@ -273,7 +309,7 @@ func generateStreamWriter(cb *codeBuilder, s arrayStream) {
 	cb.writeln("//")
 	cb.writeln("// If f returns an error the array is left unterminated, since a partial array")
 	cb.writeln("// should not be presented as a complete one.")
-	cb.writef("func Write%s(w io.Writer, f func(*%s) error, opts ...avro.ArrayWriterOption) error {\n", s.plural, writer)
+	cb.writef("func %s(w io.Writer, f func(*%s) error, opts ...avro.ArrayWriterOption) error {\n", s.writeFunc(), writer)
 	cb.writeln("\treturn avro.WriteArray(avro.NewBinaryWriter(w), func(a *avro.ArrayWriter) error {")
 	cb.writef("\t\treturn f(&%s{ArrayWriter: a})\n", writer)
 	cb.writeln("\t}, opts...)")

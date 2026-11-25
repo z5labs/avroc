@@ -33,6 +33,12 @@ func nestedIssueSchema() *avrocpb.Schema {
 // a map in a map, and each kind of innermost type — a record, an enum and a
 // fixed defined in full where they are first met, a named reference to one of
 // them, a union holding one, and a container nested in a union's branch.
+//
+// Its enum and fixed are Shade and Digest rather than unionHolderSchema's Tone
+// and Hash because determinismSchemas puts the two schemas in one descriptor,
+// and one package cannot declare a type twice: under those names the
+// descriptor generated a package that did not compile, which the identifier
+// check now refuses (#247).
 func nestedShapesSchema() *avrocpb.Schema {
 	cellRef := &avrocpb.Type{Type: &avrocpb.Type_Reference{Reference: namedRef(unionTestNamespace + ".Cell")}}
 	return &avrocpb.Schema{
@@ -41,8 +47,8 @@ func nestedShapesSchema() *avrocpb.Schema {
 			fieldOf("cube", arrayOf(arrayOf(arrayOf(primType("long"))))),
 			fieldOf("nestedMaps", mapOf(mapOf(primType("string")))),
 			fieldOf("cells", arrayOf(arrayOf(recordOf("Cell", fieldOf("c", primType("int")))))),
-			fieldOf("tones", arrayOf(mapOf(enumOf("Tone", "LOW", "HIGH")))),
-			fieldOf("hashes", mapOf(arrayOf(fixedOf("Hash", 2)))),
+			fieldOf("tones", arrayOf(mapOf(enumOf("Shade", "LOW", "HIGH")))),
+			fieldOf("hashes", mapOf(arrayOf(fixedOf("Digest", 2)))),
 			fieldOf("cellsByKey", mapOf(mapOf(cellRef))),
 			fieldOf("maybeCells", arrayOf(mapOf(arrayOf(unionOf(primType("null"), cellRef))))),
 			fieldOf("choice", unionOf(primType("null"), arrayOf(arrayOf(primType("int"))))),
