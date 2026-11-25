@@ -105,7 +105,7 @@ func (cb *codeBuilder) newline() {
 //
 // fixed is every fixed the whole descriptor defines, since a reference in this
 // schema can name one an earlier schema wrote out in full.
-func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes, named namedTypes, fp [8]byte) string {
+func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes, named namedTypes, fp [8]byte) (string, error) {
 	cb := &codeBuilder{}
 
 	// Collect all types to generate (including unions)
@@ -113,14 +113,19 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 
 	// Every record's Compare, planned before the preamble for the stream's
 	// reason: the plans are what pull bytes and cmp into the import block.
-	// readOptions has already refused a record without one.
+	// readOptions has already refused a record without one, and the error is
+	// returned rather than dropped all the same: an empty plan in its place
+	// would be a Compare that calls every pair of records equal.
 	var plans map[*avrocpb.Record]comparePlan
 	var needBytes, needCmp, needBinary bool
 	if opts.compare {
 		plans = map[*avrocpb.Record]comparePlan{}
 		for _, t := range types {
 			if rec, ok := t.typ.Type.(*avrocpb.Type_Record); ok {
-				plan, _ := named.comparePlanFor(rec.Record)
+				plan, err := named.comparePlanFor(rec.Record)
+				if err != nil {
+					return "", err
+				}
 				plans[rec.Record] = plan
 				needBytes = needBytes || plan.needsBytes()
 				needCmp = needCmp || plan.needsCmp()
@@ -171,7 +176,7 @@ func generateFileCode(opts genOptions, schema *avrocpb.Schema, fixed fixedTypes,
 		generateStreamWriter(cb, *stream)
 	}
 
-	return cb.String()
+	return cb.String(), nil
 }
 
 // schemaRecordName returns the name of the schema's primary record type, or the

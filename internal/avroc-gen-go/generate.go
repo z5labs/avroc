@@ -202,7 +202,10 @@ func buildSchemaFile(ctx context.Context, opts genOptions, base string, schema *
 	}
 
 	// Generate the Go source code
-	code := generateFileCode(opts, schema, fixed, named, fp)
+	code, err := generateFileCode(opts, schema, fixed, named, fp)
+	if err != nil {
+		return "", nil, err
+	}
 
 	// Determine the filename from the schema
 	filename := ir.SnakeCase(base) + ".go"

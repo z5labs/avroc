@@ -425,7 +425,9 @@ every length, index and varint is decoded in the generated code itself, and avro
 record, and the same goes for each nested record's fields. The exception is a trailing run of
 ignored fields, which is never read and so may be of any type. A record with a map, an array
 or a union anywhere else — or a record that contains itself — fails the run under
-`compare=true`, before any file is written. A record named `Compare<Other>Avro` beside a
+`compare=true`, before any file is written. A nested record's fields are compared inline rather
+than through its own function, so a record reused in several fields is written out once per
+field, and the function grows with the number of paths to the record's leaves. A record named `Compare<Other>Avro` beside a
 record `Other` collides with that function, and is refused like any other collision.
 
 **Streaming an array root.** A schema whose root type is `array<T>` says the file it

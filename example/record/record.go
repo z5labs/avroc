@@ -130,9 +130,9 @@ func (x *Record) UnmarshalAvroBinary(r *avro.BinaryReader) error {
 	return nil
 }
 
-// CompareRecordAvro compares the Records encoded at the start of a and b by the
-// Avro specification's sort order, without decoding them: field by field in
-// schema order, a descending field's result negated and an ignored field
+// CompareRecordAvro compares the Record records encoded at the start of a and b by
+// the Avro specification's sort order, without decoding them: field by field
+// in schema order, a descending field's result negated and an ignored field
 // skipped.
 //
 // c is -1, 0 or +1 as a's record sorts before, equal to or after b's. na and

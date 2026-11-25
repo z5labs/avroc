@@ -402,6 +402,34 @@ func TestCorruptInputIsReportedOnItsOwnSide(t *testing.T) {
 	}
 }
 
+// TestAnyNonZeroBooleanByteIsTrue is the boolean row of the ordering table,
+// which AppendAvro alone never reaches: it writes only 0x00 and 0x01. A
+// boolean byte of 0x02 or 0xff is true — equal to 0x01, after 0x00 — and a
+// descending one sorts the other way.
+func TestAnyNonZeroBooleanByteIsTrue(t *testing.T) {
+	zero := zeroSample()
+	valid := encode(&zero)
+	const boolAt, boolDownAt = 0, 1
+
+	for _, truthy := range []byte{0x02, 0x80, 0xff} {
+		for _, tc := range []struct {
+			at      int
+			vsFalse int
+			ofField string
+		}{{boolAt, 1, "BooleanValue"}, {boolDownAt, -1, "BooleanValueDown"}} {
+			odd := splice(valid, tc.at, 1, []byte{truthy})
+			one := splice(valid, tc.at, 1, []byte{0x01})
+
+			if c, na, nb := CompareSampleAvro(odd, one); c != 0 || na < 0 || nb < 0 {
+				t.Errorf("%s 0x%02x against 0x01: CompareSampleAvro = %d, %d, %d, want equal", tc.ofField, truthy, c, na, nb)
+			}
+			if c, _, _ := CompareSampleAvro(odd, valid); c != tc.vsFalse {
+				t.Errorf("%s 0x%02x against 0x00: CompareSampleAvro = %d, want %d", tc.ofField, truthy, c, tc.vsFalse)
+			}
+		}
+	}
+}
+
 // TestCompareSampleMakesNoAllocations is the allocation guarantee.
 func TestCompareSampleMakesNoAllocations(t *testing.T) {
 	ps := pairs()

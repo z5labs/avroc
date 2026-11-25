@@ -36,6 +36,12 @@ import (
 // separately: the run is cut from the end of the sequence, so a nested record's
 // trailing ignored fields are read (to be skipped) exactly when something after
 // them is compared, and never otherwise.
+//
+// The cost accepted for it is size: the generated code grows with the number
+// of paths from the record to its leaves rather than with the number of
+// types, so a record reused at several positions on several levels is
+// inlined once per position. That is a schema's own size made visible rather
+// than a cardinality the user does not control, and no cap is imposed.
 
 // compareKind is what one leaf operation reads.
 type compareKind int
@@ -331,9 +337,9 @@ func generateCompareFunc(cb *codeBuilder, r *avrocpb.Record, plan comparePlan) {
 	typeName := toPascalCase(r.GetName())
 
 	cb.newline()
-	cb.writef("// %s compares the %ss encoded at the start of a and b by the\n", name, typeName)
-	cb.writeln("// Avro specification's sort order, without decoding them: field by field in")
-	cb.writeln("// schema order, a descending field's result negated and an ignored field")
+	cb.writef("// %s compares the %s records encoded at the start of a and b by\n", name, typeName)
+	cb.writeln("// the Avro specification's sort order, without decoding them: field by field")
+	cb.writeln("// in schema order, a descending field's result negated and an ignored field")
 	cb.writeln("// skipped.")
 	cb.writeln("//")
 	cb.writeln("// c is -1, 0 or +1 as a's record sorts before, equal to or after b's. na and")
