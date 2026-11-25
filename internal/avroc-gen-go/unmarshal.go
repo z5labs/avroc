@@ -309,12 +309,16 @@ func generateMapValueRead(cb *codeBuilder, t *avrocpb.Type, fieldName string, un
 }
 
 // generateEnumUnmarshal generates the UnmarshalAvroBinary method for an enum type.
+//
+// The ordinal is read with ReadIndex rather than ReadInt, so one no symbol
+// names fails the decode with avro.ErrInvalidIndex instead of becoming a value
+// of the enum's type that none of its constants is (#248).
 func generateEnumUnmarshal(cb *codeBuilder, e *avrocpb.Enum) {
 	name := toPascalCase(e.GetName())
 
 	cb.newline()
 	cb.writef("func (x *%s) UnmarshalAvroBinary(r *avro.BinaryReader) error {\n", name)
-	cb.writeln("\tv, err := r.ReadInt()")
+	cb.writef("\tv, err := r.ReadIndex(%d)\n", len(e.GetValues()))
 	cb.writeln("\tif err != nil {")
 	cb.writeln("\t\treturn err")
 	cb.writeln("\t}")
@@ -340,12 +344,21 @@ func generateFixedUnmarshal(cb *codeBuilder, f *avrocpb.Fixed) {
 }
 
 // generateUnionUnmarshal generates the standalone unmarshal function for a union type.
+//
+// This function is the only place a union is decoded: a record field, an
+// array item, a map value and a nested container all call it. The branch
+// index is read with ReadIndex, so an index past the last branch, or a
+// negative one, fails with avro.ErrInvalidIndex in either reader mode (#248).
+// That leaves the default case unreachable; it returns the same sentinel
+// because a switch the compiler can see is exhaustive needs one, and an
+// unreachable path that reported anything else would be a second answer to the
+// same question.
 func generateUnionUnmarshal(cb *codeBuilder, u *avrocpb.Union, recordName string, fieldName string) {
 	unionName := unionTypeName(recordName, fieldName)
 
 	cb.newline()
 	cb.writef("func unmarshal%s(r *avro.BinaryReader) (%s, error) {\n", unionName, unionName)
-	cb.writeln("\tindex, err := r.ReadLong()")
+	cb.writef("\tindex, err := r.ReadIndex(%d)\n", len(u.GetTypes()))
 	cb.writeln("\tif err != nil {")
 	cb.writeln("\t\treturn nil, err")
 	cb.writeln("\t}")
@@ -356,7 +369,7 @@ func generateUnionUnmarshal(cb *codeBuilder, u *avrocpb.Union, recordName string
 	}
 
 	cb.writeln("\tdefault:")
-	cb.writef("\t\treturn nil, fmt.Errorf(\"unknown union index: %%d\", index)\n")
+	cb.writeln("\t\treturn nil, avro.ErrInvalidIndex")
 	cb.writeln("\t}")
 	cb.writeln("}")
 }

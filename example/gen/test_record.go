@@ -3,8 +3,6 @@
 package avro
 
 import (
-	"fmt"
-
 	avro "github.com/z5labs/avro-go"
 )
 
@@ -22,7 +20,7 @@ func (x Kind) MarshalAvroBinary(w *avro.BinaryWriter) error {
 }
 
 func (x *Kind) UnmarshalAvroBinary(r *avro.BinaryReader) error {
-	v, err := r.ReadInt()
+	v, err := r.ReadIndex(3)
 	if err != nil {
 		return err
 	}
@@ -82,7 +80,7 @@ func (x TestRecordNullableHashUnionMD5) MarshalAvroBinary(w *avro.BinaryWriter) 
 }
 
 func unmarshalTestRecordNullableHashUnion(r *avro.BinaryReader) (TestRecordNullableHashUnion, error) {
-	index, err := r.ReadLong()
+	index, err := r.ReadIndex(2)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +95,7 @@ func unmarshalTestRecordNullableHashUnion(r *avro.BinaryReader) (TestRecordNulla
 		}
 		return v, nil
 	default:
-		return nil, fmt.Errorf("unknown union index: %d", index)
+		return nil, avro.ErrInvalidIndex
 	}
 }
 
